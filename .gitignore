@@ -1,0 +1,27 @@
+# Build
+build/
+cmake-build-*/
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Compiled objects
+*.o
+*.a
+*.so
+*.dylib
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Game files (do not commit ROMs/ISOs)
+*.bin
+*.iso
+*.img
+*.cue
+*.ecm

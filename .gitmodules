@@ -1,0 +1,9 @@
+[submodule "lib/ELFIO"]
+	path = lib/ELFIO
+	url = https://github.com/serge1/ELFIO.git
+[submodule "lib/toml11"]
+	path = lib/toml11
+	url = https://github.com/ToruNiina/toml11.git
+[submodule "lib/fmt"]
+	path = lib/fmt
+	url = https://github.com/fmtlib/fmt.git
