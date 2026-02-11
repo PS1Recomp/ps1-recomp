@@ -72,9 +72,12 @@ bool ElfParser::load(const std::string& path) {
             static_cast<uint32_t>(section->get_type()),
             static_cast<uint32_t>(section->get_flags()));
 
-        // Set data pointer (nullptr for BSS-type sections)
-        if (section->get_type() != ELFIO::SHT_NOBITS && section->get_data() != nullptr) {
-            sec.data = reinterpret_cast<const uint8_t*>(section->get_data());
+        // Set data pointer into our owned m_elfData buffer
+        // (ELFIO's internal pointers become invalid after reader goes out of scope)
+        if (section->get_type() != ELFIO::SHT_NOBITS &&
+            section->get_data() != nullptr &&
+            section->get_offset() + sec.size <= m_elfData.size()) {
+            sec.data = m_elfData.data() + section->get_offset();
         } else {
             sec.data = nullptr;
         }

@@ -3,6 +3,7 @@
 # Library target (for linking into tests)
 add_library(ps1xAnalyzer_lib
     src/elf_parser.cpp
+    src/function_finder.cpp
 )
 
 target_include_directories(ps1xAnalyzer_lib
