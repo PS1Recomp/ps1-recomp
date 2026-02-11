@@ -8,18 +8,10 @@ add_executable(ps1xAnalyzer_tests
     analyzer/test_elf_parser.cpp
 )
 
-target_include_directories(ps1xAnalyzer_tests
-    PRIVATE
-        ${CMAKE_SOURCE_DIR}/analyzer/include
-        ${CMAKE_SOURCE_DIR}/analyzer/src
-)
-
 target_link_libraries(ps1xAnalyzer_tests
     PRIVATE
         GTest::gtest_main
-        elfio
-        toml11::toml11
-        fmt::fmt
+        ps1xAnalyzer_lib
 )
 
 gtest_discover_tests(ps1xAnalyzer_tests)
