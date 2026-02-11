@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential libsdl2-dev libglfw3-dev libgl-dev
+
+    - name: Configure CMake
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DPS1RECOMP_BUILD_TESTS=ON
+
+    - name: Build
+      run: cmake --build build --parallel $(nproc)
+
+    - name: Run tests
+      run: ctest --test-dir build --output-on-failure --verbose

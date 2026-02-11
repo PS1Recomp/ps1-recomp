@@ -1,2 +1,68 @@
-# Placeholder — tests will be added as components are implemented
-enable_testing()
+# PS1Recomp Tests
+# Structure: tests/<component>/test_<module>.cpp
+
+# ──────────────────────────────────────────
+# Analyzer Tests
+# ──────────────────────────────────────────
+add_executable(ps1xAnalyzer_tests
+    analyzer/test_elf_parser.cpp
+)
+
+target_include_directories(ps1xAnalyzer_tests
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/analyzer/include
+        ${CMAKE_SOURCE_DIR}/analyzer/src
+)
+
+target_link_libraries(ps1xAnalyzer_tests
+    PRIVATE
+        GTest::gtest_main
+        elfio
+        toml11::toml11
+        fmt::fmt
+)
+
+gtest_discover_tests(ps1xAnalyzer_tests)
+
+# ──────────────────────────────────────────
+# Recompiler Tests
+# ──────────────────────────────────────────
+add_executable(ps1xRecomp_tests
+    recompiler/test_mips_decoder.cpp
+)
+
+target_include_directories(ps1xRecomp_tests
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/recompiler/include
+        ${CMAKE_SOURCE_DIR}/recompiler/src
+)
+
+target_link_libraries(ps1xRecomp_tests
+    PRIVATE
+        GTest::gtest_main
+        toml11::toml11
+        fmt::fmt
+)
+
+gtest_discover_tests(ps1xRecomp_tests)
+
+# ──────────────────────────────────────────
+# Runtime Tests
+# ──────────────────────────────────────────
+add_executable(ps1xRuntime_tests
+    runtime/test_cpu_context.cpp
+)
+
+target_include_directories(ps1xRuntime_tests
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/runtime/include
+        ${CMAKE_SOURCE_DIR}/runtime/src
+)
+
+target_link_libraries(ps1xRuntime_tests
+    PRIVATE
+        GTest::gtest_main
+        fmt::fmt
+)
+
+gtest_discover_tests(ps1xRuntime_tests)
