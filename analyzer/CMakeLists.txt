@@ -4,6 +4,7 @@
 add_library(ps1xAnalyzer_lib
     src/elf_parser.cpp
     src/function_finder.cpp
+    src/psyq_signatures.cpp
 )
 
 target_include_directories(ps1xAnalyzer_lib
