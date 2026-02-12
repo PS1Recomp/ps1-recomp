@@ -24,6 +24,7 @@ gtest_discover_tests(ps1xAnalyzer_tests)
 # ──────────────────────────────────────────
 add_executable(ps1xRecomp_tests
     recompiler/test_mips_decoder.cpp
+    recompiler/test_instruction_emitter.cpp
 )
 
 target_link_libraries(ps1xRecomp_tests

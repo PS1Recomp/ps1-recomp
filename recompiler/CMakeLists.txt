@@ -3,6 +3,7 @@
 # Library target (for linking into tests)
 add_library(ps1xRecomp_lib
     src/mips_decoder.cpp
+    src/instruction_emitter.cpp
 )
 
 target_include_directories(ps1xRecomp_lib
