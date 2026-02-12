@@ -1,6 +1,6 @@
 # PS1Recomp
 
-**Static recompilation tool for PS1 (MIPS R3000) → native C++ on PC.**
+**Static recompilation tool for PS1 (MIPS R3000) to native C++ on PC.**
 
 ## Overview
 
