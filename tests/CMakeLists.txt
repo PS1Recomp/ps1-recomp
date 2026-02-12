@@ -26,17 +26,10 @@ add_executable(ps1xRecomp_tests
     recompiler/test_mips_decoder.cpp
 )
 
-target_include_directories(ps1xRecomp_tests
-    PRIVATE
-        ${CMAKE_SOURCE_DIR}/recompiler/include
-        ${CMAKE_SOURCE_DIR}/recompiler/src
-)
-
 target_link_libraries(ps1xRecomp_tests
     PRIVATE
         GTest::gtest_main
-        toml11::toml11
-        fmt::fmt
+        ps1xRecomp_lib
 )
 
 gtest_discover_tests(ps1xRecomp_tests)
