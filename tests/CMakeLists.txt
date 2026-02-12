@@ -8,6 +8,7 @@ add_executable(ps1xAnalyzer_tests
     analyzer/test_elf_parser.cpp
     analyzer/test_function_finder.cpp
     analyzer/test_psyq_signatures.cpp
+    analyzer/test_config_generator.cpp
 )
 
 target_link_libraries(ps1xAnalyzer_tests
