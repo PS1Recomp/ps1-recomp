@@ -42,6 +42,8 @@ gtest_discover_tests(ps1xRecomp_tests)
 # ──────────────────────────────────────────
 add_executable(ps1xRuntime_tests
     runtime/test_cpu_context.cpp
+    runtime/test_memory.cpp
+    runtime/test_runtime_macros.cpp
 )
 
 target_include_directories(ps1xRuntime_tests
