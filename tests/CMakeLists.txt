@@ -45,6 +45,7 @@ add_executable(ps1xRuntime_tests
     runtime/test_memory.cpp
     runtime/test_runtime_macros.cpp
     runtime/test_gte.cpp
+    runtime/test_hw_stubs.cpp
 )
 
 target_include_directories(ps1xRuntime_tests
