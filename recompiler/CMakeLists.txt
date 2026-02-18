@@ -5,6 +5,7 @@ add_library(ps1xRecomp_lib
     src/mips_decoder.cpp
     src/instruction_emitter.cpp
     src/gte_emitter.cpp
+    src/overlay_handler.cpp
 )
 
 target_include_directories(ps1xRecomp_lib
@@ -15,6 +16,7 @@ target_include_directories(ps1xRecomp_lib
 target_link_libraries(ps1xRecomp_lib
     PUBLIC
         fmt::fmt
+        toml11::toml11
 )
 
 # Executable target

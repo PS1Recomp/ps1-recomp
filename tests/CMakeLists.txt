@@ -26,6 +26,7 @@ add_executable(ps1xRecomp_tests
     recompiler/test_mips_decoder.cpp
     recompiler/test_instruction_emitter.cpp
     recompiler/test_gte_emitter.cpp
+    recompiler/test_overlay_handler.cpp
 )
 
 target_link_libraries(ps1xRecomp_tests
