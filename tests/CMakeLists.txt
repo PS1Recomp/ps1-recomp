@@ -44,6 +44,7 @@ add_executable(ps1xRuntime_tests
     runtime/test_cpu_context.cpp
     runtime/test_memory.cpp
     runtime/test_runtime_macros.cpp
+    runtime/test_gte.cpp
 )
 
 target_include_directories(ps1xRuntime_tests
@@ -54,6 +55,7 @@ target_include_directories(ps1xRuntime_tests
 
 target_link_libraries(ps1xRuntime_tests
     PRIVATE
+        ps1xRuntime_lib
         GTest::gtest_main
         fmt::fmt
 )
