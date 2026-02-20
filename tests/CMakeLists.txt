@@ -62,3 +62,12 @@ target_link_libraries(ps1xRuntime_tests
 )
 
 gtest_discover_tests(ps1xRuntime_tests)
+
+# Phase 5 E2E Tests
+add_executable(ps1xRuntime_e2e_tests
+    pipeline/test_pipeline.cpp
+    pipeline/test_elf_loader.cpp
+    pipeline/test_function_resolver.cpp
+)
+target_link_libraries(ps1xRuntime_e2e_tests PRIVATE ps1xRuntime_lib ps1xAnalyzer_lib ps1xRecomp_lib gtest gtest_main gmock)
+gtest_discover_tests(ps1xRuntime_e2e_tests)
