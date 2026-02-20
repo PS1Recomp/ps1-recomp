@@ -17,7 +17,8 @@ target_link_libraries(ps1xRuntime_lib
 
 # ── Runtime Executable ──────────────────────────────────
 add_executable(ps1xRuntime
-    src/main.cpp
+    src/main_host.cpp
+    src/recompiled_out.cpp
 )
 
 target_include_directories(ps1xRuntime
@@ -31,4 +32,5 @@ target_link_libraries(ps1xRuntime
         fmt::fmt
         SDL2::SDL2
         OpenGL::GL
+        ps1xAnalyzer_lib
 )

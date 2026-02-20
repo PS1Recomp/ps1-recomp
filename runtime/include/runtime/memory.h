@@ -120,6 +120,7 @@ private:
   uint8_t scratchpad_[SCRATCHPAD_SIZE];
   uint8_t bios_[BIOS_SIZE];
 
+public:
   /// Convert virtual address to physical address
   /// PS1 uses 3 mirrors: KUSEG (0x0), KSEG0 (0x80), KSEG1 (0xA0)
   static uint32_t toPhysical(uint32_t addr) {

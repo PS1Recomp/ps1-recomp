@@ -5,6 +5,7 @@
 // They bridge recompiled C++ code → runtime Memory/GTE subsystems.
 
 #include <cstdint>
+#include <iostream>
 #include <runtime/cpu_context.h>
 #include <runtime/memory.h>
 
@@ -122,3 +123,12 @@ inline uint32_t gte_read_control(ps1::CPUContext *ctx, uint8_t reg) {
 inline void gte_write_control(ps1::CPUContext *ctx, uint8_t reg, uint32_t val) {
   ctx->cop2c[reg & 0x1F] = val;
 }
+
+// ─── Control flow and System macros ──────────────────────
+#define BREAK(ctx) std::cerr << "BREAK at " << std::hex << (ctx)->pc << "\n"
+#define SYSCALL(ctx) std::cerr << "SYSCALL at " << std::hex << (ctx)->pc << "\n"
+#define CALL_INDIRECT(ctx, addr)                                               \
+  std::cerr << "CALL_INDIRECT " << std::hex << (addr) << "\n"
+#define JUMP_INDIRECT(ctx, addr)                                               \
+  std::cerr << "JUMP_INDIRECT " << std::hex << (addr) << "\n"
+#define COP0_RFE(ctx) /* NOP for now */

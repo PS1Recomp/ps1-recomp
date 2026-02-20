@@ -68,7 +68,14 @@ enum COP0Reg : uint32_t {
 ///   ctx->rN, ctx->hi, ctx->lo, ctx->cop0[N], ctx->cop2d[N], ctx->cop2c[N]
 struct CPUContext {
   // General Purpose Registers (r0 = always zero)
-  uint32_t r[32];
+  union {
+    uint32_t r[32];
+    struct {
+      uint32_t r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14,
+          r15, r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28,
+          r29, r30, r31;
+    };
+  };
 
   // Program Counter
   uint32_t pc;
@@ -92,3 +99,13 @@ struct CPUContext {
 };
 
 } // namespace ps1
+
+// Forward declare Memory so we can define recomp_context
+namespace ps1 {
+class Memory;
+}
+
+// recompiled code expects recomp_context* ctx
+struct recomp_context : public ps1::CPUContext {
+  ps1::Memory *mem;
+};

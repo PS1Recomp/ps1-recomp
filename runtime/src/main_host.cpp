@@ -1,0 +1,70 @@
+// ps1xRuntime — PS1 Hardware Simulation Runtime
+// Executes recompiled C++ code with GPU, GTE, SPU, CD-ROM simulation
+
+#include <cstring>
+#include <fmt/format.h>
+#include <iostream>
+#include <ps1recomp/elf_parser.h>
+#include <runtime/cpu_context.h>
+#include <runtime/memory.h>
+#include <string>
+#include <vector>
+
+extern void __start(uint8_t *rdram, recomp_context *ctx);
+
+int main(int argc, char *argv[]) {
+  if (argc < 2) {
+    std::cerr << "Usage: ps1xRuntime <ps1_elf_file>\n";
+    return 1;
+  }
+
+  std::string elf_path = argv[1];
+
+  std::cout << "ps1xRuntime — PS1 Hardware Simulation\n";
+
+  // Initialize Memory and CPU Context
+  ps1::Memory memory;
+  recomp_context ctx;
+  ctx.reset();
+  ctx.mem = &memory;
+
+  // Load the ELF
+  ps1recomp::ElfParser parser;
+  if (!parser.load(elf_path)) {
+    std::cerr << "Failed to load ELF: " << parser.getError() << "\n";
+    return 1;
+  }
+
+  // Hand-rolled ELF loader to Memory
+  auto sections = parser.getSections();
+  int loaded_sections = 0;
+  for (const auto &sec : sections) {
+    if ((sec.type == ps1recomp::SectionType::Text ||
+         sec.type == ps1recomp::SectionType::Data) &&
+        sec.data != nullptr) {
+      uint32_t phys = ps1::Memory::toPhysical(sec.vaddr);
+      if (phys < ps1::Memory::RAM_SIZE) {
+        std::memcpy(memory.ramPtr() + phys, sec.data, sec.size);
+        loaded_sections++;
+      }
+    }
+  }
+
+  std::cout << "Loaded " << loaded_sections << " sections into PS1 memory.\n";
+
+  // Boot the statically recompiled executable
+  std::cout << "Booting statically recompiled executable at entry point "
+               "0x80010000...\n";
+
+  // Note: in a real emulator, we'd loop over PC or setup the event loop.
+  // For the direct static recompiler, we just call the recompiled run method.
+  // We only call it once as it implements a while(1) internally usually,
+  // or we'd step through the scheduler.
+  // The Spinning Cube is a while(1) loop without a scheduler, so this call will
+  // block. In later phases we'd integrate it with the Thread/Scheduler system.
+
+  __start(memory.ramPtr(), &ctx);
+  std::cout << "Execution finished.\n";
+
+  return 0;
+}
