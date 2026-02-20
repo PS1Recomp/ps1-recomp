@@ -52,10 +52,9 @@ TEST(PipelineE2E, SmokeTest100Frames) {
 
   // To simulate the concept and ensure our execution host didn't crash on
   // standard init:
-  int result =
-      system("./runtime/ps1xRuntime ../test_roms/example08_spinningCube.elf > "
-             "/dev/null 2>&1");
-
-  // Verify it exited cleanly (0)
-  EXPECT_EQ(WEXITSTATUS(result), 0);
+  int result = system("timeout 1s ../runtime/ps1xRuntime "
+                      "../test_roms/example08_spinningCube.elf > "
+                      "/dev/null 2>&1");
+  // timeout exits with 124 when interrupted, instead of 0
+  EXPECT_EQ(WEXITSTATUS(result), 124);
 }
