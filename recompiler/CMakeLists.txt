@@ -17,6 +17,7 @@ target_link_libraries(ps1xRecomp_lib
     PUBLIC
         fmt::fmt
         toml11::toml11
+        ps1xAnalyzer_lib
 )
 
 # Executable target
@@ -28,4 +29,5 @@ target_link_libraries(ps1xRecomp
     PRIVATE
         ps1xRecomp_lib
         toml11::toml11
+        ps1xAnalyzer_lib
 )
