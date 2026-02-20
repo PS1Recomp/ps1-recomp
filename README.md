@@ -31,7 +31,7 @@ ps1-recomp/
 ├── tools/             → Helper scripts
 ├── docs/              → Research & TCC documentation
 ├── CMakeLists.txt     → C++20 / CMake build system
-└── LICENSE            → MIT
+└── LICENSE            → GPLv3
 ```
 
 ## Building
@@ -71,4 +71,4 @@ make -j$(nproc)
 
 ## License
 
-MIT
+GPLv3

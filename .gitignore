@@ -20,6 +20,7 @@ cmake-build-*/
 Thumbs.db
 
 # Game files (do not commit ROMs/ISOs)
+test_roms/
 *.bin
 *.iso
 *.img
