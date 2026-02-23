@@ -46,6 +46,11 @@ add_executable(ps1xRuntime_tests
     runtime/test_runtime_macros.cpp
     runtime/test_gte.cpp
     runtime/test_hw_stubs.cpp
+    runtime/test_cue_parser.cpp
+    runtime/test_bin_reader.cpp
+    runtime/test_iso9660.cpp
+    runtime/test_exe_extractor.cpp
+    runtime/test_virtual_fs.cpp
 )
 
 target_include_directories(ps1xRuntime_tests

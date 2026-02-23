@@ -4,6 +4,11 @@ find_package(OpenGL REQUIRED)
 # ── Runtime Library (shared between exe and tests) ──────
 add_library(ps1xRuntime_lib STATIC
     src/gte.cpp
+    src/cdrom/cue_parser.cpp
+    src/cdrom/bin_reader.cpp
+    src/cdrom/iso9660.cpp
+    src/cdrom/exe_extractor.cpp
+    src/cdrom/virtual_fs.cpp
 )
 
 target_include_directories(ps1xRuntime_lib
