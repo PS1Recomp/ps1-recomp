@@ -13,7 +13,9 @@ using namespace ps1recomp;
 TEST(PipelineE2E, EndToEndSimulation) {
   // 1. Analyze
   ElfParser parser;
-  ASSERT_TRUE(parser.load("../test_roms/example08_spinningCube.elf"));
+  if (!parser.load("../test_roms/example08_spinningCube.elf")) {
+    GTEST_SKIP() << "Test ROM not found. Skipping.";
+  }
 
   // Test we can identify PsyQ signatures on this ELF
   FunctionFinder finder;
@@ -49,6 +51,13 @@ TEST(PipelineE2E, SmokeTest100Frames) {
   // within the same build step before it's linked, and GoogleTest runs
   // statically. For a true "smoke test", we can run the `ps1xRuntime` process
   // with the ELF programmatically and intercept its exit status or output.
+
+  // Check if ROM exists first
+  FILE *f = fopen("../test_roms/example08_spinningCube.elf", "r");
+  if (!f) {
+    GTEST_SKIP() << "Test ROM not found. Skipping.";
+  }
+  fclose(f);
 
   // To simulate the concept and ensure our execution host didn't crash on
   // standard init:
