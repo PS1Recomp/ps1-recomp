@@ -13,6 +13,8 @@ add_library(ps1xRuntime_lib STATIC
     src/bios/heap.cpp
     src/bios/event_system.cpp
     src/bios/file_io.cpp
+    src/gpu/gpu.cpp
+    src/gpu/renderer_opengl.cpp
 )
 
 target_include_directories(ps1xRuntime_lib

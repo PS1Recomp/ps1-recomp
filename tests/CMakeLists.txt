@@ -55,6 +55,16 @@ add_executable(ps1xRuntime_tests
     runtime/test_event_system.cpp
     runtime/test_file_io.cpp
     runtime/test_bios.cpp
+    runtime/test_bios_table_a.cpp
+    runtime/test_bios_table_b.cpp
+    runtime/test_bios_table_c.cpp
+    runtime/test_bios_integration.cpp
+    runtime/test_gpu_commands.cpp
+    runtime/test_gpu_dma.cpp
+    runtime/test_gpu_lines_rects.cpp
+    runtime/test_gpu_rasterizer.cpp
+    runtime/test_gpu_textures.cpp
+    runtime/test_gpu_vram.cpp
 )
 
 target_include_directories(ps1xRuntime_tests

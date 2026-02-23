@@ -49,14 +49,14 @@ TEST_F(BiosTest, StrcmpReturnsCorrectly) {
   writeString(0x80000200, "banana");
 
   // Test equal
-  ctx.r[T1] = 0x13; // strcmp A0
+  ctx.r[T1] = 0x16; // strcmp A0
   ctx.r[A0] = 0x80000000;
   ctx.r[A1] = 0x80000100;
   bios->executeA0();
   EXPECT_EQ(ctx.r[V0], 0);
 
   // Test not equal
-  ctx.r[T1] = 0x13;
+  ctx.r[T1] = 0x16;
   ctx.r[A0] = 0x80000000;
   ctx.r[A1] = 0x80000200;
   bios->executeA0();

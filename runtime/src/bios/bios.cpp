@@ -28,7 +28,7 @@ void Bios::executeC0() {
 
 void Bios::handleA0(uint32_t index) {
   switch (index) {
-  case 0x13: { // strcmp
+  case 0x16: { // strcmp
     uint32_t s1 = ctx_.r[A0];
     uint32_t s2 = ctx_.r[A1];
     char c1, c2;
@@ -58,6 +58,89 @@ void Bios::handleA0(uint32_t index) {
     while (ctx_.mem->read8(s++) != '\0')
       len++;
     ctx_.r[V0] = len;
+    break;
+  }
+  case 0x18: { // strncpy
+    uint32_t dst = ctx_.r[A0];
+    uint32_t src = ctx_.r[A1];
+    uint32_t n = ctx_.r[A2];
+    uint32_t i = 0;
+    char c;
+    while (i < n && (c = ctx_.mem->read8(src++)) != '\0') {
+      ctx_.mem->write8(dst++, c);
+      i++;
+    }
+    while (i < n) {
+      ctx_.mem->write8(dst++, '\0');
+      i++;
+    }
+    ctx_.r[V0] = ctx_.r[A0];
+    break;
+  }
+  case 0x19: { // strcat
+    uint32_t dst = ctx_.r[A0];
+    uint32_t src = ctx_.r[A1];
+    // Find end of dst
+    while (ctx_.mem->read8(dst) != '\0') {
+      dst++;
+    }
+    // Copy src to dst
+    char c;
+    do {
+      c = ctx_.mem->read8(src++);
+      ctx_.mem->write8(dst++, c);
+    } while (c != '\0');
+    ctx_.r[V0] = ctx_.r[A0];
+    break;
+  }
+  case 0x1A: { // strncmp
+    uint32_t s1 = ctx_.r[A0];
+    uint32_t s2 = ctx_.r[A1];
+    uint32_t n = ctx_.r[A2];
+    if (n == 0) {
+      ctx_.r[V0] = 0;
+      break;
+    }
+    char c1, c2;
+    do {
+      c1 = ctx_.mem->read8(s1++);
+      c2 = ctx_.mem->read8(s2++);
+      if (c1 != c2 || --n == 0)
+        break;
+    } while (c1 != '\0');
+    ctx_.r[V0] = c1 - c2;
+    break;
+  }
+  case 0x1B: { // index (strchr)
+    uint32_t s = ctx_.r[A0];
+    char c = static_cast<char>(ctx_.r[A1]);
+    char curr;
+    uint32_t res = 0;
+    while ((curr = ctx_.mem->read8(s)) != '\0') {
+      if (curr == c) {
+        res = s;
+        break;
+      }
+      s++;
+    }
+    if (c == '\0' && curr == '\0')
+      res = s;
+    ctx_.r[V0] = res;
+    break;
+  }
+  case 0x1C: { // rindex (strrchr)
+    uint32_t s = ctx_.r[A0];
+    char c = static_cast<char>(ctx_.r[A1]);
+    char curr;
+    uint32_t res = 0;
+    while ((curr = ctx_.mem->read8(s)) != '\0') {
+      if (curr == c)
+        res = s;
+      s++;
+    }
+    if (c == '\0')
+      res = s;
+    ctx_.r[V0] = res;
     break;
   }
   case 0x2A: // memcpy

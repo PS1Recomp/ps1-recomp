@@ -1,13 +1,17 @@
 // ps1xRuntime — PS1 Hardware Simulation Runtime
 // Executes recompiled C++ code with GPU, GTE, SPU, CD-ROM simulation
 
+#include "runtime/ps1_runtime_macros.h"
 #include <cstring>
+#include <exception>
 #include <fmt/format.h>
 #include <iostream>
 #include <ps1recomp/elf_parser.h>
 #include <runtime/bios/bios.h>
 #include <runtime/cdrom/virtual_fs.h>
 #include <runtime/cpu_context.h>
+#include <runtime/gpu/gpu.h>
+#include <runtime/gpu/renderer_opengl.h>
 #include <runtime/memory.h>
 #include <string>
 #include <vector>
@@ -26,11 +30,21 @@ int main(int argc, char *argv[]) {
 
   // Initialize Memory and CPU Context
   ps1::Memory memory;
-  ps1::cdrom::VirtualFs fs;
+  ps1::gpu::GPU gpu;
+  memory.setGPU(&gpu);
+
   recomp_context ctx;
   ctx.reset();
   ctx.mem = &memory;
 
+  // Initialize renderer
+  ps1::gpu::RendererOpenGL renderer(gpu);
+  if (!renderer.init("ps1xRecomp - Phase 8 GPU")) {
+    fmt::print(stderr, "Failed to initialize OpenGL renderer!\n");
+    return 1;
+  }
+
+  ps1::cdrom::VirtualFs fs;
   ps1::bios::Bios bios(ctx, fs, memory);
   ctx.bios = &bios;
 
@@ -85,16 +99,23 @@ int main(int argc, char *argv[]) {
         ctx.pc += 4;
       } else if (e.cause == ps1::ExceptionCause::Bp) {
         std::cerr << "BREAK exception caught!\n";
-        ctx.pc += 4;
+        // Outras exceções encerram a execução por agora
       } else {
-        std::cerr << "Unhandled CPU Exception: "
-                  << static_cast<uint32_t>(e.cause) << "\n";
+        fmt::print("Unhandled CPU Exception {}, stopping.\n",
+                   static_cast<uint32_t>(e.cause));
         break;
       }
     }
+
+    // Render loop and events (simple temporary hook)
+    if (!renderer.processEvents()) {
+      break; // User closed window
+    }
+    renderer.renderFrame();
   }
 
-  std::cout << "Execution finished.\n";
+  renderer.destroy();
+  fmt::print("Simulation ended.\n");
 
   return 0;
 }

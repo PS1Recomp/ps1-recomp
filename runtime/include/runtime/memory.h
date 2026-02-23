@@ -3,6 +3,7 @@
 // ps1xRuntime — PS1 Memory Subsystem
 // 2MB Main RAM + 1KB Scratchpad + BIOS ROM + I/O port routing
 
+#include "runtime/gpu/gpu.h"
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
@@ -66,6 +67,14 @@ public:
   }
 
   uint32_t read32(uint32_t addr) const {
+    uint32_t phys = toPhysical(addr);
+    if (phys == 0x1F801810) {
+      return gpu_ ? gpu_->readGPUREAD() : 0;
+    }
+    if (phys == 0x1F801814) {
+      return gpu_ ? gpu_->readGPUSTAT() : 0;
+    }
+
     uint8_t b0 = read8(addr);
     uint8_t b1 = read8(addr + 1);
     uint8_t b2 = read8(addr + 2);
@@ -98,6 +107,18 @@ public:
   }
 
   void write32(uint32_t addr, uint32_t val) {
+    uint32_t phys = toPhysical(addr);
+    if (phys == 0x1F801810) {
+      if (gpu_)
+        gpu_->writeGP0(val);
+      return;
+    }
+    if (phys == 0x1F801814) {
+      if (gpu_)
+        gpu_->writeGP1(val);
+      return;
+    }
+
     write8(addr, static_cast<uint8_t>(val & 0xFF));
     write8(addr + 1, static_cast<uint8_t>((val >> 8) & 0xFF));
     write8(addr + 2, static_cast<uint8_t>((val >> 16) & 0xFF));
@@ -119,6 +140,11 @@ private:
   uint8_t ram_[RAM_SIZE];
   uint8_t scratchpad_[SCRATCHPAD_SIZE];
   uint8_t bios_[BIOS_SIZE];
+
+  ps1::gpu::GPU *gpu_ = nullptr;
+
+public:
+  void setGPU(ps1::gpu::GPU *gpu) { gpu_ = gpu; }
 
 public:
   /// Convert virtual address to physical address
