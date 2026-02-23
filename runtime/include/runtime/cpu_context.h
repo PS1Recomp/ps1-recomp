@@ -5,8 +5,30 @@
 
 #include <cstdint>
 #include <cstring>
+#include <exception>
 
 namespace ps1 {
+
+enum class ExceptionCause : uint32_t {
+  Interrupt = 0x00,
+  Mod = 0x01,
+  TLBL = 0x02,
+  TLBS = 0x03,
+  AdEL = 0x04,
+  AdES = 0x05,
+  IBE = 0x06,
+  DBE = 0x07,
+  Syscall = 0x08,
+  Bp = 0x09,
+  RI = 0x0A,
+  CpU = 0x0B,
+  Ov = 0x0C
+};
+
+struct CpuException : public std::exception {
+  ExceptionCause cause;
+  explicit CpuException(ExceptionCause c) : cause(c) {}
+};
 
 // ─── Register aliases ────────────────────────────────────
 
@@ -100,12 +122,15 @@ struct CPUContext {
 
 } // namespace ps1
 
-// Forward declare Memory so we can define recomp_context
+// Forward declare Memory and Bios so we can define recomp_context
 namespace ps1 {
 class Memory;
+namespace bios {
+class Bios;
 }
+} // namespace ps1
 
-// recompiled code expects recomp_context* ctx
 struct recomp_context : public ps1::CPUContext {
   ps1::Memory *mem;
+  ps1::bios::Bios *bios;
 };

@@ -5,6 +5,8 @@
 #include <fmt/format.h>
 #include <iostream>
 #include <ps1recomp/elf_parser.h>
+#include <runtime/bios/bios.h>
+#include <runtime/cdrom/virtual_fs.h>
 #include <runtime/cpu_context.h>
 #include <runtime/memory.h>
 #include <string>
@@ -24,9 +26,13 @@ int main(int argc, char *argv[]) {
 
   // Initialize Memory and CPU Context
   ps1::Memory memory;
+  ps1::cdrom::VirtualFs fs;
   recomp_context ctx;
   ctx.reset();
   ctx.mem = &memory;
+
+  ps1::bios::Bios bios(ctx, fs, memory);
+  ctx.bios = &bios;
 
   // Load the ELF
   ps1recomp::ElfParser parser;
@@ -63,7 +69,31 @@ int main(int argc, char *argv[]) {
   // The Spinning Cube is a while(1) loop without a scheduler, so this call will
   // block. In later phases we'd integrate it with the Thread/Scheduler system.
 
-  __start(memory.ramPtr(), &ctx);
+  while (true) {
+    try {
+      __start(memory.ramPtr(), &ctx);
+      break; // Normal exit
+    } catch (const ps1::CpuException &e) {
+      if (e.cause == ps1::ExceptionCause::Syscall) {
+        // Exception vector for syscall in real PS1 goes to 0x80000080
+        // Our HLE BIOS router handles it differently, standard MIPS convention
+        // doesn't directly map syscall to A0/B0/C0 routines usually (they use
+        // JAL), but some games might trigger SYSCALL for specific kernel
+        // functions.
+        std::cerr << "SYSCALL exception caught!\n";
+        // Handle SYSCALL, increment PC to not get stuck
+        ctx.pc += 4;
+      } else if (e.cause == ps1::ExceptionCause::Bp) {
+        std::cerr << "BREAK exception caught!\n";
+        ctx.pc += 4;
+      } else {
+        std::cerr << "Unhandled CPU Exception: "
+                  << static_cast<uint32_t>(e.cause) << "\n";
+        break;
+      }
+    }
+  }
+
   std::cout << "Execution finished.\n";
 
   return 0;

@@ -51,6 +51,10 @@ add_executable(ps1xRuntime_tests
     runtime/test_iso9660.cpp
     runtime/test_exe_extractor.cpp
     runtime/test_virtual_fs.cpp
+    runtime/test_heap.cpp
+    runtime/test_event_system.cpp
+    runtime/test_file_io.cpp
+    runtime/test_bios.cpp
 )
 
 target_include_directories(ps1xRuntime_tests

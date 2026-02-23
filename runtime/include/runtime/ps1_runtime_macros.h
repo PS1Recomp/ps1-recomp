@@ -125,8 +125,8 @@ inline void gte_write_control(ps1::CPUContext *ctx, uint8_t reg, uint32_t val) {
 }
 
 // ─── Control flow and System macros ──────────────────────
-#define BREAK(ctx) std::cerr << "BREAK at " << std::hex << (ctx)->pc << "\n"
-#define SYSCALL(ctx) std::cerr << "SYSCALL at " << std::hex << (ctx)->pc << "\n"
+#define BREAK(ctx) throw ps1::CpuException(ps1::ExceptionCause::Bp)
+#define SYSCALL(ctx) throw ps1::CpuException(ps1::ExceptionCause::Syscall)
 #define CALL_INDIRECT(ctx, addr)                                               \
   std::cerr << "CALL_INDIRECT " << std::hex << (addr) << "\n"
 #define JUMP_INDIRECT(ctx, addr)                                               \

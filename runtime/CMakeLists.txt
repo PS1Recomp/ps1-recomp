@@ -9,6 +9,10 @@ add_library(ps1xRuntime_lib STATIC
     src/cdrom/iso9660.cpp
     src/cdrom/exe_extractor.cpp
     src/cdrom/virtual_fs.cpp
+    src/bios/bios.cpp
+    src/bios/heap.cpp
+    src/bios/event_system.cpp
+    src/bios/file_io.cpp
 )
 
 target_include_directories(ps1xRuntime_lib

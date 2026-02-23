@@ -16,19 +16,20 @@ namespace ps1::cdrom {
 class VirtualFs {
 public:
   VirtualFs();
-  ~VirtualFs() = default;
+  virtual ~VirtualFs() = default;
 
   // Load a disc image (currently supports .cue or .bin directly)
-  bool loadDisc(const std::filesystem::path &imagePath);
+  virtual bool loadDisc(const std::filesystem::path &imagePath);
 
   // Read a specific sector (raw or data)
-  std::optional<Sector> readSector(uint32_t lba);
+  virtual std::optional<Sector> readSector(uint32_t lba);
 
   // Abstract file reading from the mounted disc
-  std::optional<std::vector<uint8_t>> readFile(const std::string &filepath);
+  virtual std::optional<std::vector<uint8_t>>
+  readFile(const std::string &filepath);
 
   // Get the boot executable path from SYSTEM.CNF
-  std::optional<std::string> getBootPath();
+  virtual std::optional<std::string> getBootPath();
 
 private:
   std::unique_ptr<BinReader> binReader_;
