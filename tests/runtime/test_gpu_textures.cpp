@@ -11,6 +11,9 @@ protected:
 };
 
 TEST_F(GpuTexturesTest, TexturedTriangle4BitWithCLUT) {
+  // Disable Dithering explicitly for reliable color hex match
+  gpu.writeGP0(0xE1000000);
+
   // Setup CLUT at 0, 480 (CLUT x=0, y=480) -> CLUT code = (480 << 6) | (0 >> 4)
   // = 0x7800 CLUT is 16 colors. We'll set color 0 = transparent, color 1 =
   // 0xAA55

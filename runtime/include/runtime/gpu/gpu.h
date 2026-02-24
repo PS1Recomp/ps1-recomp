@@ -60,6 +60,23 @@ public:
   static constexpr uint32_t VRAM_WIDTH = 1024;
   static constexpr uint32_t VRAM_HEIGHT = 512;
 
+  // Display State accessors for Renderer
+  void getDisplayArea(uint32_t &xStart, uint32_t &yStart) const {
+    xStart = displayVRAMXStart_;
+    yStart = displayVRAMYStart_;
+  }
+
+  void getDisplayRange(uint32_t &x1, uint32_t &x2, uint32_t &y1,
+                       uint32_t &y2) const {
+    x1 = displayX1_;
+    x2 = displayX2_;
+    y1 = displayY1_;
+    y2 = displayY2_;
+  }
+
+  // Helper methods
+  Color16 applyBlend(Color16 fg, Color16 bg);
+
 private:
   // VRAM buffer
   std::vector<Color16> vram_;
@@ -82,12 +99,20 @@ private:
   int32_t drawAreaY1_;
   int32_t drawAreaX2_;
   int32_t drawAreaY2_;
+  bool ditherEnable_;
+  uint8_t blendMode_; // 0: B/2+F/2, 1: B+F, 2: B-F, 3: B+F/4
 
   // Display attributes
   uint32_t displayVRAMXStart_;
   uint32_t displayVRAMYStart_;
   uint32_t displayX1_, displayX2_;
   uint32_t displayY1_, displayY2_;
+
+  // Texture Window attributes
+  uint8_t texWindowMaskX_;
+  uint8_t texWindowMaskY_;
+  uint8_t texWindowOffsetX_;
+  uint8_t texWindowOffsetY_;
 
   // VRAM copy parameters
   struct {
@@ -111,6 +136,7 @@ private:
   void executeCopyVRAM();
   void executeCPUToVRAM();
   void executeVRAMToCPU();
+  void executeTextureWindow();
 
   void executeMonochromePoly3();
   void executeMonochromePoly4();
@@ -121,13 +147,18 @@ private:
   void executeLine();
   void executeRect();
 
+  // Helper methods for rasterization
+  Color16 applyDither(Color16 baseColor, int x, int y);
+
   // Rasterize a solid monochrome triangle
-  void rasterizeTriangle(Vertex v0, Vertex v1, Vertex v2, Color16 c);
+  void rasterizeTriangle(Vertex v0, Vertex v1, Vertex v2, Color16 c,
+                         bool blend);
 
   // Rasterize a textured triangle
   void rasterizeTexturedTriangle(Vertex v0, Vertex v1, Vertex v2, TexCoord t0,
                                  TexCoord t1, TexCoord t2, Color16 color,
-                                 uint16_t clut, uint16_t tpage);
+                                 uint16_t clut, uint16_t tpage, bool isRaw,
+                                 bool blend);
 
   // Helper methods for rasterization (to be implemented)
   void drawSolidPoly(bool quad);

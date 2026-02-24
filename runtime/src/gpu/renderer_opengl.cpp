@@ -18,7 +18,6 @@ layout (location = 1) in vec2 aTexCoord;
 out vec2 TexCoord;
 
 void main() {
-    // Flip Y and draw full screen quad
     gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);
     TexCoord = aTexCoord;
 }
@@ -30,10 +29,17 @@ out vec4 FragColor;
 in vec2 TexCoord;
 
 uniform sampler2D vramTex;
+// Uniform storing (X / 1024.0, Y / 512.0, W / 1024.0, H / 512.0)
+uniform vec4 uDisplayArea;
 
 void main() {
-    // The VRAM is ABGR1555. RGBA values will be read properly if format is correct.
-    FragColor = texture(vramTex, TexCoord);
+    // Map normalized TexCoord (0..1) to the actual Display Area in VRAM
+    vec2 displayCoord = vec2(
+        uDisplayArea.x + TexCoord.x * uDisplayArea.z,
+        uDisplayArea.y + TexCoord.y * uDisplayArea.w
+    );
+    
+    FragColor = texture(vramTex, displayCoord);
 }
 )";
 
@@ -186,6 +192,50 @@ void RendererOpenGL::renderFrame() {
                   GL_RGBA, GL_UNSIGNED_SHORT_1_5_5_5_REV, gpu_.getVRAM());
 
   glUseProgram(shaderProgram_);
+
+  // Setup display area uniforms based on GP1
+  uint32_t vramX, vramY;
+  gpu_.getDisplayArea(vramX, vramY);
+
+  uint32_t x1, x2, y1, y2;
+  gpu_.getDisplayRange(x1, x2, y1, y2);
+
+  // Calculate width and height of the display area out of the entire VRAM
+  // x1 and x2 are usually relative to the display pipeline.
+  // For basic PS1 resolution we assume W = x2 - x1 (scaled by clock
+  // multipliers, but loosely ~320 default) And H = y2 - y1 (usually ~240). Some
+  // games might have 0 or invalid widths early in boot, clamp to sensible
+  // defaults.
+  float dispW = (x2 > x1) ? (x2 - x1) : 320.0f;
+  float dispH = (y2 > y1) ? (y2 - y1) : 240.0f;
+
+  // Magic numbers for horizontal dots multiplier (3.2x etc) are common.
+  // A simplified rule is dividing width by typical dot clocks.
+  // For now to get visual output, width usually isn't purely 320, it can be
+  // 2560 for 320px depending on DOT dividers. We'll trust the GPU output
+  // display resolution instead:
+  uint32_t stat = gpu_.readGPUSTAT();
+  int currentW = 320;
+  int currentH = (stat & (1 << 20)) ? 480 : 240;
+
+  int hres = (stat >> 17) & 3;
+  if (hres == 0)
+    currentW = 256;
+  else if (hres == 1)
+    currentW = 320;
+  else if (hres == 2)
+    currentW = 512;
+  else if (hres == 3)
+    currentW = 640;
+
+  float uX = vramX / 1024.0f;
+  float uY = vramY / 512.0f;
+  float uW = currentW / 1024.0f;
+  float uH = currentH / 512.0f;
+
+  GLint loc = glGetUniformLocation(shaderProgram_, "uDisplayArea");
+  glUniform4f(loc, uX, uY, uW, uH);
+
   glBindVertexArray(vao_);
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 

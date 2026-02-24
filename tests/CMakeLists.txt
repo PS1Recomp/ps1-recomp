@@ -64,6 +64,9 @@ add_executable(ps1xRuntime_tests
     runtime/test_gpu_lines_rects.cpp
     runtime/test_gpu_rasterizer.cpp
     runtime/test_gpu_textures.cpp
+    runtime/test_gpu_texture_window.cpp
+    runtime/test_gpu_blend.cpp
+    runtime/test_gpu_display.cpp
     runtime/test_gpu_vram.cpp
 )
 

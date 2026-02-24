@@ -27,6 +27,7 @@ void GPU::reset() {
   drawAreaY1_ = 0;
   drawAreaX2_ = 1023;
   drawAreaY2_ = 511;
+  ditherEnable_ = false;
 
   displayVRAMXStart_ = 0;
   displayVRAMYStart_ = 0;
@@ -213,6 +214,10 @@ void GPU::writeGP1(uint32_t val) {
     vramTransfer_.isWritingToVRAM = false;
     vramTransfer_.isReadingFromVRAM = false;
     break;
+  case 0x03: // Display Enable
+    // Bit 0: 0=On, 1=Off. Updates GPUSTAT bit 23.
+    gpuStat_ = (gpuStat_ & ~(1 << 23)) | ((val & 1) << 23);
+    break;
   case 0x04: // DMA Direction
     // Update GPUSTAT bits 29-30
     gpuStat_ = (gpuStat_ & ~(3 << 29)) | ((val & 3) << 29);
@@ -322,6 +327,9 @@ void GPU::executeGP0Command() {
   case 0xC0: // VRAM to CPU
     executeVRAMToCPU();
     break;
+  case 0xE2: // Set Texture Window
+    executeTextureWindow();
+    break;
   case 0xE3: // Set Drawing Area top left
     drawAreaX1_ = cmd & 0x3FF;
     drawAreaY1_ = (cmd >> 10) & 0x3FF;
@@ -338,10 +346,26 @@ void GPU::executeGP0Command() {
     if (drawOffsetY_ & 0x400)
       drawOffsetY_ |= 0xFFFFF800; // Sign extend 11-bit
     break;
+  case 0xE1: // Draw Mode parameter (Dither flag is bit 9, Blend Mode is bits
+             // 5-6)
+    ditherEnable_ = (cmd & (1 << 9)) != 0;
+    blendMode_ = (cmd >> 5) & 3;
+    break;
+  case 0xE6: // Mask Bit
+    // Bit 0 = Mask while drawing, Bit 1 = Set Mask bit on draw
+    break;
   default:
-    // Some commands like E1, E2, E6 are unimplemented but don't crash
+    // Some commands like E1, E6 are unimplemented but don't crash
     break;
   }
+}
+
+void GPU::executeTextureWindow() {
+  uint32_t cmd = commandQueue_.front();
+  texWindowMaskX_ = (cmd & 0x1F) * 8;
+  texWindowMaskY_ = ((cmd >> 5) & 0x1F) * 8;
+  texWindowOffsetX_ = ((cmd >> 10) & 0x1F) * 8;
+  texWindowOffsetY_ = ((cmd >> 15) & 0x1F) * 8;
 }
 
 void GPU::executeMonochromePoly3() {
@@ -357,8 +381,10 @@ void GPU::executeMonochromePoly3() {
     v[i].x = x + drawOffsetX_;
     v[i].y = y + drawOffsetY_;
   }
+  uint32_t opcode = commandQueue_[0] >> 24;
+  bool isBlend = (opcode & 2) != 0;
 
-  rasterizeTriangle(v[0], v[1], v[2], c16);
+  rasterizeTriangle(v[0], v[1], v[2], c16, isBlend);
 }
 
 void GPU::executeMonochromePoly4() {
@@ -375,10 +401,13 @@ void GPU::executeMonochromePoly4() {
     v[i].y = y + drawOffsetY_;
   }
 
+  uint32_t opcode = commandQueue_[0] >> 24;
+  bool isBlend = (opcode & 2) != 0;
+
   // Draw as two triangles: (0, 1, 2) and (1, 2, 3) because PS1 quadrilaterals
   // are usually ordered like Z
-  rasterizeTriangle(v[0], v[1], v[2], c16);
-  rasterizeTriangle(v[1], v[2], v[3], c16);
+  rasterizeTriangle(v[0], v[1], v[2], c16, isBlend);
+  rasterizeTriangle(v[1], v[2], v[3], c16, isBlend);
 }
 
 void GPU::executeTexturedPoly3() {
@@ -408,8 +437,12 @@ void GPU::executeTexturedPoly3() {
   t[2].u = commandQueue_[6] & 0xFF;
   t[2].v = (commandQueue_[6] >> 8) & 0xFF;
 
+  uint32_t opcode = commandQueue_[0] >> 24;
+  bool isRaw = (opcode & 1) != 0;
+  bool isBlend = (opcode & 2) != 0;
+
   rasterizeTexturedTriangle(v[0], v[1], v[2], t[0], t[1], t[2], c16, clut,
-                            tpage);
+                            tpage, isRaw, isBlend);
 }
 
 void GPU::executeTexturedPoly4() {
@@ -444,17 +477,111 @@ void GPU::executeTexturedPoly4() {
   t[3].u = commandQueue_[8] & 0xFF;
   t[3].v = (commandQueue_[8] >> 8) & 0xFF;
 
+  uint32_t opcode = commandQueue_[0] >> 24;
+  bool isRaw = (opcode & 1) != 0;
+  bool isBlend = (opcode & 2) != 0;
+
   rasterizeTexturedTriangle(v[0], v[1], v[2], t[0], t[1], t[2], c16, clut,
-                            tpage);
+                            tpage, isRaw, isBlend);
   rasterizeTexturedTriangle(v[1], v[2], v[3], t[1], t[2], t[3], c16, clut,
-                            tpage);
+                            tpage, isRaw, isBlend);
 }
 
 static int edgeFunction(const Vertex &a, const Vertex &b, const Vertex &c) {
   return (c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x);
 }
 
-void GPU::rasterizeTriangle(Vertex v0, Vertex v1, Vertex v2, Color16 color) {
+Color16 GPU::applyDither(Color16 baseColor, int x, int y) {
+  if (!ditherEnable_) {
+    return baseColor;
+  }
+
+  // PS1 Dither Matrix 4x4
+  static const int8_t ditherMatrix[4][4] = {
+      {-4, 0, -3, 1}, {2, -2, 3, -1}, {-3, 1, -4, 0}, {3, -1, 2, -2}};
+
+  int offset = ditherMatrix[y & 3][x & 3];
+
+  // Apply to 24-bit components extracted from 15-bit color
+  int r = ((baseColor.raw & 0x1F) << 3) + offset;
+  int g = (((baseColor.raw >> 5) & 0x1F) << 3) + offset;
+  int b = (((baseColor.raw >> 10) & 0x1F) << 3) + offset;
+
+  // Clamp 0..255
+  if (r < 0)
+    r = 0;
+  else if (r > 255)
+    r = 255;
+  if (g < 0)
+    g = 0;
+  else if (g > 255)
+    g = 255;
+  if (b < 0)
+    b = 0;
+  else if (b > 255)
+    b = 255;
+
+  Color16 c;
+  c.raw = ((r >> 3) & 0x1F) | (((g >> 3) & 0x1F) << 5) |
+          (((b >> 3) & 0x1F) << 10) | (baseColor.raw & 0x8000);
+  return c;
+}
+
+Color16 GPU::applyBlend(Color16 fg, Color16 bg) {
+  int rF = (fg.raw & 0x1F) << 3;
+  int gF = ((fg.raw >> 5) & 0x1F) << 3;
+  int bF = ((fg.raw >> 10) & 0x1F) << 3;
+
+  int rB = (bg.raw & 0x1F) << 3;
+  int gB = ((bg.raw >> 5) & 0x1F) << 3;
+  int bB = ((bg.raw >> 10) & 0x1F) << 3;
+
+  int rOut = rF, gOut = gF, bOut = bF;
+
+  switch (blendMode_) {
+  case 0: // 0.5 * B + 0.5 * F
+    rOut = (rB + rF) / 2;
+    gOut = (gB + gF) / 2;
+    bOut = (bB + bF) / 2;
+    break;
+  case 1: // 1.0 * B + 1.0 * F
+    rOut = rB + rF;
+    gOut = gB + gF;
+    bOut = bB + bF;
+    break;
+  case 2: // 1.0 * B - 1.0 * F
+    rOut = rB - rF;
+    gOut = gB - gF;
+    bOut = bB - bF;
+    break;
+  case 3: // 1.0 * B + 0.25 * F
+    rOut = rB + (rF / 4);
+    gOut = gB + (gF / 4);
+    bOut = bB + (bF / 4);
+    break;
+  }
+
+  if (rOut < 0)
+    rOut = 0;
+  else if (rOut > 255)
+    rOut = 255;
+  if (gOut < 0)
+    gOut = 0;
+  else if (gOut > 255)
+    gOut = 255;
+  if (bOut < 0)
+    bOut = 0;
+  else if (bOut > 255)
+    bOut = 255;
+
+  Color16 c;
+  c.raw = ((rOut >> 3) & 0x1F) | (((gOut >> 3) & 0x1F) << 5) |
+          (((bOut >> 3) & 0x1F) << 10) | (bg.raw & 0x8000);
+  return c;
+}
+
+void GPU::rasterizeTriangle(Vertex v0, Vertex v1, Vertex v2, Color16 color,
+                            bool blend) {
   // Check winding and swap if necessary so we have CCW
   int area = edgeFunction(v0, v1, v2);
   if (area == 0)
@@ -485,8 +612,15 @@ void GPU::rasterizeTriangle(Vertex v0, Vertex v1, Vertex v2, Color16 color) {
 
       if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
         // Draw pixel
+        Color16 finalColor = applyDither(color, p.x, p.y);
+
         uint32_t idx = (p.y % VRAM_HEIGHT) * VRAM_WIDTH + (p.x % VRAM_WIDTH);
-        vram_[idx] = color;
+        if (blend) {
+          Color16 bg = vram_[idx];
+          finalColor = applyBlend(finalColor, bg);
+        }
+
+        vram_[idx] = finalColor;
       }
     }
   }
@@ -495,7 +629,7 @@ void GPU::rasterizeTriangle(Vertex v0, Vertex v1, Vertex v2, Color16 color) {
 void GPU::rasterizeTexturedTriangle(Vertex v0, Vertex v1, Vertex v2,
                                     TexCoord t0, TexCoord t1, TexCoord t2,
                                     Color16 color, uint16_t clut,
-                                    uint16_t tpage) {
+                                    uint16_t tpage, bool isRaw, bool blend) {
   int area = edgeFunction(v0, v1, v2);
   if (area == 0)
     return;
@@ -528,6 +662,14 @@ void GPU::rasterizeTexturedTriangle(Vertex v0, Vertex v1, Vertex v2,
         int u = (w0 * t0.u + w1 * t1.u + w2 * t2.u) / area;
         int v = (w0 * t0.v + w1 * t1.v + w2 * t2.v) / area;
 
+        // Apply Texture Window (E2) masking and offsets
+        if (texWindowMaskX_ != 0 || texWindowOffsetX_ != 0) {
+          u = (u & ~(texWindowMaskX_)) | (texWindowOffsetX_ & texWindowMaskX_);
+        }
+        if (texWindowMaskY_ != 0 || texWindowOffsetY_ != 0) {
+          v = (v & ~(texWindowMaskY_)) | (texWindowOffsetY_ & texWindowMaskY_);
+        }
+
         Color16 texColor;
         if (depth == 0) { // 4-bit
           uint32_t tx = tpX + (u / 4);
@@ -556,9 +698,12 @@ void GPU::rasterizeTexturedTriangle(Vertex v0, Vertex v1, Vertex v2,
 
         uint32_t idx = (y % VRAM_HEIGHT) * VRAM_WIDTH + (x % VRAM_WIDTH);
 
-        // For unmodulated raw textures or just as a default modulated fallback
-        // we'll just output the raw texture color to see it working.
-        vram_[idx] = texColor;
+        if (isRaw) {
+          vram_[idx] = texColor;
+        } else {
+          // For modulated textures, we apply dither onto texture read.
+          vram_[idx] = applyDither(texColor, p.x, p.y);
+        }
       }
     }
   }
@@ -572,6 +717,7 @@ void GPU::executeLine() {
             ((((c >> 16) & 0xFF) >> 3) << 10);
 
   bool isGouraud = (opcode & 0x10) != 0;
+  bool isBlend = (opcode & 0x02) != 0;
 
   Vertex v0, v1;
   v0.x = (int16_t)(commandQueue_[1] & 0xFFFF) + drawOffsetX_;
@@ -597,7 +743,12 @@ void GPU::executeLine() {
   while (true) {
     if (x >= drawAreaX1_ && x <= drawAreaX2_ && y >= drawAreaY1_ &&
         y <= drawAreaY2_) {
-      vram_[(y % VRAM_HEIGHT) * VRAM_WIDTH + (x % VRAM_WIDTH)] = c16;
+      uint32_t idx = (y % VRAM_HEIGHT) * VRAM_WIDTH + (x % VRAM_WIDTH);
+      Color16 finalColor = c16;
+      if (isBlend) {
+        finalColor = applyBlend(finalColor, vram_[idx]);
+      }
+      vram_[idx] = finalColor;
     }
     if (x == v1.x && y == v1.y)
       break;
@@ -626,6 +777,7 @@ void GPU::executeRect() {
 
   int w = 0, h = 0;
   bool isTextured = (opcode & 0x04) != 0;
+  bool isBlend = (opcode & 0x02) != 0;
   int sizeWordIdx = isTextured ? 3 : 2;
 
   switch ((opcode >> 3) & 3) {
@@ -653,7 +805,12 @@ void GPU::executeRect() {
       int py = v.y + dy;
       if (px >= drawAreaX1_ && px <= drawAreaX2_ && py >= drawAreaY1_ &&
           py <= drawAreaY2_) {
-        vram_[(py % VRAM_HEIGHT) * VRAM_WIDTH + (px % VRAM_WIDTH)] = c16;
+        uint32_t idx = (py % VRAM_HEIGHT) * VRAM_WIDTH + (px % VRAM_WIDTH);
+        Color16 finalColor = c16;
+        if (isBlend) {
+          finalColor = applyBlend(finalColor, vram_[idx]);
+        }
+        vram_[idx] = finalColor;
       }
     }
   }
