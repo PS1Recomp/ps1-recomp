@@ -104,4 +104,22 @@ std::optional<std::string> VirtualFs::getBootPath() {
   return bootOpt;
 }
 
+bool VirtualFs::swapDisc(const std::filesystem::path &newImagePath) {
+  fmt::print("[CDROM] Swapping disc to: {}\n",
+             newImagePath.filename().string());
+
+  // Reset current state
+  exeExtractor_.reset();
+  isoParser_.reset();
+  binReader_.reset();
+  tracks_.clear();
+
+  // Track the new disc
+  discPaths_.push_back(newImagePath);
+  currentDiscIndex_ = discPaths_.size() - 1;
+
+  // Reload with the new image
+  return loadDisc(newImagePath);
+}
+
 } // namespace ps1::cdrom

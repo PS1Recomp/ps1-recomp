@@ -128,6 +128,22 @@ void GPU::writeGP0(uint32_t val) {
     case 0x2C:
       expectedCommandWords_ = 9;
       break; // Textured 4-point polygon
+    case 0x30:
+    case 0x32:
+      expectedCommandWords_ = 6;
+      break; // Gouraud 3-point polygon
+    case 0x34:
+    case 0x36:
+      expectedCommandWords_ = 9;
+      break; // Gouraud Textured 3-point polygon
+    case 0x38:
+    case 0x3A:
+      expectedCommandWords_ = 8;
+      break; // Gouraud 4-point polygon
+    case 0x3C:
+    case 0x3E:
+      expectedCommandWords_ = 12;
+      break; // Gouraud Textured 4-point polygon
     case 0x40:
       expectedCommandWords_ = 3;
       break; // Monochrome Line
@@ -302,6 +318,22 @@ void GPU::executeGP0Command() {
     break;
   case 0x2C: // Textured 4-point polygon
     executeTexturedPoly4();
+    break;
+  case 0x30: // Gouraud 3-point polygon
+  case 0x32: // Gouraud Blended 3-point polygon
+    executeGouraudPoly3();
+    break;
+  case 0x34: // Gouraud Textured 3-point polygon
+  case 0x36:
+    executeGouraudTexturedPoly3();
+    break;
+  case 0x38: // Gouraud 4-point polygon
+  case 0x3A: // Gouraud Blended 4-point polygon
+    executeGouraudPoly4();
+    break;
+  case 0x3C: // Gouraud Textured 4-point polygon
+  case 0x3E:
+    executeGouraudTexturedPoly4();
     break;
   case 0x40: // Monochrome Line
   case 0x48: // Mono Poly Line
@@ -932,6 +964,298 @@ void GPU::executeVRAMToCPU() {
   uint32_t pixels = w * h;
   vramTransfer_.transferWordsRemaining = (pixels + 1) / 2;
   vramTransfer_.isReadingFromVRAM = true;
+}
+
+// ─── Gouraud Shading Polygons ───────────────────────────────────────────────
+
+static Color24 extractColor24(uint32_t word) {
+  Color24 c;
+  c.r = word & 0xFF;
+  c.g = (word >> 8) & 0xFF;
+  c.b = (word >> 16) & 0xFF;
+  return c;
+}
+
+void GPU::executeGouraudPoly3() {
+  // Word layout: c0+cmd, v0, c1, v1, c2, v2
+  Color24 c[3];
+  Vertex v[3];
+  c[0] = extractColor24(commandQueue_[0]);
+  v[0].x = (int16_t)(commandQueue_[1] & 0xFFFF) + drawOffsetX_;
+  v[0].y = (int16_t)(commandQueue_[1] >> 16) + drawOffsetY_;
+  c[1] = extractColor24(commandQueue_[2]);
+  v[1].x = (int16_t)(commandQueue_[3] & 0xFFFF) + drawOffsetX_;
+  v[1].y = (int16_t)(commandQueue_[3] >> 16) + drawOffsetY_;
+  c[2] = extractColor24(commandQueue_[4]);
+  v[2].x = (int16_t)(commandQueue_[5] & 0xFFFF) + drawOffsetX_;
+  v[2].y = (int16_t)(commandQueue_[5] >> 16) + drawOffsetY_;
+
+  uint32_t opcode = commandQueue_[0] >> 24;
+  bool isBlend = (opcode & 2) != 0;
+
+  rasterizeGouraudTriangle(v[0], v[1], v[2], c[0], c[1], c[2], isBlend);
+}
+
+void GPU::executeGouraudPoly4() {
+  // Word layout: c0+cmd, v0, c1, v1, c2, v2, c3, v3
+  Color24 c[4];
+  Vertex v[4];
+  c[0] = extractColor24(commandQueue_[0]);
+  v[0].x = (int16_t)(commandQueue_[1] & 0xFFFF) + drawOffsetX_;
+  v[0].y = (int16_t)(commandQueue_[1] >> 16) + drawOffsetY_;
+  c[1] = extractColor24(commandQueue_[2]);
+  v[1].x = (int16_t)(commandQueue_[3] & 0xFFFF) + drawOffsetX_;
+  v[1].y = (int16_t)(commandQueue_[3] >> 16) + drawOffsetY_;
+  c[2] = extractColor24(commandQueue_[4]);
+  v[2].x = (int16_t)(commandQueue_[5] & 0xFFFF) + drawOffsetX_;
+  v[2].y = (int16_t)(commandQueue_[5] >> 16) + drawOffsetY_;
+  c[3] = extractColor24(commandQueue_[6]);
+  v[3].x = (int16_t)(commandQueue_[7] & 0xFFFF) + drawOffsetX_;
+  v[3].y = (int16_t)(commandQueue_[7] >> 16) + drawOffsetY_;
+
+  uint32_t opcode = commandQueue_[0] >> 24;
+  bool isBlend = (opcode & 2) != 0;
+
+  rasterizeGouraudTriangle(v[0], v[1], v[2], c[0], c[1], c[2], isBlend);
+  rasterizeGouraudTriangle(v[1], v[2], v[3], c[1], c[2], c[3], isBlend);
+}
+
+void GPU::executeGouraudTexturedPoly3() {
+  // Word layout: c0+cmd, v0, uv0+clut, c1, v1, uv1+tpage, c2, v2, uv2
+  Color24 c[3];
+  Vertex v[3];
+  TexCoord t[3];
+  uint16_t clut, tpage;
+
+  c[0] = extractColor24(commandQueue_[0]);
+  v[0].x = (int16_t)(commandQueue_[1] & 0xFFFF) + drawOffsetX_;
+  v[0].y = (int16_t)(commandQueue_[1] >> 16) + drawOffsetY_;
+  t[0].u = commandQueue_[2] & 0xFF;
+  t[0].v = (commandQueue_[2] >> 8) & 0xFF;
+  clut = (commandQueue_[2] >> 16) & 0xFFFF;
+
+  c[1] = extractColor24(commandQueue_[3]);
+  v[1].x = (int16_t)(commandQueue_[4] & 0xFFFF) + drawOffsetX_;
+  v[1].y = (int16_t)(commandQueue_[4] >> 16) + drawOffsetY_;
+  t[1].u = commandQueue_[5] & 0xFF;
+  t[1].v = (commandQueue_[5] >> 8) & 0xFF;
+  tpage = (commandQueue_[5] >> 16) & 0xFFFF;
+
+  c[2] = extractColor24(commandQueue_[6]);
+  v[2].x = (int16_t)(commandQueue_[7] & 0xFFFF) + drawOffsetX_;
+  v[2].y = (int16_t)(commandQueue_[7] >> 16) + drawOffsetY_;
+  t[2].u = commandQueue_[8] & 0xFF;
+  t[2].v = (commandQueue_[8] >> 8) & 0xFF;
+
+  uint32_t opcode = commandQueue_[0] >> 24;
+  bool isRaw = (opcode & 1) != 0;
+  bool isBlend = (opcode & 2) != 0;
+
+  rasterizeGouraudTexturedTriangle(v[0], v[1], v[2], t[0], t[1], t[2], c[0],
+                                   c[1], c[2], clut, tpage, isRaw, isBlend);
+}
+
+void GPU::executeGouraudTexturedPoly4() {
+  // Word layout: c0+cmd, v0, uv0+clut, c1, v1, uv1+tpage, c2, v2, uv2, c3,
+  // v3, uv3
+  Color24 c[4];
+  Vertex v[4];
+  TexCoord t[4];
+  uint16_t clut, tpage;
+
+  c[0] = extractColor24(commandQueue_[0]);
+  v[0].x = (int16_t)(commandQueue_[1] & 0xFFFF) + drawOffsetX_;
+  v[0].y = (int16_t)(commandQueue_[1] >> 16) + drawOffsetY_;
+  t[0].u = commandQueue_[2] & 0xFF;
+  t[0].v = (commandQueue_[2] >> 8) & 0xFF;
+  clut = (commandQueue_[2] >> 16) & 0xFFFF;
+
+  c[1] = extractColor24(commandQueue_[3]);
+  v[1].x = (int16_t)(commandQueue_[4] & 0xFFFF) + drawOffsetX_;
+  v[1].y = (int16_t)(commandQueue_[4] >> 16) + drawOffsetY_;
+  t[1].u = commandQueue_[5] & 0xFF;
+  t[1].v = (commandQueue_[5] >> 8) & 0xFF;
+  tpage = (commandQueue_[5] >> 16) & 0xFFFF;
+
+  c[2] = extractColor24(commandQueue_[6]);
+  v[2].x = (int16_t)(commandQueue_[7] & 0xFFFF) + drawOffsetX_;
+  v[2].y = (int16_t)(commandQueue_[7] >> 16) + drawOffsetY_;
+  t[2].u = commandQueue_[8] & 0xFF;
+  t[2].v = (commandQueue_[8] >> 8) & 0xFF;
+
+  c[3] = extractColor24(commandQueue_[9]);
+  v[3].x = (int16_t)(commandQueue_[10] & 0xFFFF) + drawOffsetX_;
+  v[3].y = (int16_t)(commandQueue_[10] >> 16) + drawOffsetY_;
+  t[3].u = commandQueue_[11] & 0xFF;
+  t[3].v = (commandQueue_[11] >> 8) & 0xFF;
+
+  uint32_t opcode = commandQueue_[0] >> 24;
+  bool isRaw = (opcode & 1) != 0;
+  bool isBlend = (opcode & 2) != 0;
+
+  rasterizeGouraudTexturedTriangle(v[0], v[1], v[2], t[0], t[1], t[2], c[0],
+                                   c[1], c[2], clut, tpage, isRaw, isBlend);
+  rasterizeGouraudTexturedTriangle(v[1], v[2], v[3], t[1], t[2], t[3], c[1],
+                                   c[2], c[3], clut, tpage, isRaw, isBlend);
+}
+
+void GPU::rasterizeGouraudTriangle(Vertex v0, Vertex v1, Vertex v2, Color24 c0,
+                                   Color24 c1, Color24 c2, bool blend) {
+  int area = edgeFunction(v0, v1, v2);
+  if (area == 0)
+    return;
+  if (area < 0) {
+    std::swap(v1, v2);
+    std::swap(c1, c2);
+    area = -area;
+  }
+
+  int minX = std::max(drawAreaX1_, std::min({v0.x, v1.x, v2.x}));
+  int minY = std::max(drawAreaY1_, std::min({v0.y, v1.y, v2.y}));
+  int maxX = std::min(drawAreaX2_, std::max({v0.x, v1.x, v2.x}));
+  int maxY = std::min(drawAreaY2_, std::max({v0.y, v1.y, v2.y}));
+
+  for (int y = minY; y <= maxY; ++y) {
+    for (int x = minX; x <= maxX; ++x) {
+      Vertex p{x, y};
+      int w0 = edgeFunction(v1, v2, p);
+      int w1 = edgeFunction(v2, v0, p);
+      int w2 = edgeFunction(v0, v1, p);
+
+      if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
+        // Interpolate RGB per-vertex using barycentric coordinates
+        int r = (w0 * c0.r + w1 * c1.r + w2 * c2.r) / area;
+        int g = (w0 * c0.g + w1 * c1.g + w2 * c2.g) / area;
+        int b = (w0 * c0.b + w1 * c1.b + w2 * c2.b) / area;
+
+        // Clamp
+        r = std::clamp(r, 0, 255);
+        g = std::clamp(g, 0, 255);
+        b = std::clamp(b, 0, 255);
+
+        Color16 c16;
+        c16.raw = ((r >> 3) & 0x1F) | (((g >> 3) & 0x1F) << 5) |
+                  (((b >> 3) & 0x1F) << 10);
+
+        Color16 finalColor = applyDither(c16, x, y);
+
+        uint32_t idx = (y % VRAM_HEIGHT) * VRAM_WIDTH + (x % VRAM_WIDTH);
+        if (blend) {
+          finalColor = applyBlend(finalColor, vram_[idx]);
+        }
+        vram_[idx] = finalColor;
+      }
+    }
+  }
+}
+
+void GPU::rasterizeGouraudTexturedTriangle(Vertex v0, Vertex v1, Vertex v2,
+                                           TexCoord t0, TexCoord t1,
+                                           TexCoord t2, Color24 c0, Color24 c1,
+                                           Color24 c2, uint16_t clut,
+                                           uint16_t tpage, bool isRaw,
+                                           bool blend) {
+  int area = edgeFunction(v0, v1, v2);
+  if (area == 0)
+    return;
+  if (area < 0) {
+    std::swap(v1, v2);
+    std::swap(t1, t2);
+    std::swap(c1, c2);
+    area = -area;
+  }
+
+  int minX = std::max(drawAreaX1_, std::min({v0.x, v1.x, v2.x}));
+  int minY = std::max(drawAreaY1_, std::min({v0.y, v1.y, v2.y}));
+  int maxX = std::min(drawAreaX2_, std::max({v0.x, v1.x, v2.x}));
+  int maxY = std::min(drawAreaY2_, std::max({v0.y, v1.y, v2.y}));
+
+  uint32_t tpX = (tpage & 0xF) * 64;
+  uint32_t tpY = ((tpage >> 4) & 1) * 256;
+  uint32_t depth = (tpage >> 7) & 3;
+
+  uint32_t clutX = (clut & 0x3F) * 16;
+  uint32_t clutY = (clut >> 6) & 0x1FF;
+
+  for (int y = minY; y <= maxY; ++y) {
+    for (int x = minX; x <= maxX; ++x) {
+      Vertex p{x, y};
+      int w0 = edgeFunction(v1, v2, p);
+      int w1 = edgeFunction(v2, v0, p);
+      int w2 = edgeFunction(v0, v1, p);
+
+      if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
+        int u = (w0 * t0.u + w1 * t1.u + w2 * t2.u) / area;
+        int v = (w0 * t0.v + w1 * t1.v + w2 * t2.v) / area;
+
+        // Apply Texture Window
+        if (texWindowMaskX_ != 0 || texWindowOffsetX_ != 0) {
+          u = (u & ~(texWindowMaskX_)) | (texWindowOffsetX_ & texWindowMaskX_);
+        }
+        if (texWindowMaskY_ != 0 || texWindowOffsetY_ != 0) {
+          v = (v & ~(texWindowMaskY_)) | (texWindowOffsetY_ & texWindowMaskY_);
+        }
+
+        // Texture lookup (same as flat-textured)
+        Color16 texColor;
+        if (depth == 0) { // 4-bit
+          uint32_t tx = tpX + (u / 4);
+          uint32_t ty = tpY + v;
+          uint16_t block =
+              vram_[(ty % VRAM_HEIGHT) * VRAM_WIDTH + (tx % VRAM_WIDTH)].raw;
+          uint8_t index = (block >> ((u % 4) * 4)) & 0xF;
+          texColor = vram_[(clutY % VRAM_HEIGHT) * VRAM_WIDTH +
+                           ((clutX + index) % VRAM_WIDTH)];
+        } else if (depth == 1) { // 8-bit
+          uint32_t tx = tpX + (u / 2);
+          uint32_t ty = tpY + v;
+          uint16_t block =
+              vram_[(ty % VRAM_HEIGHT) * VRAM_WIDTH + (tx % VRAM_WIDTH)].raw;
+          uint8_t index = (block >> ((u % 2) * 8)) & 0xFF;
+          texColor = vram_[(clutY % VRAM_HEIGHT) * VRAM_WIDTH +
+                           ((clutX + index) % VRAM_WIDTH)];
+        } else { // 15-bit
+          uint32_t tx = tpX + u;
+          uint32_t ty = tpY + v;
+          texColor = vram_[(ty % VRAM_HEIGHT) * VRAM_WIDTH + (tx % VRAM_WIDTH)];
+        }
+
+        if (texColor.raw == 0)
+          continue; // Transparency
+
+        uint32_t idx = (y % VRAM_HEIGHT) * VRAM_WIDTH + (x % VRAM_WIDTH);
+
+        if (isRaw) {
+          vram_[idx] = texColor;
+        } else {
+          // Modulate texture color with interpolated vertex color
+          int r = (w0 * c0.r + w1 * c1.r + w2 * c2.r) / area;
+          int g = (w0 * c0.g + w1 * c1.g + w2 * c2.g) / area;
+          int b = (w0 * c0.b + w1 * c1.b + w2 * c2.b) / area;
+
+          // Extract texel RGB
+          int tR = (texColor.raw & 0x1F) << 3;
+          int tG = ((texColor.raw >> 5) & 0x1F) << 3;
+          int tB = ((texColor.raw >> 10) & 0x1F) << 3;
+
+          // Modulate: (tex * vertex) / 128, clamped to 255
+          int mR = std::clamp((tR * r) / 128, 0, 255);
+          int mG = std::clamp((tG * g) / 128, 0, 255);
+          int mB = std::clamp((tB * b) / 128, 0, 255);
+
+          Color16 modColor;
+          modColor.raw = ((mR >> 3) & 0x1F) | (((mG >> 3) & 0x1F) << 5) |
+                         (((mB >> 3) & 0x1F) << 10) | (texColor.raw & 0x8000);
+
+          Color16 finalColor = applyDither(modColor, x, y);
+          if (blend) {
+            finalColor = applyBlend(finalColor, vram_[idx]);
+          }
+          vram_[idx] = finalColor;
+        }
+      }
+    }
+  }
 }
 
 } // namespace ps1::gpu

@@ -144,6 +144,11 @@ private:
   void executeTexturedPoly3();
   void executeTexturedPoly4();
 
+  void executeGouraudPoly3();
+  void executeGouraudPoly4();
+  void executeGouraudTexturedPoly3();
+  void executeGouraudTexturedPoly4();
+
   void executeLine();
   void executeRect();
 
@@ -159,6 +164,18 @@ private:
                                  TexCoord t1, TexCoord t2, Color16 color,
                                  uint16_t clut, uint16_t tpage, bool isRaw,
                                  bool blend);
+
+  // Rasterize a gouraud-shaded triangle (per-vertex color interpolation)
+  void rasterizeGouraudTriangle(Vertex v0, Vertex v1, Vertex v2,
+                                Color24 c0, Color24 c1, Color24 c2,
+                                bool blend);
+
+  // Rasterize a gouraud-shaded textured triangle
+  void rasterizeGouraudTexturedTriangle(Vertex v0, Vertex v1, Vertex v2,
+                                        TexCoord t0, TexCoord t1, TexCoord t2,
+                                        Color24 c0, Color24 c1, Color24 c2,
+                                        uint16_t clut, uint16_t tpage,
+                                        bool isRaw, bool blend);
 
   // Helper methods for rasterization (to be implemented)
   void drawSolidPoly(bool quad);

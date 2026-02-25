@@ -31,11 +31,18 @@ public:
   // Get the boot executable path from SYSTEM.CNF
   virtual std::optional<std::string> getBootPath();
 
+  // Multi-disc support
+  bool swapDisc(const std::filesystem::path &newImagePath);
+  uint32_t getDiscCount() const { return discPaths_.size(); }
+  uint32_t getCurrentDisc() const { return currentDiscIndex_; }
+
 private:
   std::unique_ptr<BinReader> binReader_;
   std::unique_ptr<Iso9660Parser> isoParser_;
   std::unique_ptr<ExeExtractor> exeExtractor_;
   std::vector<Track> tracks_;
+  std::vector<std::filesystem::path> discPaths_;
+  uint32_t currentDiscIndex_ = 0;
 
   bool loadCue(const std::filesystem::path &cuePath);
 };
