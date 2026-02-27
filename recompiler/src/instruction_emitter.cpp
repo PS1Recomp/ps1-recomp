@@ -3,6 +3,7 @@
 
 #include "ps1recomp/instruction_emitter.h"
 #include <fmt/format.h>
+#include <set>
 
 namespace ps1recomp {
 
@@ -12,6 +13,22 @@ std::string InstructionEmitter::reg(uint8_t r) {
   if (r == 0)
     return "(int32_t)0"; // $zero is always 0
   return fmt::format("ctx->r{}", r);
+}
+
+// Returns an expression suitable as a write destination.
+// Writes to $zero are discarded in MIPS, so we wrap in (void).
+std::string InstructionEmitter::regWrite(uint8_t r) {
+  if (r == 0)
+    return "/* $zero discard */"; // Will be used as: /* $zero discard */ = expr
+                                  // → becomes a comment
+  return fmt::format("ctx->r{}", r);
+}
+
+// Wraps an assignment: if dest is $zero, discard the result
+std::string InstructionEmitter::assignReg(uint8_t r, const std::string &expr) {
+  if (r == 0)
+    return fmt::format("(void)({}); /* $zero */", expr);
+  return fmt::format("ctx->r{} = {};", r, expr);
 }
 
 std::string InstructionEmitter::label(uint32_t addr) {
@@ -37,58 +54,121 @@ static std::string u32(const std::string &val) {
   return fmt::format("(uint32_t)({})", val);
 }
 
+// ─── Delay Slot Conflict Detection ──────────────────────
+// Returns the GPR index written by an instruction, or -1 if none.
+// Used to detect when a delay slot instruction modifies a register
+// that the preceding branch/jump reads for its condition/target.
+
+static int getDestGPR(const Instruction &inst) {
+  if (inst.isNOP() || !inst.isValid())
+    return -1;
+
+  switch (inst.category) {
+  case InstrCategory::ALU:
+    // R-type (ADD..SLTU, SLL..SRAV) writes rd; I-type writes rt
+    if (inst.id <= InstrId::SLTU ||
+        (inst.id >= InstrId::SLL && inst.id <= InstrId::SRAV))
+      return inst.rd;
+    return inst.rt;
+  case InstrCategory::Memory:
+    return inst.isLoad() ? static_cast<int>(inst.rt) : -1;
+  case InstrCategory::MulDiv:
+    if (inst.id == InstrId::MFHI || inst.id == InstrId::MFLO)
+      return inst.rd;
+    return -1; // MULT, DIV etc. write HI/LO, not GPR
+  case InstrCategory::COP0:
+    if (inst.id == InstrId::MFC0)
+      return inst.rt;
+    return -1;
+  case InstrCategory::GTE:
+    if (inst.id == InstrId::MFC2 || inst.id == InstrId::CFC2)
+      return inst.rt;
+    return -1;
+  case InstrCategory::Jump:
+    if (inst.id == InstrId::JAL)
+      return 31;
+    if (inst.id == InstrId::JALR)
+      return inst.rd;
+    return -1;
+  default:
+    return -1;
+  }
+}
+
+// Replace all occurrences of `from` with `to` in `str`, but only when the
+// match is NOT followed by an ASCII digit (avoids replacing "ctx->r1" inside
+// "ctx->r12").
+static void replaceRegRef(std::string &str, const std::string &from,
+                          const std::string &to) {
+  size_t pos = 0;
+  while ((pos = str.find(from, pos)) != std::string::npos) {
+    size_t end = pos + from.size();
+    // Make sure we're not matching a prefix of a longer register name
+    if (end < str.size() && str[end] >= '0' && str[end] <= '9') {
+      pos = end;
+      continue;
+    }
+    str.replace(pos, from.size(), to);
+    pos += to.size();
+  }
+}
+
 // ─── ALU Emitter ─────────────────────────────────────────
 
 std::string InstructionEmitter::emitALU(const Instruction &inst) const {
-  auto rd = reg(inst.rd);
   auto rs = reg(inst.rs);
   auto rt = reg(inst.rt);
-  auto dst = reg(inst.rt); // I-type dest is rt
 
   switch (inst.id) {
   // R-type ALU
   case InstrId::ADD:
   case InstrId::ADDU:
-    return fmt::format("{} = (int32_t)({} + {});", rd, s32(rs), s32(rt));
+    return assignReg(inst.rd,
+                     fmt::format("(int32_t)({} + {})", s32(rs), s32(rt)));
   case InstrId::SUB:
   case InstrId::SUBU:
-    return fmt::format("{} = (int32_t)({} - {});", rd, s32(rs), s32(rt));
+    return assignReg(inst.rd,
+                     fmt::format("(int32_t)({} - {})", s32(rs), s32(rt)));
   case InstrId::AND:
-    return fmt::format("{} = {} & {};", rd, rs, rt);
+    return assignReg(inst.rd, fmt::format("{} & {}", rs, rt));
   case InstrId::OR:
-    return fmt::format("{} = {} | {};", rd, rs, rt);
+    return assignReg(inst.rd, fmt::format("{} | {}", rs, rt));
   case InstrId::XOR:
-    return fmt::format("{} = {} ^ {};", rd, rs, rt);
+    return assignReg(inst.rd, fmt::format("{} ^ {}", rs, rt));
   case InstrId::NOR:
-    return fmt::format("{} = ~({} | {});", rd, rs, rt);
+    return assignReg(inst.rd, fmt::format("~({} | {})", rs, rt));
   case InstrId::SLT:
-    return fmt::format("{} = ({} < {}) ? 1 : 0;", rd, s32(rs), s32(rt));
+    return assignReg(inst.rd,
+                     fmt::format("({} < {}) ? 1 : 0", s32(rs), s32(rt)));
   case InstrId::SLTU:
-    return fmt::format("{} = ({} < {}) ? 1 : 0;", rd, u32(rs), u32(rt));
+    return assignReg(inst.rd,
+                     fmt::format("({} < {}) ? 1 : 0", u32(rs), u32(rt)));
 
   // I-type ALU
   case InstrId::ADDI:
   case InstrId::ADDIU:
-    return fmt::format("{} = (int32_t)({} + {});", dst, s32(reg(inst.rs)),
-                       inst.imm16);
+    return assignReg(inst.rt, fmt::format("(int32_t)({} + {})",
+                                          s32(reg(inst.rs)), inst.imm16));
   case InstrId::ANDI:
-    return fmt::format("{} = {} & 0x{:04X};", dst, reg(inst.rs),
-                       static_cast<uint16_t>(inst.imm16));
+    return assignReg(inst.rt, fmt::format("{} & 0x{:04X}", reg(inst.rs),
+                                          static_cast<uint16_t>(inst.imm16)));
   case InstrId::ORI:
-    return fmt::format("{} = {} | 0x{:04X};", dst, reg(inst.rs),
-                       static_cast<uint16_t>(inst.imm16));
+    return assignReg(inst.rt, fmt::format("{} | 0x{:04X}", reg(inst.rs),
+                                          static_cast<uint16_t>(inst.imm16)));
   case InstrId::XORI:
-    return fmt::format("{} = {} ^ 0x{:04X};", dst, reg(inst.rs),
-                       static_cast<uint16_t>(inst.imm16));
+    return assignReg(inst.rt, fmt::format("{} ^ 0x{:04X}", reg(inst.rs),
+                                          static_cast<uint16_t>(inst.imm16)));
   case InstrId::SLTI:
-    return fmt::format("{} = ({} < {}) ? 1 : 0;", dst, s32(reg(inst.rs)),
-                       inst.imm16);
+    return assignReg(inst.rt, fmt::format("({} < {}) ? 1 : 0",
+                                          s32(reg(inst.rs)), inst.imm16));
   case InstrId::SLTIU:
-    return fmt::format("{} = ({} < {}) ? 1 : 0;", dst, u32(reg(inst.rs)),
-                       static_cast<uint32_t>(static_cast<int32_t>(inst.imm16)));
+    return assignReg(
+        inst.rt,
+        fmt::format("({} < {}) ? 1 : 0", u32(reg(inst.rs)),
+                    static_cast<uint32_t>(static_cast<int32_t>(inst.imm16))));
   case InstrId::LUI:
-    return fmt::format("{} = 0x{:04X}0000;", dst,
-                       static_cast<uint16_t>(inst.imm16));
+    return assignReg(inst.rt, fmt::format("0x{:04X}0000",
+                                          static_cast<uint16_t>(inst.imm16)));
 
   default:
     return fmt::format("// UNKNOWN ALU: {}", MipsDecoder::instrName(inst.id));
@@ -98,23 +178,26 @@ std::string InstructionEmitter::emitALU(const Instruction &inst) const {
 // ─── Shift Emitter ───────────────────────────────────────
 
 std::string InstructionEmitter::emitShift(const Instruction &inst) const {
-  auto rd = reg(inst.rd);
   auto rt = reg(inst.rt);
   auto rs = reg(inst.rs);
 
   switch (inst.id) {
   case InstrId::SLL:
-    return fmt::format("{} = (int32_t)({} << {});", rd, u32(rt), inst.shamt);
+    return assignReg(inst.rd,
+                     fmt::format("(int32_t)({} << {})", u32(rt), inst.shamt));
   case InstrId::SRL:
-    return fmt::format("{} = (int32_t)({} >> {});", rd, u32(rt), inst.shamt);
+    return assignReg(inst.rd,
+                     fmt::format("(int32_t)({} >> {})", u32(rt), inst.shamt));
   case InstrId::SRA:
-    return fmt::format("{} = {} >> {};", rd, s32(rt), inst.shamt);
+    return assignReg(inst.rd, fmt::format("{} >> {}", s32(rt), inst.shamt));
   case InstrId::SLLV:
-    return fmt::format("{} = (int32_t)({} << ({} & 31));", rd, u32(rt), rs);
+    return assignReg(inst.rd,
+                     fmt::format("(int32_t)({} << ({} & 31))", u32(rt), rs));
   case InstrId::SRLV:
-    return fmt::format("{} = (int32_t)({} >> ({} & 31));", rd, u32(rt), rs);
+    return assignReg(inst.rd,
+                     fmt::format("(int32_t)({} >> ({} & 31))", u32(rt), rs));
   case InstrId::SRAV:
-    return fmt::format("{} = {} >> ({} & 31);", rd, s32(rt), rs);
+    return assignReg(inst.rd, fmt::format("{} >> ({} & 31)", s32(rt), rs));
   default:
     return fmt::format("// UNKNOWN SHIFT: {}", MipsDecoder::instrName(inst.id));
   }
@@ -147,9 +230,9 @@ std::string InstructionEmitter::emitMulDiv(const Instruction &inst) const {
                        "ctx->hi = (int32_t)({} % {}); }}",
                        u32(rt), u32(rs), u32(rt), u32(rs), u32(rt));
   case InstrId::MFHI:
-    return fmt::format("{} = ctx->hi;", rd);
+    return assignReg(inst.rd, "ctx->hi");
   case InstrId::MFLO:
-    return fmt::format("{} = ctx->lo;", rd);
+    return assignReg(inst.rd, "ctx->lo");
   case InstrId::MTHI:
     return fmt::format("ctx->hi = {};", rs);
   case InstrId::MTLO:
@@ -163,29 +246,31 @@ std::string InstructionEmitter::emitMulDiv(const Instruction &inst) const {
 // ─── Load Emitter ────────────────────────────────────────
 
 std::string InstructionEmitter::emitLoad(const Instruction &inst) const {
-  auto rt = reg(inst.rt);
   auto base = reg(inst.rs);
   auto offset = inst.imm16;
 
   switch (inst.id) {
   case InstrId::LB:
-    return fmt::format("{} = MEM_READ8(ctx, {} + {});", rt, s32(base), offset);
+    return assignReg(inst.rt,
+                     fmt::format("MEM_READ8(ctx, {} + {})", s32(base), offset));
   case InstrId::LBU:
-    return fmt::format("{} = (uint8_t)MEM_READ8(ctx, {} + {});", rt, s32(base),
-                       offset);
+    return assignReg(inst.rt, fmt::format("(uint8_t)MEM_READ8(ctx, {} + {})",
+                                          s32(base), offset));
   case InstrId::LH:
-    return fmt::format("{} = MEM_READ16(ctx, {} + {});", rt, s32(base), offset);
+    return assignReg(
+        inst.rt, fmt::format("MEM_READ16(ctx, {} + {})", s32(base), offset));
   case InstrId::LHU:
-    return fmt::format("{} = (uint16_t)MEM_READ16(ctx, {} + {});", rt,
-                       s32(base), offset);
+    return assignReg(inst.rt, fmt::format("(uint16_t)MEM_READ16(ctx, {} + {})",
+                                          s32(base), offset));
   case InstrId::LW:
-    return fmt::format("{} = MEM_READ32(ctx, {} + {});", rt, s32(base), offset);
+    return assignReg(
+        inst.rt, fmt::format("MEM_READ32(ctx, {} + {})", s32(base), offset));
   case InstrId::LWL:
-    return fmt::format("{} = DO_LWL(ctx, {}, {} + {});", rt, rt, s32(base),
-                       offset);
+    return assignReg(inst.rt, fmt::format("DO_LWL(ctx, {}, {} + {})",
+                                          reg(inst.rt), s32(base), offset));
   case InstrId::LWR:
-    return fmt::format("{} = DO_LWR(ctx, {}, {} + {});", rt, rt, s32(base),
-                       offset);
+    return assignReg(inst.rt, fmt::format("DO_LWR(ctx, {}, {} + {})",
+                                          reg(inst.rt), s32(base), offset));
   default:
     return fmt::format("// UNKNOWN LOAD: {}", MipsDecoder::instrName(inst.id));
   }
@@ -277,8 +362,8 @@ std::string InstructionEmitter::emitJump(const Instruction &inst,
 std::string InstructionEmitter::emitCOP0(const Instruction &inst) const {
   switch (inst.id) {
   case InstrId::MFC0:
-    return fmt::format("{} = ctx->cop0[{}]; // {}", reg(inst.rt), inst.rd,
-                       cop0Name(inst.rd));
+    return assignReg(inst.rt, fmt::format("ctx->cop0[{}] /* {} */", inst.rd,
+                                          cop0Name(inst.rd)));
   case InstrId::MTC0:
     return fmt::format("ctx->cop0[{}] = {}; // {}", inst.rd, reg(inst.rt),
                        cop0Name(inst.rd));
@@ -294,11 +379,11 @@ std::string InstructionEmitter::emitCOP0(const Instruction &inst) const {
 std::string InstructionEmitter::emitGTEMove(const Instruction &inst) const {
   switch (inst.id) {
   case InstrId::MFC2:
-    return fmt::format("{} = ctx->cop2d[{}];", reg(inst.rt), inst.rd);
+    return assignReg(inst.rt, fmt::format("ctx->cop2d[{}]", inst.rd));
   case InstrId::MTC2:
     return fmt::format("ctx->cop2d[{}] = {};", inst.rd, reg(inst.rt));
   case InstrId::CFC2:
-    return fmt::format("{} = ctx->cop2c[{}];", reg(inst.rt), inst.rd);
+    return assignReg(inst.rt, fmt::format("ctx->cop2c[{}]", inst.rd));
   case InstrId::CTC2:
     return fmt::format("ctx->cop2c[{}] = {};", inst.rd, reg(inst.rt));
   case InstrId::LWC2:
@@ -420,54 +505,208 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
 
   uint32_t pc = func.address;
   size_t numInstr = func.instructions.size();
-  std::vector<uint32_t> oob_targets;
+
+  // ─── Pass 1: Pre-scan ALL instructions ─────────────────
+  // Scan every instruction to find all branch/jump targets.
+  // For targets within the emitted instruction range: mark as label.
+  // For anything else (OOB or in gap beyond loaded instrs): dispatch.
+  //
+  // IMPORTANT: After an unconditional jump (JR/JALR) + delay slot,
+  // subsequent bytes may be DATA (jump tables, padding), not code.
+  // We skip unreachable regions to avoid misinterpreting data as branches.
+  std::set<uint32_t> oob_set; // deduplicated OOB targets
+  // Copy isLabelTarget so we can add new targets discovered in data-as-code
+  std::vector<bool> labelTargets = func.isLabelTarget;
+  if (labelTargets.size() < numInstr) {
+    labelTargets.resize(numInstr, false);
+  }
+
+  auto classifyTarget = [&](uint32_t target) {
+    // Check if target falls within the actual emitted instructions
+    if (target >= func.address) {
+      size_t idx = (target - func.address) / 4;
+      if (idx < labelTargets.size()) {
+        // In-range of emitted instructions: mark as label
+        labelTargets[idx] = true;
+        return;
+      }
+    }
+    // OOB: outside function OR in the gap beyond loaded instructions
+    oob_set.insert(target);
+  };
+
+  // First pass: classify ALL targets from ALL instructions.
+  // Even data words might appear as instructions in Pass 2 if reachability
+  // diverges, so we must ensure every possible target has a label.
+  for (size_t i = 0; i < numInstr; ++i) {
+    uint32_t addr = func.address + static_cast<uint32_t>(i * 4);
+    Instruction inst = MipsDecoder::decode(func.instructions[i]);
+
+    if (inst.category == InstrCategory::Branch) {
+      classifyTarget(inst.branchTarget(addr));
+    } else if (inst.category == InstrCategory::Jump && inst.id == InstrId::J) {
+      classifyTarget(inst.jumpTarget(addr));
+    }
+  }
+
+  // ─── Pass 2: Emit code ─────────────────────────────────
+  // Track reachability: after JR/JALR + delay slot, treat subsequent
+  // words as data comments until the next branch target label.
+  bool reachable = true;
+  int skipAfterJump = 0;
 
   for (size_t i = 0; i < numInstr; ++i) {
     uint32_t addr = func.address + static_cast<uint32_t>(i * 4);
 
     // Emit label if this address is a branch target
-    if (!func.isLabelTarget.empty() && i < func.isLabelTarget.size() &&
-        func.isLabelTarget[i]) {
+    if (i < labelTargets.size() && labelTargets[i]) {
       result += fmt::format("{}:\n", label(addr));
+      reachable = true;
+      skipAfterJump = 0;
+    }
+
+    if (skipAfterJump > 0) {
+      skipAfterJump--;
+      if (skipAfterJump == 0) {
+        reachable = false;
+      }
+    }
+
+    if (!reachable) {
+      // Emit as data comment instead of decoding
+      result +=
+          fmt::format("    // .word 0x{:08X} (data)\n", func.instructions[i]);
+      continue;
     }
 
     Instruction inst = MipsDecoder::decode(func.instructions[i]);
-
-    if (inst.category == InstrCategory::Branch) {
-      uint32_t target = inst.branchTarget(addr);
-      if (target < func.address || target >= func.address + func.size) {
-        oob_targets.push_back(target);
-      }
-    } else if (inst.category == InstrCategory::Jump && inst.id == InstrId::J) {
-      uint32_t target = inst.jumpTarget(addr);
-      if (target < func.address || target >= func.address + func.size) {
-        oob_targets.push_back(target);
-      }
-    }
-
     std::string code = emitInstruction(inst, addr);
 
     // Handle branch delay slots: if this instruction has a delay slot,
-    // emit the next instruction BEFORE the branch/jump
+    // emit the next instruction BEFORE the branch/jump.
+    //
+    // IMPORTANT — MIPS delay slot semantics:
+    //   In real hardware the branch condition (or jump target register)
+    //   is evaluated BEFORE the delay slot executes.  If the delay slot
+    //   writes to a register that the branch/jump reads, we must save
+    //   that register to a temporary before the delay slot runs, then
+    //   use the saved value in the branch/jump.
     if (inst.hasBranchDelaySlot() && i + 1 < numInstr) {
       Instruction delayInst = MipsDecoder::decode(func.instructions[i + 1]);
       std::string delayCode = emitInstruction(delayInst, addr + 4);
-      result += fmt::format("    {} // delay slot\n", delayCode);
-      result += fmt::format("    {}\n", code);
+
+      int destGPR = getDestGPR(delayInst);
+
+      // Detect conflict: delay slot writes to a register that the
+      // branch condition or jump target reads.
+      // For conditional branches: rs (and rt for BEQ/BNE).
+      // For JR/JALR: rs (the target register).
+      std::set<int> conflictRegs;
+      if (destGPR > 0) { // r0 is hardwired to 0, no conflict possible
+        if (inst.isBranch()) {
+          if (destGPR == static_cast<int>(inst.rs))
+            conflictRegs.insert(destGPR);
+          if ((inst.id == InstrId::BEQ || inst.id == InstrId::BNE) &&
+              destGPR == static_cast<int>(inst.rt))
+            conflictRegs.insert(destGPR);
+        } else if (inst.id == InstrId::JR || inst.id == InstrId::JALR) {
+          if (destGPR == static_cast<int>(inst.rs))
+            conflictRegs.insert(destGPR);
+        }
+      }
+
+      if (!conflictRegs.empty()) {
+        // Save conflicting registers, run delay slot, then branch/jump
+        // using the saved values.  Wrap in a block scope so that the
+        // local temporaries don't get crossed by gotos elsewhere in the
+        // function (C++ forbids goto jumping over an initialiser).
+        result += "    {\n";
+        for (int r : conflictRegs) {
+          result += fmt::format(
+              "      uint32_t _ds_r{} = ctx->r{}; // save for branch\n", r, r);
+        }
+        result += fmt::format("      {} // delay slot\n", delayCode);
+        std::string branchCode = code;
+        for (int r : conflictRegs) {
+          replaceRegRef(branchCode, fmt::format("ctx->r{}", r),
+                     fmt::format("_ds_r{}", r));
+        }
+        result += fmt::format("      {}\n", branchCode);
+        result += "    }\n";
+      } else {
+        // No conflict — emit delay slot then branch/jump (original order)
+        result += fmt::format("    {} // delay slot\n", delayCode);
+        result += fmt::format("    {}\n", code);
+      }
       ++i; // Skip delay slot instruction
     } else {
       result += fmt::format("    {}\n", code);
     }
+
+    // Track unconditional jumps for reachability.
+    // Only JR makes subsequent code unreachable — JALR is a function call
+    // that returns, so code after JALR is still reachable.
+    if (inst.category == InstrCategory::Jump && inst.id == InstrId::JR) {
+      skipAfterJump = 1; // delay slot was already consumed above, skip 1 more
+    }
   }
 
-  for (uint32_t target : oob_targets) {
+  // ─── Emit OOB target labels ────────────────────────────
+  // Always use recomp_dispatch for OOB — we can't trust that
+  // the target corresponds to a known function.
+  for (uint32_t target : oob_set) {
     result += fmt::format("{}:\n", label(target));
-    if (m_resolver) {
-      result +=
-          fmt::format("    {}(rdram, ctx); return;\n", m_resolver(target));
-    } else {
-      result +=
-          fmt::format("    JUMP_INDIRECT(ctx, 0x{:08X}); return;\n", target);
+    result += fmt::format(
+        "    recomp_dispatch(rdram, ctx, 0x{:08X}); return;\n", target);
+  }
+
+  // ─── Post-pass: catch-all for undefined labels ─────────
+  // Scan the generated code for all "goto L_XXXXXXXX" references
+  // and ensure every one has a matching "L_XXXXXXXX:" definition.
+  // This catches any edge cases the pre-scan missed.
+  {
+    std::set<uint32_t> referenced;
+    std::set<uint32_t> defined;
+
+    // Find all "goto L_" references
+    size_t pos = 0;
+    while ((pos = result.find("goto L_", pos)) != std::string::npos) {
+      pos += 7; // skip "goto L_"
+      if (pos + 8 <= result.size()) {
+        try {
+          uint32_t addr = std::stoul(result.substr(pos, 8), nullptr, 16);
+          referenced.insert(addr);
+        } catch (...) {
+        }
+      }
+      pos += 8;
+    }
+
+    // Find all "L_XXXXXXXX:" label definitions
+    pos = 0;
+    while ((pos = result.find("L_", pos)) != std::string::npos) {
+      size_t lpos = pos;
+      pos += 2; // skip "L_"
+      if (pos + 8 <= result.size() && pos + 8 < result.size() &&
+          result[pos + 8] == ':') {
+        // Check this isn't preceded by "goto " (i.e., it's a label def)
+        if (lpos == 0 || result[lpos - 1] == '\n' || result[lpos - 1] == ' ') {
+          try {
+            uint32_t addr = std::stoul(result.substr(pos, 8), nullptr, 16);
+            defined.insert(addr);
+          } catch (...) {
+          }
+        }
+      }
+    }
+
+    // Emit dispatch for any referenced-but-undefined labels
+    for (uint32_t addr : referenced) {
+      if (defined.find(addr) == defined.end()) {
+        result += fmt::format("{}:\n", label(addr));
+        result += fmt::format(
+            "    recomp_dispatch(rdram, ctx, 0x{:08X}); return;\n", addr);
+      }
     }
   }
 
