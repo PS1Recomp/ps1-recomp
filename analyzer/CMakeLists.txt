@@ -6,6 +6,8 @@ add_library(ps1xAnalyzer_lib
     src/function_finder.cpp
     src/psyq_signatures.cpp
     src/config_generator.cpp
+    src/disc_reader.cpp
+    src/overlay_scanner.cpp
 )
 
 target_include_directories(ps1xAnalyzer_lib
