@@ -279,6 +279,9 @@ void GPU::writeGP0(uint32_t val) {
     case 0x7F:
       expectedCommandWords_ = 3;
       break; // 16x16 Tex Rect
+    case 0x80:
+      expectedCommandWords_ = 4;
+      break; // Copy Rectangle (VRAM to VRAM)
     case 0xA0:
       expectedCommandWords_ = 3;
       break; // Copy Rectangle (CPU to VRAM)

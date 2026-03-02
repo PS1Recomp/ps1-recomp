@@ -64,6 +64,7 @@ public:
   // Get sector data for DMA transfer
   const uint8_t *getSectorBuffer() const { return sectorBuffer_.data(); }
   uint32_t getSectorSize() const { return sectorSize_; }
+  uint8_t getMode() const { return mode_; }
   bool hasSectorReady() const { return sectorReady_; }
   void clearSectorReady() { sectorReady_ = false; }
 

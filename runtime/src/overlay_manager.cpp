@@ -71,6 +71,7 @@ void OverlayManager::notifyMemWrite(uint32_t addr, uint32_t writeSize) {
       ovl.active = true;
       if (hook_)
         hook_(ovl.index, true);
+      break; // Only activate one overlay per write notification
     }
   }
 }
