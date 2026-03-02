@@ -9,6 +9,7 @@ add_executable(ps1xAnalyzer_tests
     analyzer/test_function_finder.cpp
     analyzer/test_psyq_signatures.cpp
     analyzer/test_config_generator.cpp
+    analyzer/test_overlay_scanner.cpp
 )
 
 target_link_libraries(ps1xAnalyzer_tests
@@ -68,6 +69,17 @@ add_executable(ps1xRuntime_tests
     runtime/test_gpu_blend.cpp
     runtime/test_gpu_display.cpp
     runtime/test_gpu_vram.cpp
+    runtime/test_spu.cpp
+    runtime/test_cdrom_controller.cpp
+    runtime/test_dma.cpp
+    runtime/test_input.cpp
+    runtime/test_mdec.cpp
+    runtime/test_timers.cpp
+    runtime/test_save_state.cpp
+    runtime/test_config.cpp
+    runtime/test_gpu_screenshot.cpp
+    runtime/test_game_validation.cpp
+    runtime/test_overlay_manager.cpp
 )
 
 target_include_directories(ps1xRuntime_tests

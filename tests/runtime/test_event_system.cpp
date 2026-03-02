@@ -1,12 +1,14 @@
 #include "runtime/bios/event_system.h"
+#include "runtime/cpu_context.h"
 #include <gtest/gtest.h>
 
 using namespace ps1::bios;
 
 class EventSystemTest : public ::testing::Test {
 protected:
-  void SetUp() override { es = std::make_unique<EventSystem>(); }
+  void SetUp() override { es = std::make_unique<EventSystem>(ctx); }
 
+  recomp_context ctx{};
   std::unique_ptr<EventSystem> es;
 };
 

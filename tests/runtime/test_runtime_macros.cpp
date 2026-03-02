@@ -49,37 +49,49 @@ TEST(RuntimeMacros, GteRegisterMasking) {
 
 TEST(RuntimeMacros, LWLAligned) {
   Memory mem;
+  RuntimeContext ctx;
+  ctx.reset();
+  ctx.mem = &mem;
   mem.write32(0x1000, 0xAABBCCDD);
 
   // LWL with shift=3 (fully aligned word)
-  uint32_t result = DO_LWL(&mem, 0x00000000, 0x1003);
+  uint32_t result = DO_LWL((recomp_context *)&ctx, 0x00000000, 0x1003);
   EXPECT_EQ(result, 0xAABBCCDDu);
 }
 
 TEST(RuntimeMacros, LWRAligned) {
   Memory mem;
+  RuntimeContext ctx;
+  ctx.reset();
+  ctx.mem = &mem;
   mem.write32(0x1000, 0xAABBCCDD);
 
   // LWR with shift=0 (fully aligned word)
-  uint32_t result = DO_LWR(&mem, 0x00000000, 0x1000);
+  uint32_t result = DO_LWR((recomp_context *)&ctx, 0x00000000, 0x1000);
   EXPECT_EQ(result, 0xAABBCCDDu);
 }
 
 TEST(RuntimeMacros, LWLPartialMerge) {
   Memory mem;
+  RuntimeContext ctx;
+  ctx.reset();
+  ctx.mem = &mem;
   mem.write32(0x1000, 0xAABBCCDD);
 
   // LWL shift=0 → load high byte only, keep low 3 bytes of rt
-  uint32_t result = DO_LWL(&mem, 0x11223344, 0x1000);
+  uint32_t result = DO_LWL((recomp_context *)&ctx, 0x11223344, 0x1000);
   EXPECT_EQ(result, (0x11223344u & 0x00FFFFFF) | (0xAABBCCDD << 24));
 }
 
 TEST(RuntimeMacros, LWRPartialMerge) {
   Memory mem;
+  RuntimeContext ctx;
+  ctx.reset();
+  ctx.mem = &mem;
   mem.write32(0x1000, 0xAABBCCDD);
 
   // LWR shift=3 → load low byte only, keep high 3 bytes of rt
-  uint32_t result = DO_LWR(&mem, 0x11223344, 0x1003);
+  uint32_t result = DO_LWR((recomp_context *)&ctx, 0x11223344, 0x1003);
   EXPECT_EQ(result, (0x11223344u & 0xFFFFFF00) | (0xAABBCCDD >> 24));
 }
 
@@ -89,17 +101,23 @@ TEST(RuntimeMacros, LWRPartialMerge) {
 
 TEST(RuntimeMacros, SWLFullWrite) {
   Memory mem;
+  RuntimeContext ctx;
+  ctx.reset();
+  ctx.mem = &mem;
   mem.write32(0x2000, 0x00000000);
 
-  DO_SWL(&mem, 0xAABBCCDD, 0x2003);
+  DO_SWL((recomp_context *)&ctx, 0xAABBCCDD, 0x2003);
   EXPECT_EQ(mem.read32(0x2000), 0xAABBCCDDu);
 }
 
 TEST(RuntimeMacros, SWRFullWrite) {
   Memory mem;
+  RuntimeContext ctx;
+  ctx.reset();
+  ctx.mem = &mem;
   mem.write32(0x2000, 0x00000000);
 
-  DO_SWR(&mem, 0xAABBCCDD, 0x2000);
+  DO_SWR((recomp_context *)&ctx, 0xAABBCCDD, 0x2000);
   EXPECT_EQ(mem.read32(0x2000), 0xAABBCCDDu);
 }
 
