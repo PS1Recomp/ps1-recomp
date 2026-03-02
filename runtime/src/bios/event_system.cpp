@@ -1,9 +1,15 @@
 #include "runtime/bios/event_system.h"
+#include "runtime/cpu_context.h"
+#include "runtime/memory.h"
 #include <fmt/core.h>
+
+// Forward declare recomp_dispatch (defined in recompiled_out.cpp, global namespace)
+extern void recomp_dispatch(uint8_t *rdram, recomp_context *ctx,
+                            uint32_t target_pc);
 
 namespace ps1::bios {
 
-EventSystem::EventSystem() {
+EventSystem::EventSystem(recomp_context &ctx) : ctx_(ctx) {
   // Usually games assume event IDs start from a specific range or we can just
   // use vector index
   events_.reserve(MAX_EVENTS);
@@ -70,6 +76,9 @@ uint32_t EventSystem::testEvent(uint32_t eventId) {
   bool isTriggered = events_[eventId].triggered;
   if (isTriggered) {
     events_[eventId].triggered = false; // Acknowledge
+    fmt::print(
+        "[BIOS] testEvent({}) -> TRIGGERED (class=0x{:X}, spec=0x{:X})\n",
+        eventId, events_[eventId].classId, events_[eventId].specId);
     return 1;
   }
 
@@ -96,12 +105,11 @@ void EventSystem::triggerEvent(uint32_t classId, uint32_t specId) {
   for (auto &ev : events_) {
     if (ev.classId == classId && ev.specId == specId && ev.enabled) {
       ev.triggered = true;
-      // Mode 0x1000 or 0x2000 dictates whether it's an interrupt handler call
-      // vs a flag
       if (ev.mode == 0x1000 && ev.handler != 0) {
-        fmt::print("[BIOS] Would dispatch event handler 0x{:08X}\n",
-                   ev.handler);
-        // We need to inject a jump to the handler in the cpu context next cycle
+        // Queue for game-thread dispatch instead of calling recomp_dispatch
+        // directly (which would be thread-unsafe when called from main thread).
+        std::lock_guard<std::mutex> lk(cbMtx_);
+        pendingCallbacks_.push_back({ev.handler, 0, 0, false, false});
       }
     }
   }
@@ -109,6 +117,48 @@ void EventSystem::triggerEvent(uint32_t classId, uint32_t specId) {
 
 void EventSystem::tick() {
   // Evaluate if any triggered events need handling
+}
+
+void EventSystem::drainPendingCallbacks() {
+  // Move callbacks to a local copy under the lock, then release the lock
+  // before dispatching (dispatched callbacks may re-enter triggerEvent).
+  std::vector<PendingCallback> local;
+  {
+    std::lock_guard<std::mutex> lk(cbMtx_);
+    if (pendingCallbacks_.empty())
+      return;
+    local = std::move(pendingCallbacks_);
+    pendingCallbacks_.clear();
+  }
+
+  // Save volatile registers around callback dispatch so we don't corrupt
+  // the game thread's register state.
+  auto saved = static_cast<ps1::CPUContext>(ctx_);
+
+  for (const auto &cb : local) {
+    // Set up register arguments before dispatch if needed
+    if (cb.hasArg) {
+      ctx_.r4 = cb.a0;
+    }
+    if (cb.hasA1) {
+      ctx_.r5 = cb.a1;
+    }
+    // Debug: log CD data callback with remaining value
+    if (cb.handlerPc == 0x80045C04) {
+      static int cdDispatchCount = 0;
+      cdDispatchCount++;
+      int32_t remaining = (int32_t)ctx_.mem->read32(0x80055898);
+      if (cdDispatchCount <= 20) {
+        fmt::print(stderr, "[CD-DISPATCH] #{} a0={} remaining={} sectorRdy=?\n",
+                   cdDispatchCount, cb.a0, remaining);
+      }
+    }
+    fmt::print("[BIOS] Dispatching event callback 0x{:08X}\n", cb.handlerPc);
+    recomp_dispatch(ctx_.mem->ramPtr(), &ctx_, cb.handlerPc);
+  }
+
+  // Restore all registers that the game was using
+  static_cast<ps1::CPUContext &>(ctx_) = saved;
 }
 
 } // namespace ps1::bios

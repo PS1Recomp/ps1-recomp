@@ -103,6 +103,11 @@ int32_t FileIO::read(int32_t fd, uint32_t dstAddr, int32_t length) {
   fmt::print("[BIOS] read(fd: {}, dst: 0x{:08X}, len: {}) -> read {}\n", fd,
              dstAddr, length, bytesToRead);
 
+  // Notify overlay manager that data was written to RAM
+  if (overlayMgr_) {
+    overlayMgr_->notifyMemWrite(dstAddr, static_cast<uint32_t>(bytesToRead));
+  }
+
   return bytesToRead;
 }
 

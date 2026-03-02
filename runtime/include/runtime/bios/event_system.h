@@ -1,7 +1,10 @@
 #pragma once
 
 #include <cstdint>
+#include <mutex>
 #include <vector>
+
+struct recomp_context;
 
 namespace ps1::bios {
 
@@ -14,9 +17,17 @@ struct Event {
   bool triggered;
 };
 
+struct PendingCallback {
+  uint32_t handlerPc;
+  uint32_t a0;     // value for ctx->r4 before call
+  uint32_t a1;     // value for ctx->r5 before call
+  bool hasArg;
+  bool hasA1;
+};
+
 class EventSystem {
 public:
-  EventSystem();
+  EventSystem(recomp_context &ctx);
   ~EventSystem() = default;
 
   // BIOS Event Functions
@@ -32,8 +43,37 @@ public:
   void triggerEvent(uint32_t classId, uint32_t specId);
   void tick(); // Evaluate events
 
+  // Process callbacks queued by triggerEvent / queueCallback.
+  // MUST be called from the game thread (uses ctx_ safely).
+  void drainPendingCallbacks();
+
+  // Queue a callback with no specific register setup.
+  // Thread-safe: may be called from the main loop thread.
+  void queueCallback(uint32_t handlerPc) {
+    std::lock_guard<std::mutex> lk(cbMtx_);
+    pendingCallbacks_.push_back({handlerPc, 0, 0, false, false});
+  }
+
+  // Queue a callback with a0 ($r4) set to a specific value.
+  // Thread-safe: may be called from the main loop thread.
+  void queueCallbackWithArg(uint32_t handlerPc, uint32_t a0Val) {
+    std::lock_guard<std::mutex> lk(cbMtx_);
+    pendingCallbacks_.push_back({handlerPc, a0Val, 0, true, false});
+  }
+
+  // Queue a callback with both a0 ($r4) and a1 ($r5) set.
+  // Thread-safe: may be called from the main loop thread.
+  void queueCallbackWithArgs(uint32_t handlerPc, uint32_t a0Val, uint32_t a1Val) {
+    std::lock_guard<std::mutex> lk(cbMtx_);
+    pendingCallbacks_.push_back({handlerPc, a0Val, a1Val, true, true});
+  }
+
 private:
+  recomp_context &ctx_;
   std::vector<Event> events_;
+
+  std::mutex cbMtx_;  // protects pendingCallbacks_
+  std::vector<PendingCallback> pendingCallbacks_;
 
   static constexpr uint32_t MAX_EVENTS = 32;
   static constexpr uint32_t INVALID_EVENT_ID = 0xFFFFFFFF;
