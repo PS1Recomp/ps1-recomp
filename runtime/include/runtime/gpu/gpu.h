@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <mutex>
 #include <vector>
 
 namespace ps1::gpu {
@@ -53,8 +54,18 @@ public:
   // Read GPU Status Register (GPUSTAT)
   uint32_t readGPUSTAT() const;
 
-  // Get a pointer to the 1024x512 VRAM framebuffer
+  // Get a pointer to the 1024x512 VRAM framebuffer (live — game thread writes here)
   const Color16 *getVRAM() const { return vram_.data(); }
+
+  // Get the display-safe snapshot (captured at VBlank)
+  const Color16 *getDisplayVRAM() const { return displayVram_.data(); }
+
+  // Snapshot the current display region into the display buffer.
+  // Call this at VBlank time from the main thread.
+  void snapshotDisplayBuffer();
+
+  // Check if display is enabled (GP1(0x03), GPUSTAT bit 23)
+  bool isDisplayEnabled() const { return !(gpuStat_ & (1u << 23)); }
 
   // Dimensions of VRAM
   static constexpr uint32_t VRAM_WIDTH = 1024;
@@ -78,8 +89,14 @@ public:
   Color16 applyBlend(Color16 fg, Color16 bg);
 
 private:
-  // VRAM buffer
+  // VRAM buffer (live — game thread writes here)
   std::vector<Color16> vram_;
+
+  // Display snapshot buffer (read by renderer at frame time)
+  std::vector<Color16> displayVram_;
+
+  // Mutex for snapshot buffer access
+  mutable std::mutex displayMutex_;
 
   // GPU status registers
   uint32_t gpuStat_;

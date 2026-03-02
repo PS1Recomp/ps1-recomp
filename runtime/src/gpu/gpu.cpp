@@ -3,12 +3,14 @@
 #include <cstdint>
 #include <fmt/format.h>
 #include <initializer_list>
+#include <unordered_map>
 #include <utility>
 
 namespace ps1::gpu {
 
 GPU::GPU() {
   vram_.resize(VRAM_WIDTH * VRAM_HEIGHT);
+  displayVram_.resize(VRAM_WIDTH * VRAM_HEIGHT);
   reset();
 }
 
@@ -42,6 +44,14 @@ void GPU::reset() {
   vramTransfer_.isCopyingVRAM = false;
 
   std::fill(vram_.begin(), vram_.end(), Color16{0});
+  std::fill(displayVram_.begin(), displayVram_.end(), Color16{0});
+}
+
+void GPU::snapshotDisplayBuffer() {
+  std::lock_guard<std::mutex> lock(displayMutex_);
+  // Copy the full VRAM to the display buffer.
+  // The renderer will select the display region from this buffer.
+  std::copy(vram_.begin(), vram_.end(), displayVram_.begin());
 }
 
 uint32_t GPU::readGPUSTAT() const { return gpuStat_; }
@@ -75,6 +85,21 @@ uint32_t GPU::readGPUREAD() {
 }
 
 void GPU::writeGP0(uint32_t val) {
+  {
+    static int gp0Count = 0;
+    static std::unordered_map<uint8_t, int> opcodeHist;
+    gp0Count++;
+    if (!vramTransfer_.isWritingToVRAM && !isCommandExecuting_) {
+      uint8_t op = val >> 24;
+      opcodeHist[op]++;
+    }
+    if (gp0Count == 500 || gp0Count == 2000 || gp0Count == 5000) {
+      fmt::print(stderr, "[GPU] GP0 command histogram after {} calls:\n", gp0Count);
+      for (auto& [op, cnt] : opcodeHist) {
+        fmt::print(stderr, "  opcode 0x{:02X}: {} times\n", op, cnt);
+      }
+    }
+  }
   if (vramTransfer_.isWritingToVRAM) {
     uint16_t p1 = val & 0xFFFF;
     uint16_t p2 = (val >> 16) & 0xFFFF;
@@ -117,65 +142,141 @@ void GPU::writeGP0(uint32_t val) {
       expectedCommandWords_ = 3;
       break; // Fill Rectangle in VRAM
     case 0x20:
+    case 0x21:
+    case 0x22:
+    case 0x23:
       expectedCommandWords_ = 4;
       break; // Monochrome 3-point polygon
     case 0x24:
+    case 0x25:
+    case 0x26:
+    case 0x27:
       expectedCommandWords_ = 7;
       break; // Textured 3-point polygon
     case 0x28:
+    case 0x29:
+    case 0x2A:
+    case 0x2B:
       expectedCommandWords_ = 5;
       break; // Monochrome 4-point polygon
     case 0x2C:
+    case 0x2D:
+    case 0x2E:
+    case 0x2F:
       expectedCommandWords_ = 9;
       break; // Textured 4-point polygon
     case 0x30:
+    case 0x31:
     case 0x32:
+    case 0x33:
       expectedCommandWords_ = 6;
       break; // Gouraud 3-point polygon
     case 0x34:
+    case 0x35:
     case 0x36:
+    case 0x37:
       expectedCommandWords_ = 9;
       break; // Gouraud Textured 3-point polygon
     case 0x38:
+    case 0x39:
     case 0x3A:
+    case 0x3B:
       expectedCommandWords_ = 8;
       break; // Gouraud 4-point polygon
     case 0x3C:
+    case 0x3D:
     case 0x3E:
+    case 0x3F:
       expectedCommandWords_ = 12;
       break; // Gouraud Textured 4-point polygon
     case 0x40:
+    case 0x41:
+    case 0x42:
+    case 0x43:
+    case 0x44:
+    case 0x45:
+    case 0x46:
+    case 0x47:
       expectedCommandWords_ = 3;
       break; // Monochrome Line
     case 0x48:
+    case 0x49:
     case 0x4A:
+    case 0x4B:
     case 0x4C:
+    case 0x4D:
     case 0x4E:
+    case 0x4F:
       expectedCommandWords_ =
           3; // Poly-line is variable, 3 is just for the first segment
       break;
     case 0x50:
+    case 0x51:
+    case 0x52:
+    case 0x53:
+    case 0x54:
+    case 0x55:
+    case 0x56:
+    case 0x57:
       expectedCommandWords_ = 4;
       break; // Gouraud Line
+    case 0x58:
+    case 0x59:
+    case 0x5A:
+    case 0x5B:
+    case 0x5C:
+    case 0x5D:
+    case 0x5E:
+    case 0x5F:
+      expectedCommandWords_ =
+          4; // Gouraud Poly-line is variable, 4 for first segment
+      break;
     case 0x60:
+    case 0x61:
+    case 0x62:
+    case 0x63:
       expectedCommandWords_ = 3;
       break; // Variable Rect
     case 0x64:
+    case 0x65:
+    case 0x66:
+    case 0x67:
       expectedCommandWords_ = 4;
       break; // Variable Tex Rect
     case 0x68:
+    case 0x69:
+    case 0x6A:
+    case 0x6B:
       expectedCommandWords_ = 2;
       break; // 1x1 Rect
+    case 0x6C:
+    case 0x6D:
+    case 0x6E:
+    case 0x6F:
+      expectedCommandWords_ = 3;
+      break; // 1x1 Tex Rect
     case 0x70:
+    case 0x71:
+    case 0x72:
+    case 0x73:
       expectedCommandWords_ = 2;
       break; // 8x8 Rect
     case 0x74:
+    case 0x75:
+    case 0x76:
+    case 0x77:
       expectedCommandWords_ = 3;
       break; // 8x8 Tex Rect
     case 0x78:
+    case 0x79:
+    case 0x7A:
+    case 0x7B:
       expectedCommandWords_ = 2;
       break; // 16x16 Rect
     case 0x7C:
+    case 0x7D:
+    case 0x7E:
+    case 0x7F:
       expectedCommandWords_ = 3;
       break; // 16x16 Tex Rect
     case 0xA0:
@@ -261,6 +362,35 @@ void GPU::writeGP1(uint32_t val) {
     // We update GPUSTAT bits 17-19 (Hres), 20 (Vres), etc.
     gpuStat_ = (gpuStat_ & ~0x7F0000) | ((val & 0x7F) << 17);
     break;
+  case 0x10: // Get GPU Info
+  {
+    uint32_t param = val & 0x0F; // Only bits 0-3 matter (mirrored 0-7)
+    switch (param & 0x07) {
+    case 2: // Texture Window
+      gpuRead_ = ((uint32_t)texWindowMaskX_) |
+                 ((uint32_t)texWindowMaskY_ << 5) |
+                 ((uint32_t)texWindowOffsetX_ << 10) |
+                 ((uint32_t)texWindowOffsetY_ << 15);
+      break;
+    case 3: // Draw Area Top Left
+      gpuRead_ = ((uint32_t)drawAreaX1_) | ((uint32_t)drawAreaY1_ << 10);
+      break;
+    case 4: // Draw Area Bottom Right
+      gpuRead_ = ((uint32_t)drawAreaX2_) | ((uint32_t)drawAreaY2_ << 10);
+      break;
+    case 5: // Draw Offset
+      gpuRead_ = ((uint32_t)(drawOffsetX_ & 0x7FF)) |
+                 ((uint32_t)(drawOffsetY_ & 0x7FF) << 11);
+      break;
+    case 7: // GPU Type (usually 2)
+      gpuRead_ = 2;
+      break;
+    default:
+      gpuRead_ = 0;
+      break;
+    }
+    break;
+  }
   default:
     fmt::print("[GPU] WARNING: Unknown GP1 opcode 0x{:02X}\n", opcode);
     break;
@@ -270,6 +400,9 @@ void GPU::writeGP1(uint32_t val) {
 void GPU::processLinkedList(uint32_t startAddr, const uint8_t *ram) {
   uint32_t currentAddr = startAddr & 0x1FFFFC;
   uint32_t maxNodes = 0x10000; // safety net to prevent infinite loops
+  static int llCallCount = 0;
+  int nodeCount = 0;
+  int totalWords = 0;
 
   while (currentAddr != 0x00FFFFFF && currentAddr != 0xFFFFFF &&
          maxNodes-- > 0) {
@@ -285,12 +418,20 @@ void GPU::processLinkedList(uint32_t startAddr, const uint8_t *ram) {
       uint32_t word = (ram[wordAddr] | (ram[wordAddr + 1] << 8) |
                        (ram[wordAddr + 2] << 16) | (ram[wordAddr + 3] << 24));
       writeGP0(word);
+      totalWords++;
     }
+    nodeCount++;
 
     if (nextAddr == 0xFFFFFF || nextAddr == 0x00FFFFFF) {
       break;
     }
     currentAddr = nextAddr & 0x1FFFFC;
+  }
+
+  llCallCount++;
+  if (llCallCount <= 10) {
+    fmt::print(stderr, "[GPU] LinkedList #{}: startAddr=0x{:06X}, nodes={}, GP0 words={}\n",
+               llCallCount, startAddr, nodeCount, totalWords);
   }
 }
 
@@ -307,57 +448,249 @@ void GPU::executeGP0Command() {
   case 0x02: // Fill Rect
     executeFillRect();
     break;
-  case 0x20: // Monochrome 3-point polygon
+
+  // ─── Polygons ──────────────────────────────────────────
+  // Opcode bits: [27:25] = type, [24] = gouraud, [23] unused
+  // Bit 0 = raw texture, Bit 1 = semi-transparent, Bit 2 = textured
+
+  // Monochrome triangles (all combinations)
+  case 0x20:
+  case 0x21:
+  case 0x22:
+  case 0x23:
     executeMonochromePoly3();
     break;
-  case 0x24: // Textured 3-point polygon
+  // Textured triangles
+  case 0x24:
+  case 0x25:
+  case 0x26:
+  case 0x27:
     executeTexturedPoly3();
     break;
-  case 0x28: // Monochrome 4-point polygon
+  // Monochrome quads (all combinations)
+  case 0x28:
+  case 0x29:
+  case 0x2A:
+  case 0x2B:
     executeMonochromePoly4();
     break;
-  case 0x2C: // Textured 4-point polygon
+  // Textured quads
+  case 0x2C:
+  case 0x2D:
+  case 0x2E:
+  case 0x2F:
     executeTexturedPoly4();
     break;
-  case 0x30: // Gouraud 3-point polygon
-  case 0x32: // Gouraud Blended 3-point polygon
+
+  // Gouraud triangles
+  case 0x30:
+  case 0x31:
+  case 0x32:
+  case 0x33:
     executeGouraudPoly3();
     break;
-  case 0x34: // Gouraud Textured 3-point polygon
+  // Gouraud textured triangles
+  case 0x34:
+  case 0x35:
   case 0x36:
+  case 0x37:
     executeGouraudTexturedPoly3();
     break;
-  case 0x38: // Gouraud 4-point polygon
-  case 0x3A: // Gouraud Blended 4-point polygon
+  // Gouraud quads
+  case 0x38:
+  case 0x39:
+  case 0x3A:
+  case 0x3B:
     executeGouraudPoly4();
     break;
-  case 0x3C: // Gouraud Textured 4-point polygon
+  // Gouraud textured quads
+  case 0x3C:
+  case 0x3D:
   case 0x3E:
+  case 0x3F:
     executeGouraudTexturedPoly4();
     break;
-  case 0x40: // Monochrome Line
-  case 0x48: // Mono Poly Line
-  case 0x50: // Gouraud Line
-  case 0x58: // Gouraud Poly Line
+
+  // ─── Lines ─────────────────────────────────────────────
+  case 0x40:
+  case 0x41:
+  case 0x42:
+  case 0x43: // Mono line
+  case 0x44:
+  case 0x45:
+  case 0x46:
+  case 0x47:
+  case 0x48:
+  case 0x49:
+  case 0x4A:
+  case 0x4B: // Mono poly-line
+  case 0x4C:
+  case 0x4D:
+  case 0x4E:
+  case 0x4F:
+  case 0x50:
+  case 0x51:
+  case 0x52:
+  case 0x53: // Gouraud line
+  case 0x54:
+  case 0x55:
+  case 0x56:
+  case 0x57:
+  case 0x58:
+  case 0x59:
+  case 0x5A:
+  case 0x5B: // Gouraud poly-line
+  case 0x5C:
+  case 0x5D:
+  case 0x5E:
+  case 0x5F:
     executeLine();
     break;
-  case 0x60: // Variable Rect
-  case 0x64: // Variable Tex Rect
-  case 0x68: // 1x1 Rect
-  case 0x70: // 8x8 Rect
-  case 0x74: // 8x8 Tex Rect
-  case 0x78: // 16x16 Rect
-  case 0x7C: // 16x16 Tex Rect
+
+  // ─── Rectangles ────────────────────────────────────────
+  case 0x60:
+  case 0x61:
+  case 0x62:
+  case 0x63: // Variable size rect
+  case 0x64:
+  case 0x65:
+  case 0x66:
+  case 0x67: // Variable size textured rect
+  case 0x68:
+  case 0x69:
+  case 0x6A:
+  case 0x6B: // 1x1 dot
+  case 0x6C:
+  case 0x6D:
+  case 0x6E:
+  case 0x6F: // 1x1 textured
+  case 0x70:
+  case 0x71:
+  case 0x72:
+  case 0x73: // 8x8 rect
+  case 0x74:
+  case 0x75:
+  case 0x76:
+  case 0x77: // 8x8 textured rect
+  case 0x78:
+  case 0x79:
+  case 0x7A:
+  case 0x7B: // 16x16 rect
+  case 0x7C:
+  case 0x7D:
+  case 0x7E:
+  case 0x7F: // 16x16 textured rect
     executeRect();
     break;
-  case 0x80: // VRAM to VRAM
+
+  // ─── VRAM Transfers ────────────────────────────────────
+  case 0x80:
+  case 0x81:
+  case 0x82:
+  case 0x83:
+  case 0x84:
+  case 0x85:
+  case 0x86:
+  case 0x87:
+  case 0x88:
+  case 0x89:
+  case 0x8A:
+  case 0x8B:
+  case 0x8C:
+  case 0x8D:
+  case 0x8E:
+  case 0x8F:
+  case 0x90:
+  case 0x91:
+  case 0x92:
+  case 0x93:
+  case 0x94:
+  case 0x95:
+  case 0x96:
+  case 0x97:
+  case 0x98:
+  case 0x99:
+  case 0x9A:
+  case 0x9B:
+  case 0x9C:
+  case 0x9D:
+  case 0x9E:
+  case 0x9F:
     executeCopyVRAM();
     break;
-  case 0xA0: // CPU to VRAM
+  case 0xA0:
+  case 0xA1:
+  case 0xA2:
+  case 0xA3:
+  case 0xA4:
+  case 0xA5:
+  case 0xA6:
+  case 0xA7:
+  case 0xA8:
+  case 0xA9:
+  case 0xAA:
+  case 0xAB:
+  case 0xAC:
+  case 0xAD:
+  case 0xAE:
+  case 0xAF:
+  case 0xB0:
+  case 0xB1:
+  case 0xB2:
+  case 0xB3:
+  case 0xB4:
+  case 0xB5:
+  case 0xB6:
+  case 0xB7:
+  case 0xB8:
+  case 0xB9:
+  case 0xBA:
+  case 0xBB:
+  case 0xBC:
+  case 0xBD:
+  case 0xBE:
+  case 0xBF:
     executeCPUToVRAM();
     break;
-  case 0xC0: // VRAM to CPU
+  case 0xC0:
+  case 0xC1:
+  case 0xC2:
+  case 0xC3:
+  case 0xC4:
+  case 0xC5:
+  case 0xC6:
+  case 0xC7:
+  case 0xC8:
+  case 0xC9:
+  case 0xCA:
+  case 0xCB:
+  case 0xCC:
+  case 0xCD:
+  case 0xCE:
+  case 0xCF:
+  case 0xD0:
+  case 0xD1:
+  case 0xD2:
+  case 0xD3:
+  case 0xD4:
+  case 0xD5:
+  case 0xD6:
+  case 0xD7:
+  case 0xD8:
+  case 0xD9:
+  case 0xDA:
+  case 0xDB:
+  case 0xDC:
+  case 0xDD:
+  case 0xDE:
+  case 0xDF:
     executeVRAMToCPU();
+    break;
+
+  // ─── GPU Environment Commands ──────────────────────────
+  case 0xE1: // Draw Mode / Texpage
+    ditherEnable_ = (cmd & (1 << 9)) != 0;
+    blendMode_ = (cmd >> 5) & 3;
     break;
   case 0xE2: // Set Texture Window
     executeTextureWindow();
@@ -378,16 +711,13 @@ void GPU::executeGP0Command() {
     if (drawOffsetY_ & 0x400)
       drawOffsetY_ |= 0xFFFFF800; // Sign extend 11-bit
     break;
-  case 0xE1: // Draw Mode parameter (Dither flag is bit 9, Blend Mode is bits
-             // 5-6)
-    ditherEnable_ = (cmd & (1 << 9)) != 0;
-    blendMode_ = (cmd >> 5) & 3;
-    break;
   case 0xE6: // Mask Bit
     // Bit 0 = Mask while drawing, Bit 1 = Set Mask bit on draw
     break;
+
   default:
-    // Some commands like E1, E6 are unimplemented but don't crash
+    fmt::print(stderr, "[GPU] Unknown GP0 opcode: 0x{:02X} (cmd=0x{:08X})\n",
+               opcode, cmd);
     break;
   }
 }
@@ -865,6 +1195,11 @@ void GPU::executeFillRect() {
   w = ((w - 1) & 0x3FF) + 1;
   uint32_t h = (size >> 16) & 0x1FF;
   h = ((h - 1) & 0x1FF) + 1;
+
+  static int fillCount = 0;
+  if (++fillCount <= 10)
+    fmt::print(stderr, "[GPU] FillRect #{}: color=0x{:06X} pos=({},{}) size={}x{}\n",
+               fillCount, color, x, y, w, h);
 
   // Convert 24-bit RGB to 15-bit
   uint16_t r5 = (color & 0xFF) >> 3;

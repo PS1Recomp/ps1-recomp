@@ -186,10 +186,14 @@ void RendererOpenGL::renderFrame() {
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
-  // Upload latest VRAM content to texture
+  // Upload display snapshot (captured at VBlank) to texture.
+  // This avoids tearing from the game thread writing to VRAM concurrently.
   glBindTexture(GL_TEXTURE_2D, vramTexture_);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, GPU::VRAM_WIDTH, GPU::VRAM_HEIGHT,
-                  GL_RGBA, GL_UNSIGNED_SHORT_1_5_5_5_REV, gpu_.getVRAM());
+  if (gpu_.isDisplayEnabled()) {
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, GPU::VRAM_WIDTH, GPU::VRAM_HEIGHT,
+                    GL_RGBA, GL_UNSIGNED_SHORT_1_5_5_5_REV,
+                    gpu_.getDisplayVRAM());
+  }
 
   glUseProgram(shaderProgram_);
 
@@ -243,13 +247,8 @@ void RendererOpenGL::renderFrame() {
 }
 
 bool RendererOpenGL::processEvents() {
-  SDL_Event e;
-  while (SDL_PollEvent(&e)) {
-    if (e.type == SDL_QUIT) {
-      return false;
-    }
-    // Handle input / window resize in the future
-  }
+  // Main loop in main_host.cpp already handles SDL_PollEvent.
+  // We don't want to steal SDL_QUIT or other events here.
   return true;
 }
 
