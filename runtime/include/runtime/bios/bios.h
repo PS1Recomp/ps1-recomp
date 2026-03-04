@@ -27,6 +27,26 @@ public:
   void setInputController(input::InputController *input) { input_ = input; }
   void setCdromController(cdrom::CdromController *cdrom) { cdrom_ = cdrom; }
 
+  // ── Per-game PsyQ BSS address configuration ──
+  // These addresses vary by game (PsyQ version / link layout).
+  // All default to 0 — MUST be configured per-game via env vars or TOML.
+  // When an address is 0, the corresponding HLE logic is skipped.
+  struct PsyqAddresses {
+    uint32_t vblankCounter = 0;   // rcnt[3] VBlank counter
+    uint32_t cdSyncByte    = 0;   // CD command completion flag
+    uint32_t cdReadyByte   = 0;   // CD data readiness flag
+    uint32_t cdRemaining   = 0;   // Sectors remaining to read
+    uint32_t cdDestPtr     = 0;   // Destination pointer for CD data
+    uint32_t cdWordCount   = 0;   // Words per sector to copy
+    uint32_t cdDataCb      = 0;   // CD data callback function pointer
+    uint32_t cdNotifyCb    = 0;   // CD notify callback function pointer
+    uint32_t cdStatusHw    = 0;   // CD status halfword (gate for PsyQ polling)
+    uint32_t gpuSwapCb     = 0;   // PsyQ display swap callback (SysEnqIntRP chain)
+  };
+
+  void setPsyqAddresses(const PsyqAddresses &addrs) { psyq_ = addrs; }
+  const PsyqAddresses &psyqAddresses() const { return psyq_; }
+
   // The single entry-point when PC jumps to A0, B0 or C0.
   // Handles reading the function index and triggering the right stub.
   void executeA0();
@@ -69,6 +89,9 @@ private:
   // Simulates the SysEnqIntRP interrupt handler chain that never runs in our
   // recompiled environment.  Stores the INT type (1-5) or 0 if nothing pending.
   std::atomic<uint8_t> cdIntPending_{0};
+
+  // Per-game PsyQ BSS addresses
+  PsyqAddresses psyq_;
 
   // Specific Table handlers mapping
   void handleA0(uint32_t index);

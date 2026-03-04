@@ -308,12 +308,18 @@ void CdromController::executeCommand(uint8_t cmd) {
     cmdDemute();
     break;
   case 0x0D:
-    cmdSetMode();
+    cmdSetFilter();
     break;
   case 0x0E:
-    cmdGetLocL();
+    cmdSetMode();
     break;
   case 0x0F:
+    cmdGetParam();
+    break;
+  case 0x10:
+    cmdGetLocL();
+    break;
+  case 0x11:
     cmdGetLocP();
     break;
   case 0x13:
@@ -420,6 +426,13 @@ void CdromController::cmdInit() {
   mode_ = 0;
   motorOn_ = true;
   pushResponse(INT_ACKNOWLEDGE, {buildStatusByte()});
+
+  // Push INT2 (Complete) immediately after INT3 (Acknowledge).
+  // On a real PS1 there's a delay, but in our recompiled model the game
+  // thread runs ahead of the main thread's tick(), so we must deliver
+  // both responses inline. The interruptCallback_ fires for each push,
+  // triggering the corresponding BIOS events that PsyQ CdInit polls.
+  pushResponse(INT_COMPLETE, {buildStatusByte()});
 }
 
 void CdromController::cmdMute() {
@@ -430,12 +443,25 @@ void CdromController::cmdDemute() {
   pushResponse(INT_ACKNOWLEDGE, {buildStatusByte()});
 }
 
+void CdromController::cmdSetFilter() {
+  if (paramFifo_.size() >= 2) {
+    xaFilterFile_ = paramFifo_[0];
+    xaFilterChannel_ = paramFifo_[1];
+  }
+  pushResponse(INT_ACKNOWLEDGE, {buildStatusByte()});
+}
+
 void CdromController::cmdSetMode() {
   if (!paramFifo_.empty()) {
     mode_ = paramFifo_[0];
     xaFilterEnabled_ = (mode_ & (1 << 4)) != 0;
   }
+  fmt::print("[CDROM] SetMode: mode_=0x{:02X}\n", mode_);
   pushResponse(INT_ACKNOWLEDGE, {buildStatusByte()});
+}
+
+void CdromController::cmdGetParam() {
+  pushResponse(INT_ACKNOWLEDGE, {buildStatusByte(), mode_, xaFilterFile_, xaFilterChannel_});
 }
 
 void CdromController::cmdGetLocL() {

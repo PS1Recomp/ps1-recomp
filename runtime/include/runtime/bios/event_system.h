@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <mutex>
 #include <vector>
@@ -71,6 +72,16 @@ public:
 private:
   recomp_context &ctx_;
   std::vector<Event> events_;
+
+  // Mutex protecting events_ vector. ALL reads and writes to events_
+  // (openEvent, testEvent, enableEvent, triggerEvent, etc.) must hold this.
+  // Main thread writes triggered state, game thread reads it.
+  mutable std::mutex eventsMtx_;
+
+  // Atomic bitmask for thread-safe event triggering.
+  // Main thread sets bits via triggerEvent(), game thread reads/clears via testEvent().
+  // Each bit corresponds to an event ID (0-31).
+  std::atomic<uint32_t> triggeredBits_{0};
 
   std::mutex cbMtx_;  // protects pendingCallbacks_
   std::vector<PendingCallback> pendingCallbacks_;

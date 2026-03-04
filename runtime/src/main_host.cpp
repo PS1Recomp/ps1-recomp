@@ -179,6 +179,37 @@ int main(int argc, char *argv[]) {
   bios.setInputController(&input);
   bios.setCdromController(&cdromCtrl);
 
+  // ── Per-game PsyQ BSS address configuration ──
+  // These can be overridden via environment variables.
+  {
+    ps1::bios::Bios::PsyqAddresses addrs;  // all default to 0
+    auto readEnvHex = [](const char *name, uint32_t &out) {
+      const char *val = std::getenv(name);
+      if (val) {
+        out = std::strtoul(val, nullptr, 0);
+        fmt::print("[CONFIG] {} = 0x{:08X}\n", name, out);
+      }
+    };
+    readEnvHex("PSYQ_VSYNC_COUNTER", addrs.vblankCounter);
+    readEnvHex("PSYQ_CD_SYNC_BYTE", addrs.cdSyncByte);
+    readEnvHex("PSYQ_CD_READY_BYTE", addrs.cdReadyByte);
+    readEnvHex("PSYQ_CD_REMAINING", addrs.cdRemaining);
+    readEnvHex("PSYQ_CD_DEST_PTR", addrs.cdDestPtr);
+    readEnvHex("PSYQ_CD_WORD_COUNT", addrs.cdWordCount);
+    readEnvHex("PSYQ_CD_DATA_CB", addrs.cdDataCb);
+    readEnvHex("PSYQ_CD_NOTIFY_CB", addrs.cdNotifyCb);
+    readEnvHex("PSYQ_CD_STATUS_HW", addrs.cdStatusHw);
+    readEnvHex("PSYQ_GPU_SWAP_CB", addrs.gpuSwapCb);
+
+    // Warn if critical addresses are not configured
+    if (addrs.vblankCounter == 0)
+      fmt::print(stderr, "[WARN] PSYQ_VSYNC_COUNTER not set — VSync polling will not work\n");
+    if (addrs.cdSyncByte == 0 || addrs.cdReadyByte == 0)
+      fmt::print(stderr, "[WARN] PSYQ_CD_SYNC_BYTE / PSYQ_CD_READY_BYTE not set — CD commands may hang\n");
+
+    bios.setPsyqAddresses(addrs);
+  }
+
   // Wire CDROM interrupt callback → BIOS event system
   // This fires IMMEDIATELY when a CDROM command completes (inside tick()),
   // before the game thread can read/acknowledge the interrupt hardware flag.

@@ -67,6 +67,7 @@ public:
   uint8_t getMode() const { return mode_; }
   bool hasSectorReady() const { return sectorReady_; }
   void clearSectorReady() { sectorReady_ = false; }
+  uint32_t getCyclesPerSector() const { return cyclesPerSector_; }
 
   // XA-ADPCM callback for SPU
   using XaCallback = std::function<void(const int16_t *, uint32_t)>;
@@ -155,7 +156,9 @@ private:
   void cmdInit();
   void cmdMute();
   void cmdDemute();
+  void cmdSetFilter();
   void cmdSetMode();
+  void cmdGetParam();
   void cmdGetLocL();
   void cmdGetLocP();
   void cmdGetTN();

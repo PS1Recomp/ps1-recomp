@@ -1,0 +1,240 @@
+skips = []
+stubs = []
+
+[[functions]]
+leaf = false
+size = 268
+source = "entry_point"
+address = "0x80010000"
+name = "__start"
+
+[[functions]]
+leaf = true
+size = 72
+source = "symbol"
+address = "0x8001010C"
+name = "initSerialIO"
+
+[[functions]]
+leaf = true
+size = 80
+source = "symbol"
+address = "0x80010154"
+name = "_putchar"
+
+[[functions]]
+leaf = false
+size = 104
+source = "symbol"
+address = "0x800101A4"
+name = "_puts"
+
+[[functions]]
+leaf = false
+size = 40
+source = "symbol"
+address = "0x8001020C"
+name = "_assertAbort"
+
+[[functions]]
+leaf = true
+size = 8
+source = "symbol"
+address = "0x80010300"
+name = "_out_null"
+
+[[functions]]
+leaf = true
+size = 92
+source = "symbol"
+address = "0x80010308"
+name = "_atoi"
+
+[[functions]]
+leaf = false
+size = 320
+source = "symbol"
+address = "0x80010364"
+name = "_out_rev"
+
+[[functions]]
+leaf = false
+size = 648
+source = "symbol"
+address = "0x800104A4"
+name = "_ntoa_format"
+
+[[functions]]
+leaf = false
+size = 336
+source = "symbol"
+address = "0x8001072C"
+name = "_ntoa_long"
+
+[[functions]]
+leaf = false
+size = 492
+source = "symbol"
+address = "0x8001087C"
+name = "_ntoa_long_long"
+
+[[functions]]
+leaf = false
+size = 3148
+source = "symbol"
+address = "0x80010A68"
+name = "_vsnprintf"
+
+[[functions]]
+leaf = true
+size = 16
+source = "symbol"
+address = "0x800116B4"
+name = "_out_char"
+
+[[functions]]
+leaf = false
+size = 32
+source = "prologue"
+address = "0x800116C4"
+name = "func_800116C4"
+
+[[functions]]
+leaf = false
+size = 76
+source = "symbol"
+address = "0x800116E4"
+name = "printf_"
+
+[[functions]]
+leaf = true
+size = 172
+source = "symbol"
+address = "0x80011730"
+name = "setupGPU"
+
+[[functions]]
+leaf = true
+size = 40
+source = "symbol"
+address = "0x800117DC"
+name = "waitForGP0Ready"
+
+[[functions]]
+leaf = true
+size = 40
+source = "symbol"
+address = "0x80011804"
+name = "waitForDMADone"
+
+[[functions]]
+leaf = true
+size = 48
+source = "symbol"
+address = "0x8001182C"
+name = "waitForVSync"
+
+[[functions]]
+leaf = false
+size = 112
+source = "symbol"
+address = "0x8001185C"
+name = "sendLinkedList"
+
+[[functions]]
+leaf = true
+size = 80
+source = "symbol"
+address = "0x800118CC"
+name = "clearOrderingTable"
+
+[[functions]]
+leaf = false
+size = 292
+source = "symbol"
+address = "0x8001191C"
+name = "allocatePacket"
+
+[[functions]]
+leaf = true
+size = 100
+source = "symbol"
+address = "0x80011A40"
+name = "setupGTE"
+
+[[functions]]
+leaf = true
+size = 148
+source = "symbol"
+address = "0x80011AA4"
+name = "multiplyCurrentMatrixByVectors"
+
+[[functions]]
+leaf = false
+size = 628
+source = "symbol"
+address = "0x80011B38"
+name = "rotateCurrentMatrix"
+
+[[functions]]
+leaf = false
+size = 908
+source = "symbol"
+address = "0x80011DAC"
+name = "main"
+
+[[functions]]
+leaf = true
+size = 128
+source = "symbol"
+address = "0x80012138"
+name = "isin"
+
+[[functions]]
+leaf = true
+size = 8
+source = "symbol"
+address = "0x800121B8"
+name = ".pic.__udivdi3"
+
+[[functions]]
+leaf = true
+size = 1128
+source = "symbol"
+address = "0x800121C0"
+name = "__udivdi3"
+
+[[functions]]
+leaf = true
+size = 8
+source = "symbol"
+address = "0x80012628"
+name = ".pic.__umoddi3"
+
+[[functions]]
+leaf = true
+size = 1072
+source = "symbol"
+address = "0x80012630"
+name = "__umoddi3"
+
+[[passthroughs]]
+address = "0x80010234"
+name = "memset"
+
+[stats]
+skips = 0
+stubs = 0
+game_functions = 31
+psyq_functions = 1
+passthroughs = 1
+total_functions = 32
+
+[binary]
+total_data_size = 624
+text_size = 10848
+total_code_size = 10848
+entry_point = "0x80010000"
+text_start = "0x80010000"
+path = "test_roms/example08_spinningCube.elf"
+

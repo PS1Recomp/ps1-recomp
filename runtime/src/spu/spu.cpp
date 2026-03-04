@@ -174,6 +174,11 @@ void SPU::writeRegister(uint32_t addr, uint16_t val) {
   // SPU Control
   case 0x1AA:
     spuCtrl_ = val;
+    // Immediately update SPUSTAT to mirror control bits 0-5.
+    // On real hardware this happens within a few CPU cycles.
+    // Without this, PsyQ SpuInit busy-waits on SPUSTAT forever
+    // because generateSamples() (audio callback) hasn't fired yet.
+    spuStat_ = val & 0x3F;
     // Noise frequency step from bits 8-13
     noiseStep_ = (val >> 8) & 0x3F;
     break;

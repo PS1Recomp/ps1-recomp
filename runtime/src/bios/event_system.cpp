@@ -17,6 +17,7 @@ EventSystem::EventSystem(recomp_context &ctx) : ctx_(ctx) {
 
 uint32_t EventSystem::openEvent(uint32_t classId, uint32_t specId,
                                 uint32_t mode, uint32_t handler) {
+  std::lock_guard<std::mutex> lk(eventsMtx_);
   if (events_.size() >= MAX_EVENTS) {
     fmt::print("[BIOS] OpenEvent failed: Max events reached\n");
     return INVALID_EVENT_ID;
@@ -42,14 +43,13 @@ uint32_t EventSystem::openEvent(uint32_t classId, uint32_t specId,
 }
 
 uint32_t EventSystem::closeEvent(uint32_t eventId) {
+  std::lock_guard<std::mutex> lk(eventsMtx_);
   if (eventId >= events_.size())
     return 0;
 
-  // In PS1 BIOS, closing does not necessarily deallocate the slot dynamically
-  // like modern vectors, it usually just marks it free. For our stub, marking
-  // it disabled/triggered=false is a start.
   events_[eventId].enabled = false;
   events_[eventId].classId = 0xFFFFFFFF; // Mark inactive
+  triggeredBits_.fetch_and(~(1u << eventId), std::memory_order_release);
 
   fmt::print("[BIOS] CloseEvent({})\n", eventId);
   return 1;
@@ -73,12 +73,12 @@ uint32_t EventSystem::testEvent(uint32_t eventId) {
   if (eventId >= events_.size())
     return 0;
 
-  bool isTriggered = events_[eventId].triggered;
-  if (isTriggered) {
-    events_[eventId].triggered = false; // Acknowledge
-    fmt::print(
-        "[BIOS] testEvent({}) -> TRIGGERED (class=0x{:X}, spec=0x{:X})\n",
-        eventId, events_[eventId].classId, events_[eventId].specId);
+  // Use atomic bitmask for thread-safe check (main thread writes, game thread reads)
+  uint32_t bit = 1u << eventId;
+  uint32_t bits = triggeredBits_.load(std::memory_order_acquire);
+  if (bits & bit) {
+    // Clear this bit atomically (acknowledge)
+    triggeredBits_.fetch_and(~bit, std::memory_order_release);
     return 1;
   }
 
@@ -86,6 +86,7 @@ uint32_t EventSystem::testEvent(uint32_t eventId) {
 }
 
 uint32_t EventSystem::enableEvent(uint32_t eventId) {
+  std::lock_guard<std::mutex> lk(eventsMtx_);
   if (eventId >= events_.size())
     return 0;
   events_[eventId].enabled = true;
@@ -94,6 +95,7 @@ uint32_t EventSystem::enableEvent(uint32_t eventId) {
 }
 
 uint32_t EventSystem::disableEvent(uint32_t eventId) {
+  std::lock_guard<std::mutex> lk(eventsMtx_);
   if (eventId >= events_.size())
     return 0;
   events_[eventId].enabled = false;
@@ -102,15 +104,39 @@ uint32_t EventSystem::disableEvent(uint32_t eventId) {
 }
 
 void EventSystem::triggerEvent(uint32_t classId, uint32_t specId) {
-  for (auto &ev : events_) {
+  std::lock_guard<std::mutex> lk(eventsMtx_);
+  bool found = false;
+  for (size_t i = 0; i < events_.size(); i++) {
+    auto &ev = events_[i];
     if (ev.classId == classId && ev.specId == specId && ev.enabled) {
-      ev.triggered = true;
+      found = true;
+      // Set bit in atomic bitmask (thread-safe for main→game thread visibility)
+      uint32_t oldBits = triggeredBits_.fetch_or(1u << i, std::memory_order_release);
       if (ev.mode == 0x1000 && ev.handler != 0) {
         // Queue for game-thread dispatch instead of calling recomp_dispatch
         // directly (which would be thread-unsafe when called from main thread).
-        std::lock_guard<std::mutex> lk(cbMtx_);
+        std::lock_guard<std::mutex> lk2(cbMtx_);
         pendingCallbacks_.push_back({ev.handler, 0, 0, false, false});
       }
+    }
+  }
+  // Debug: log card event triggers
+  if (classId == 0xF4000001) {
+    static int cardTriggerCount = 0;
+    cardTriggerCount++;
+    if (cardTriggerCount <= 30) {
+      fmt::print("[EVTDBG] triggerEvent(0x{:08X}, 0x{:04X}) found={} evCount={} bits=0x{:08X}\n",
+                 classId, specId, found, events_.size(), triggeredBits_.load());
+    }
+  }
+  // Debug: log VSync callback queueing
+  if (classId == 0xF2000002 && specId == 0x0002) {
+    static int vsyncTriggerCount = 0;
+    vsyncTriggerCount++;
+    if (vsyncTriggerCount <= 10) {
+      std::lock_guard<std::mutex> lk2(cbMtx_);
+      fmt::print("[VSYNC-DBG] triggerEvent(0x{:08X}, 0x{:04X}) found={} pendingCBs={} evCount={}\n",
+                 classId, specId, found, pendingCallbacks_.size(), events_.size());
     }
   }
 }
@@ -127,15 +153,22 @@ void EventSystem::drainPendingCallbacks() {
     std::lock_guard<std::mutex> lk(cbMtx_);
     if (pendingCallbacks_.empty())
       return;
+    static int drainCount = 0;
+    drainCount++;
+    if (drainCount <= 10) {
+      fmt::print("[DRAIN-DBG] drainPendingCallbacks called with {} pending\n",
+                 pendingCallbacks_.size());
+    }
     local = std::move(pendingCallbacks_);
     pendingCallbacks_.clear();
   }
 
-  // Save volatile registers around callback dispatch so we don't corrupt
-  // the game thread's register state.
-  auto saved = static_cast<ps1::CPUContext>(ctx_);
-
   for (const auto &cb : local) {
+    // Save and restore registers around EACH callback individually.
+    // Each callback must start with the game's original register state
+    // so that callbacks don't see corrupted registers from previous ones.
+    auto saved = static_cast<ps1::CPUContext>(ctx_);
+
     // Set up register arguments before dispatch if needed
     if (cb.hasArg) {
       ctx_.r4 = cb.a0;
@@ -143,22 +176,12 @@ void EventSystem::drainPendingCallbacks() {
     if (cb.hasA1) {
       ctx_.r5 = cb.a1;
     }
-    // Debug: log CD data callback with remaining value
-    if (cb.handlerPc == 0x80045C04) {
-      static int cdDispatchCount = 0;
-      cdDispatchCount++;
-      int32_t remaining = (int32_t)ctx_.mem->read32(0x80055898);
-      if (cdDispatchCount <= 20) {
-        fmt::print(stderr, "[CD-DISPATCH] #{} a0={} remaining={} sectorRdy=?\n",
-                   cdDispatchCount, cb.a0, remaining);
-      }
-    }
     fmt::print("[BIOS] Dispatching event callback 0x{:08X}\n", cb.handlerPc);
     recomp_dispatch(ctx_.mem->ramPtr(), &ctx_, cb.handlerPc);
-  }
 
-  // Restore all registers that the game was using
-  static_cast<ps1::CPUContext &>(ctx_) = saved;
+    // Restore all registers that the game was using
+    static_cast<ps1::CPUContext &>(ctx_) = saved;
+  }
 }
 
 } // namespace ps1::bios

@@ -410,17 +410,29 @@ private:
 public:
   /// Convert virtual address to physical address
   /// PS1 uses 3 mirrors: KUSEG (0x0), KSEG0 (0x80), KSEG1 (0xA0)
+  /// PS1 also mirrors 2MB RAM across the first 8MB of physical address space.
   static uint32_t toPhysical(uint32_t addr) {
     // Strip KSEG0/KSEG1 bits
     // KSEG0: 0x80000000-0x9FFFFFFF → mask off bit 31
     // KSEG1: 0xA0000000-0xBFFFFFFF → mask off bits 31,29
+    uint32_t phys;
     if (addr >= 0xA0000000) {
-      return addr & 0x1FFFFFFF;
+      phys = addr & 0x1FFFFFFF;
+    } else if (addr >= 0x80000000) {
+      phys = addr & 0x1FFFFFFF;
+    } else {
+      phys = addr; // KUSEG — already physical
     }
-    if (addr >= 0x80000000) {
-      return addr & 0x1FFFFFFF;
+
+    // PS1 RAM mirroring: 2MB is mirrored across the first 8MB
+    // Physical addresses 0x000000-0x7FFFFF all map to the same 2MB.
+    // This is critical for games that set SP to 0x807FFF00 (phys 0x7FFF00)
+    // which must map to RAM offset 0x1FFF00.
+    if (phys < 0x00800000) {
+      phys &= (RAM_SIZE - 1);  // phys & 0x1FFFFF
     }
-    return addr; // KUSEG — already physical
+
+    return phys;
   }
 };
 

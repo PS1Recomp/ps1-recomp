@@ -430,6 +430,28 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = 0;
     break;
 
+  case 0xAB: // _96_CdInitSubFunc — PsyQ CD initialization sub-function
+    fmt::print("[BIOS] _96_CdInitSubFunc({}) — setting up CD internal state\n",
+               ctx_.r[A0]);
+    // On a real PS1, this initializes the CD exception handler chain.
+    // In our HLE environment, the event system is already set up.
+    ctx_.r[V0] = 0; // success
+    break;
+
+  case 0xAD: { // _96_CdReset — send CdlInit (hardware reset)
+    fmt::print("[BIOS] _96_CdReset() — sending CdlInit via CDROM controller\n");
+    // On a real PS1, this writes CdlInit (0x0A) to the CDROM command register
+    // which triggers INT3 (Acknowledge) followed by INT2 (Complete).
+    // We HLE this by writing the command through the register interface
+    // so all normal command processing (callbacks, events) fires.
+    if (cdrom_) {
+      cdrom_->writeRegister(0x1F801800, 0); // index = 0
+      cdrom_->writeRegister(0x1F801801, 0x0A); // CdlInit
+    }
+    ctx_.r[V0] = 0; // success
+    break;
+  }
+
   default:
     fmt::print("[BIOS] Unimplemented A0 call: 0x{:02X} (A0: {:08X}, A1: "
                "{:08X}, A2: {:08X})\n",
@@ -598,12 +620,20 @@ void Bios::handleC0(uint32_t index) {
     fmt::print("[BIOS] InstallExceptionHandler() [STUB]\n");
     break;
   case 0x01: // SysEnqIntRP
-    fmt::print("[BIOS] SysEnqIntRP(priority: {}, handler: 0x{:08X}) [STUB]\n",
+    // Registers a handler in the interrupt priority chain.
+    // On a real PS1 this would add to the exception dispatch chain at
+    // the given priority level.  In our HLE, we deliver events directly
+    // from the main thread, so the handler chain isn't needed.
+    // We still acknowledge the call properly (return 0 = success).
+    fmt::print("[BIOS] SysEnqIntRP(priority: {}, handler: 0x{:08X})\n",
                ctx_.r[A0], ctx_.r[A1]);
+    ctx_.r[V0] = 0;
     break;
   case 0x02: // SysDeqIntRP
-    fmt::print("[BIOS] SysDeqIntRP(priority: {}, handler: 0x{:08X}) [STUB]\n",
+    // Removes a handler from the interrupt priority chain.
+    fmt::print("[BIOS] SysDeqIntRP(priority: {}, handler: 0x{:08X})\n",
                ctx_.r[A0], ctx_.r[A1]);
+    ctx_.r[V0] = 0;
     break;
   case 0x03: // SysInitMemory
     fmt::print("[BIOS] SysInitMemory(addr: 0x{:08X}, size: {}) [STUB]\n",
@@ -616,9 +646,13 @@ void Bios::handleC0(uint32_t index) {
     fmt::print("[BIOS] SysInitKMem() [STUB]\n");
     break;
   case 0x0A: // ChangeClearRCnt
-    fmt::print("[BIOS] ChangeClearRCnt(t: {}, flag: {}) [STUB]\n", ctx_.r[A0],
-               ctx_.r[A1]);
-    ctx_.r[V0] = 0;
+    // Controls whether root counter interrupts auto-clear after firing.
+    // t (A0) = root counter index (0-3), flag (A1) = 0 or 1
+    // Returns the old flag value.  We always return 0 (was auto-clear).
+    // PsyQ VSync depends on this being called during init to set up RCnt3.
+    fmt::print("[BIOS] ChangeClearRCnt(t: {}, flag: {})\n",
+               ctx_.r[A0], ctx_.r[A1]);
+    ctx_.r[V0] = 0; // return old value
     break;
   case 0x0C: // InitDefInt
     fmt::print("[BIOS] InitDefInt(priority: {}) [STUB]\n", ctx_.r[A0]);
@@ -646,9 +680,9 @@ void Bios::handleC0(uint32_t index) {
 //   INT4 (DataEnd)     → event spec 0x0004  (same as DataReady)
 //   INT5 (Error)       → event spec 0x2000
 //
-// Crash Bandicoot opens events for class 0xF4000001 with specs
+// Games typically open events for class 0xF4000001 with specs
 // 0x0004, 0x8000, 0x0100, 0x2000 — matching the above mapping.
-// It also mirrors them on class 0xF0000011.
+// They may also mirror them on class 0xF0000011.
 
 static constexpr uint32_t CDROM_EVENT_CLASS_1 = 0xF4000001;
 static constexpr uint32_t CDROM_EVENT_CLASS_2 = 0xF0000011;
@@ -658,13 +692,13 @@ static uint32_t cdIntToEventSpec(uint8_t intType) {
   case 1:
     return 0x0004; // INT1 DataReady
   case 2:
-    return 0x8000; // INT2 Complete
+    return 0x2000; // INT2 Complete
   case 3:
     return 0x0100; // INT3 Acknowledge
   case 4:
     return 0x0004; // INT4 DataEnd
   case 5:
-    return 0x2000; // INT5 Error
+    return 0x8000; // INT5 DiskError
   default:
     return 0;
   }
@@ -679,14 +713,10 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
 
   // Debug: dump PsyQ CDROM register pointers to verify CdInit initialized them
   if (cdIntType == 1) {
-    uint32_t basePtr  = ctx_.mem->read32(0x80055864);
-    uint32_t respPtr  = ctx_.mem->read32(0x80055868);
-    uint32_t iePtr    = ctx_.mem->read32(0x8005586C);
-    uint32_t ifPtr    = ctx_.mem->read32(0x80055870);
-    uint32_t dataCb   = ctx_.mem->read32(0x800555A4);
-    int32_t  remaining = (int32_t)ctx_.mem->read32(0x80055898);
-    fmt::print(stderr, "[CD-INT1] base=0x{:08X} resp=0x{:08X} ie=0x{:08X} if=0x{:08X} dataCb=0x{:08X} remaining={}\n",
-               basePtr, respPtr, iePtr, ifPtr, dataCb, remaining);
+    uint32_t dataCb   = ctx_.mem->read32(psyq_.cdDataCb);
+    int32_t  remaining = (int32_t)ctx_.mem->read32(psyq_.cdRemaining);
+    fmt::print(stderr, "[CD-INT1] dataCb=0x{:08X} remaining={}\n",
+               dataCb, remaining);
   }
 
   // ── HLE PsyQ CDROM interrupt handler variables ────
@@ -699,126 +729,176 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // In our recompiled environment the exception handler never runs, so we
   // HLE the relevant writes here.
   //
-  // Key PsyQ CD state addresses (Crash Bandicoot USA):
-  //   0x8005587C  — "sync" byte (command completion: INT2/INT3/INT5)
-  //   0x8005587D  — "ready" byte (data readiness: INT1/INT4/INT5)
-  //   0x80053936  — CD status halfword (gate for func_8003E848, non-zero
-  //                 lets the polling code proceed to HW register access)
+  // PsyQ CD state addresses (configured per-game):
+  //   cdSyncByte  — "sync" byte (command completion: INT2/INT3/INT5)
+  //   cdReadyByte — "ready" byte (data readiness: INT1/INT4/INT5)
+  //   cdStatusHw  — CD status halfword (gate for PsyQ polling code)
   //
-  constexpr uint32_t PSYQ_CD_SYNC_BYTE  = 0x8005587C;
-  constexpr uint32_t PSYQ_CD_READY_BYTE = 0x8005587D;
-  constexpr uint32_t PSYQ_CD_STATUS_HW  = 0x80053936;
-
-  // PsyQ interrupt handler writes different bytes per INT type:
-  //   INT1 (DataReady)  → ready byte = 1
-  //   INT2 (Complete)   → sync byte  = 2
-  //   INT3 (Acknowledge)→ sync byte  = 3 (or 2 for simple cmds)
-  //   INT4 (DataEnd)    → ready byte = 4
-  //   INT5 (DiskError)  → both       = 5
-  //
-  switch (cdIntType) {
-  case 1: // DataReady → ready byte
-  case 4: // DataEnd   → ready byte
-    ctx_.mem->write8(PSYQ_CD_READY_BYTE, cdIntType);
-    break;
-  case 2: // Complete    → sync byte
-  case 3: // Acknowledge → sync byte
-    ctx_.mem->write8(PSYQ_CD_SYNC_BYTE, cdIntType);
-    break;
-  case 5: // DiskError → both
-    ctx_.mem->write8(PSYQ_CD_SYNC_BYTE,  5);
-    ctx_.mem->write8(PSYQ_CD_READY_BYTE, 5);
-    break;
-  default:
-    break;
-  }
-
-  // Write a non-zero status halfword so func_8003E848 returns non-zero,
-  // allowing the polling code to proceed past the gate check.
-  // 0x0002 = "motor on" status bit – a reasonable default.
-  ctx_.mem->write16(PSYQ_CD_STATUS_HW, 0x0002);
-
-  eventSystem_.triggerEvent(CDROM_EVENT_CLASS_1, spec);
-  eventSystem_.triggerEvent(CDROM_EVENT_CLASS_2, spec);
+  const uint32_t PSYQ_CD_SYNC_BYTE  = psyq_.cdSyncByte;
+  const uint32_t PSYQ_CD_READY_BYTE = psyq_.cdReadyByte;
+  const uint32_t PSYQ_CD_STATUS_HW  = psyq_.cdStatusHw;
 
   // ── HLE sector copy for INT1 (DataReady) ──────────────────────
   //
-  // On a real PS1, INT1 fires asynchronously and the interrupt handler chain
-  // calls func_80045C04 which programs DMA Ch3 to copy the sector.  In our
-  // recompiled environment, interruptFlag_ can be overwritten by subsequent
-  // command INT3s before any game-thread callback runs.
+  // IMPORTANT: Do the sector copy BEFORE writing the ready byte to avoid a
+  // race with the game thread's polling loop.  The game thread checks the
+  // ready byte and immediately reads the destination buffer, so the data
+  // must already be there when the signal is visible.
   //
-  // Instead, we HLE the entire sector copy right here on the main thread:
+  // On a real PS1, INT1 fires asynchronously and the interrupt handler chain
+  // programs DMA Ch3 to copy the sector, then sets the ready byte.  We HLE
+  // the entire sector copy right here on the main thread:
   //   1. Read remaining/destPtr/wordCount from PsyQ BSS
   //   2. memcpy from CDROM sector buffer to game RAM
   //   3. Update destPtr and decrement remaining
   //   4. If remaining <= 0: issue CdlPause so the CDROM stops reading
   //   5. ACK + clear waitingForAck_ so the next sector can arrive
   //
+  // APPROACH: Sector copies are handled by the game's own PsyQ callback
+  // (dispatched from drainPendingCallbacks on the game thread).
+  //
+  // We set cdIntPending_ so drainPendingCallbacks on the game thread
+  // dispatches the game's dataCb.  The game thread will ACK the interrupt
+  // after processing the callback, so the CDROM stays in waitingForAck
+  // until then.  This prevents the main-thread tick from racing ahead
+  // and firing dozens of INT1s that overwrite the single cdIntPending_.
+  //
+  // On a real PS1 the entire interrupt → callback → ACK chain runs
+  // atomically within the interrupt handler.  Here we split it across
+  // threads: main thread signals (cdIntPending_), game thread processes
+  // (dataCb + ACK).
+  //
   if (cdIntType == 1 && cdrom_) {
-    constexpr uint32_t PSYQ_REMAINING = 0x80055898;
-    constexpr uint32_t PSYQ_DEST_PTR = 0x8005588C;
-    constexpr uint32_t PSYQ_WORD_CNT = 0x80055894;
-
-    int32_t remaining = (int32_t)ctx_.mem->read32(PSYQ_REMAINING);
-
-    if (remaining > 0) {
-      uint32_t destPtr  = ctx_.mem->read32(PSYQ_DEST_PTR);
-      uint32_t wordCount = ctx_.mem->read32(PSYQ_WORD_CNT);
-      uint32_t byteCount = wordCount * 4;
-
-      // Determine sector data offset based on current mode
-      uint32_t dataOffset = (cdrom_->getMode() & (1 << 5)) ? 12 : 24;
-      const uint8_t *sectorData = cdrom_->getSectorBuffer() + dataOffset;
-
-      // Copy sector data to game RAM
-      uint8_t *ramDest = ctx_.mem->ramPtr() + (destPtr & 0x1FFFFF);
-      std::memcpy(ramDest, sectorData, byteCount);
-
-      // Advance destination pointer and decrement remaining
-      destPtr += byteCount;
-      remaining--;
-      ctx_.mem->write32(PSYQ_DEST_PTR, destPtr);
-      ctx_.mem->write32(PSYQ_REMAINING, (uint32_t)remaining);
-
-      static int hleCopyCount = 0;
-      hleCopyCount++;
-      if (hleCopyCount <= 30) {
-        fmt::print(stderr, "[CD-HLE-COPY] #{} dest=0x{:08X} words={} rem={}\n",
-                   hleCopyCount, destPtr - byteCount, wordCount, remaining);
-      }
-
-      // If all sectors for this batch are done, issue CdlPause
-      if (remaining <= 0) {
-        cdrom_->writeRegister(0x1F801800, 0);   // index = 0
-        cdrom_->writeRegister(0x1F801801, 0x09); // CdlPause command
-      }
-    }
-
-    // ACK the interrupt so the CDROM can deliver the next sector
-    cdrom_->ackInterrupt(0x1F);
-    cdrom_->clearWaitingForAck();
+    cdIntPending_.store(cdIntType, std::memory_order_release);
+    // DO NOT ACK here — let the game thread's drainPendingCallbacks
+    // handle ACK after dispatching the callback.  This keeps the CDROM
+    // in waitingForAck state so tick() won't generate more INT1s.
   }
+
+  // PsyQ interrupt handler mapping (as implemented by the game's own IRQ chain):
+  //
+  //   INT1 (DataReady)  → readyByte = 1          (syncByte untouched)
+  //   INT2 (Complete)   → syncByte  = 2          (readyByte untouched)
+  //   INT3 (Acknowledge)→ syncByte  = 2 (mapped!) (readyByte untouched)
+  //   INT4 (DataEnd)    → readyByte = 4          (syncByte untouched)
+  //   INT5 (DiskError)  → syncByte  = 5, readyByte = 5
+  //
+  // CRITICAL: INT3 maps to syncByte=2 (Complete), NOT 3!  The game's
+  // CdCommand function gates on syncByte==2 before issuing new commands.
+  // If we wrote 3, subsequent commands would hang waiting for 2.
+  //
+  // NOTE: We use write32 instead of write8 because some games read these as
+  // 32-bit words. Writing the full word ensures upper bytes are zero.
+  //
+  // NOTE: For INT1, the ready byte is written AFTER the sector copy above
+  // completes, so the game thread sees data before the signal.
+  //
+  switch (cdIntType) {
+  case 1: // DataReady → readyByte only
+    if (PSYQ_CD_READY_BYTE) ctx_.mem->write32(PSYQ_CD_READY_BYTE, 1);
+    break;
+  case 2: // Complete → syncByte only
+    if (PSYQ_CD_SYNC_BYTE) ctx_.mem->write32(PSYQ_CD_SYNC_BYTE, 2);
+    break;
+  case 3: // Acknowledge → syncByte = 2 (mapped to Complete)
+    if (PSYQ_CD_SYNC_BYTE) ctx_.mem->write32(PSYQ_CD_SYNC_BYTE, 2);
+    break;
+  case 4: // DataEnd → readyByte only
+    if (PSYQ_CD_READY_BYTE) ctx_.mem->write32(PSYQ_CD_READY_BYTE, 4);
+    break;
+  case 5: // DiskError → both
+    if (PSYQ_CD_SYNC_BYTE) ctx_.mem->write32(PSYQ_CD_SYNC_BYTE, 5);
+    if (PSYQ_CD_READY_BYTE) ctx_.mem->write32(PSYQ_CD_READY_BYTE, 5);
+    break;
+  default:
+    break;
+  }
+  fmt::print("[CDROM-HLE] INT{} → sync@0x{:08X}={} ready@0x{:08X}={}\n",
+             cdIntType, PSYQ_CD_SYNC_BYTE,
+             ctx_.mem->read32(PSYQ_CD_SYNC_BYTE),
+             PSYQ_CD_READY_BYTE,
+             ctx_.mem->read32(PSYQ_CD_READY_BYTE));
+
+  // Write a non-zero status halfword so the PsyQ polling code proceeds
+  // past the gate check.  0x0002 = "motor on" status bit.
+  if (PSYQ_CD_STATUS_HW != 0) {
+    ctx_.mem->write16(PSYQ_CD_STATUS_HW, 0x0002);
+  }
+
+  eventSystem_.triggerEvent(CDROM_EVENT_CLASS_1, spec);
+  eventSystem_.triggerEvent(CDROM_EVENT_CLASS_2, spec);
 }
 
 void Bios::triggerVBlankEvent() {
   // ── Increment PsyQ VBlank counter (Root Counter 3) ────
   //
-  // PsyQ stores a VBlank counter at 0x800549F0 that VSync() polls in a tight
-  // loop.  On a real PS1 this is incremented by the BIOS IRQ handler at
-  // interrupt vector 0x80000080.  In our recompiled environment the handler
-  // never runs, so we HLE the counter increment here.
+  // PsyQ stores a VBlank counter that VSync() polls in a tight loop.
+  // On a real PS1 this is incremented by the BIOS IRQ handler at interrupt
+  // vector 0x80000080.  In our recompiled environment the handler never runs,
+  // so we HLE the counter increment here.
   //
-  // The counter lives in emulated RAM — just read/write through Memory.
+  // The address varies per game (PsyQ version / link layout).
   //
-  constexpr uint32_t VBLANK_COUNTER_ADDR = 0x800549F0;  // rcnt[3] counter
-  uint32_t cnt = ctx_.mem->read32(VBLANK_COUNTER_ADDR);
-  ctx_.mem->write32(VBLANK_COUNTER_ADDR, cnt + 1);
+  if (psyq_.vblankCounter != 0) {
+    uint32_t cnt = ctx_.mem->read32(psyq_.vblankCounter);
+    ctx_.mem->write32(psyq_.vblankCounter, cnt + 1);
+  }
 
-  // VBlank event class: 0xF2000002 (Root Counter 2 / VSync)
-  eventSystem_.triggerEvent(0xF2000002, 0x0002);
-  // Also some games use 0xF0000001 for VBlank
-  eventSystem_.triggerEvent(0xF0000001, 0x0002);
+  // ── Deliver ALL standard PsyQ events that should fire each frame ──
+  //
+  // On a real PS1, the BIOS exception handler at 0x80000080 dispatches
+  // through the SysEnqIntRP chain.  Root counter handlers call DeliverEvent
+  // for their respective event classes.  Since SysEnqIntRP is HLE'd (we
+  // don't run the real handler chain), we deliver events directly here.
+  //
+  // PsyQ Event Classes:
+  //   0xF0000001 = VBlank IRQ (interrupt class)
+  //   0xF2000001 = Root Counter 0 (pixel clock — fires every scanline)
+  //   0xF2000002 = Root Counter 1 (horizontal retrace)
+  //   0xF2000003 = Root Counter 2 (system clock / 8)
+  //
+  // Event Specs:
+  //   0x0001 = counter reached target value
+  //   0x0002 = counter overflow
+  //
+
+  // VBlank IRQ event
+  eventSystem_.triggerEvent(0xF0000001, 0x0001);
+
+  // Root Counter 0 (pixel clock) — overflows many times per frame
+  eventSystem_.triggerEvent(0xF2000001, 0x0001); // target reached
+  eventSystem_.triggerEvent(0xF2000001, 0x0002); // overflow
+
+  // Root Counter 1 (horizontal retrace) — ~263 hblanks per frame
+  eventSystem_.triggerEvent(0xF2000002, 0x0001); // target reached
+  eventSystem_.triggerEvent(0xF2000002, 0x0002); // overflow
+
+  // Root Counter 2 (system clock / 8) — fast freerun timer
+  eventSystem_.triggerEvent(0xF2000003, 0x0001);
+  eventSystem_.triggerEvent(0xF2000003, 0x0002);
+
+  // NOTE: Memory Card / CARD events (class 0xF4000001) are NOT triggered
+  // here anymore.  On a real PS1, class 0xF4000001 is shared between the
+  // memory-card SIO handler and the CDROM interrupt handler.  Firing them
+  // every VBlank was causing false-positive TestEvent returns that confused
+  // the PsyQ CdInit polling loop.  Card events should only be triggered
+  // by actual SIO/CDROM hardware activity (i.e. triggerCdromEvent).
+
+  // ── HLE PsyQ display swap callback (SysEnqIntRP replacement) ──────
+  //
+  // On a real PS1, the SysEnqIntRP priority chain includes a PsyQ VBlank
+  // handler that manages display double-buffering.  This handler calls
+  // the game's swap callback with r4=4 to signal "swap done", which sets
+  // a flag that the game's display-ready poll loop checks.
+  //
+  // Since SysEnqIntRP is stubbed (we don't build the handler chain),
+  // we QUEUE this callback for the game thread.  Dispatching it directly
+  // from the main thread would be a data race on the shared recomp_context.
+  // The game thread's drainPendingCallbacks() will dispatch it safely.
+  //
+  if (psyq_.gpuSwapCb != 0) {
+    eventSystem_.queueCallbackWithArg(psyq_.gpuSwapCb, 4); // a0 = 4 → "swap done"
+  }
 }
 
 void Bios::drainPendingCallbacks() {
@@ -831,26 +911,33 @@ void Bios::drainPendingCallbacks() {
   // interrupt handler reads HW registers, processes the response, and the
   // chain caller then dispatches dataCb/notifyCb.
   //
-  // We can't route through func_80043BA8 because interruptFlag_ may have
-  // been overwritten by a subsequent command's INT3 (pushResponse overwrites).
-  // Instead we directly HLE the callback dispatch using the stored INT type.
+  // We dispatch the game's own dataCb/notifyCb here on the GAME thread.
+  // After ACKing, we immediately try to advance the CDROM to deliver more
+  // sectors (pumping loop), so that reads don't take one frame per sector.
   //
-  uint8_t intType = cdIntPending_.exchange(0, std::memory_order_acquire);
-  if (intType != 0) {
+  // Maximum sectors to process per call — prevents infinite loops if
+  // something goes wrong, and limits time spent in one drain call.
+  constexpr int MAX_SECTORS_PER_DRAIN = 32;
+
+  for (int pump = 0; pump < MAX_SECTORS_PER_DRAIN; ++pump) {
+    uint8_t intType = cdIntPending_.exchange(0, std::memory_order_acquire);
+    if (intType == 0)
+      break;
+
     // Save registers — callbacks clobber temps.
     auto saved = static_cast<ps1::CPUContext>(ctx_);
 
-    constexpr uint32_t PSYQ_CD_DATA_CB   = 0x800555A4;
-    constexpr uint32_t PSYQ_CD_NOTIFY_CB = 0x800555A0;
+    const uint32_t PSYQ_CD_DATA_CB   = psyq_.cdDataCb;
+    const uint32_t PSYQ_CD_NOTIFY_CB = psyq_.cdNotifyCb;
 
     if (intType == 1 || intType == 4) {
       // INT1 (DataReady) or INT4 (DataEnd) → call dataCb
       uint32_t dataCb = ctx_.mem->read32(PSYQ_CD_DATA_CB);
-      int32_t remaining = (int32_t)ctx_.mem->read32(0x80055898);
+      int32_t remaining = (int32_t)ctx_.mem->read32(psyq_.cdRemaining);
       static int hleDispatch = 0;
       hleDispatch++;
       if (hleDispatch <= 20) {
-        fmt::print(stderr, "[CD-HLE] #{} INT{} dataCb=0x{:08X} remaining={}\n",
+        fmt::print(stderr, "[CD-CB] #{} INT{} dataCb=0x{:08X} remaining={}\n",
                    hleDispatch, intType, dataCb, remaining);
       }
       if (dataCb != 0) {
@@ -878,6 +965,29 @@ void Bios::drainPendingCallbacks() {
 
     // Restore registers
     static_cast<ps1::CPUContext &>(ctx_) = saved;
+
+    // ── Pump: try to advance the CDROM so the next sector is ready ──
+    //
+    // Only pump if the game still has sectors remaining to read.
+    // When remaining <= 0, the read is complete — stop feeding cycles
+    // so the CDROM transitions out of ReadingData state naturally.
+    //
+    if (cdrom_ && (intType == 1) && psyq_.cdRemaining != 0) {
+      int32_t remainAfterCb = (int32_t)ctx_.mem->read32(psyq_.cdRemaining);
+      if (remainAfterCb > 0) {
+        // Give enough cycles for the next sector to be "ready".
+        cdrom_->tick(0);
+        // If the above didn't fire an INT1 (no accumulated cycles), feed
+        // one sector's worth of cycles so reads don't stall at 1/frame.
+        if (cdIntPending_.load(std::memory_order_relaxed) == 0) {
+          cdrom_->tick(cdrom_->getCyclesPerSector());
+        }
+      } else {
+        // Read complete — stop the CDROM so it doesn't generate more INT1s.
+        cdrom_->stopReading();
+        cdIntPending_.store(0, std::memory_order_release);
+      }
+    }
   }
 }
 
