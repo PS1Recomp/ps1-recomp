@@ -1,0 +1,11 @@
+# Silent Hill (USA) — ps1-recomp runtime configuration
+# Serial: SLUS-00707
+
+[game]
+name = "Silent Hill"
+serial = "SLUS-00707"
+region = "USA"
+
+[disc]
+exe_path = "test_roms/Silent Hill/Silent Hill (USA).bin.boot.exe"
+cue_path = "test_roms/Silent Hill/Silent Hill (USA).cue"

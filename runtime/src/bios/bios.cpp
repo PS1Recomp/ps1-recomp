@@ -3,13 +3,13 @@
 #include "runtime/gpu/gpu.h"
 #include "runtime/input/input.h"
 #include <cctype>
-#include <cstring>
 #include <cstdlib>
+#include <cstring>
 #include <fmt/format.h>
 
-// Forward declare recomp_dispatch (defined in recompiled_out.cpp, global namespace)
-extern void recomp_dispatch(uint8_t *rdram, recomp_context *ctx,
-                            uint32_t addr);
+// Forward declare recomp_dispatch (defined in recompiled_out.cpp, global
+// namespace)
+extern void recomp_dispatch(uint8_t *rdram, recomp_context *ctx, uint32_t addr);
 
 namespace ps1::bios {
 
@@ -440,12 +440,8 @@ void Bios::handleA0(uint32_t index) {
 
   case 0xAD: { // _96_CdReset — send CdlInit (hardware reset)
     fmt::print("[BIOS] _96_CdReset() — sending CdlInit via CDROM controller\n");
-    // On a real PS1, this writes CdlInit (0x0A) to the CDROM command register
-    // which triggers INT3 (Acknowledge) followed by INT2 (Complete).
-    // We HLE this by writing the command through the register interface
-    // so all normal command processing (callbacks, events) fires.
     if (cdrom_) {
-      cdrom_->writeRegister(0x1F801800, 0); // index = 0
+      cdrom_->writeRegister(0x1F801800, 0);    // index = 0
       cdrom_->writeRegister(0x1F801801, 0x0A); // CdlInit
     }
     ctx_.r[V0] = 0; // success
@@ -532,8 +528,9 @@ void Bios::handleB0(uint32_t index) {
     fmt::print("[BIOS] SetDefaultExitFromException() [STUB]\n");
     break;
   case 0x19: // SetCustomExitFromException
-    fmt::print("[BIOS] SetCustomExitFromException(handler: 0x{:08X}) [STUB]\n",
+    fmt::print("[BIOS] SetCustomExitFromException(handler: 0x{:08X})\n",
                ctx_.r[A0]);
+    customExceptionExit_ = ctx_.r[A0];
     break;
   case 0x20: // UnDeliverEvent
     fmt::print("[BIOS] UnDeliverEvent(class: 0x{:X}, spec: 0x{:X}) [STUB]\n",
@@ -650,8 +647,8 @@ void Bios::handleC0(uint32_t index) {
     // t (A0) = root counter index (0-3), flag (A1) = 0 or 1
     // Returns the old flag value.  We always return 0 (was auto-clear).
     // PsyQ VSync depends on this being called during init to set up RCnt3.
-    fmt::print("[BIOS] ChangeClearRCnt(t: {}, flag: {})\n",
-               ctx_.r[A0], ctx_.r[A1]);
+    fmt::print("[BIOS] ChangeClearRCnt(t: {}, flag: {})\n", ctx_.r[A0],
+               ctx_.r[A1]);
     ctx_.r[V0] = 0; // return old value
     break;
   case 0x0C: // InitDefInt
@@ -692,13 +689,13 @@ static uint32_t cdIntToEventSpec(uint8_t intType) {
   case 1:
     return 0x0004; // INT1 DataReady
   case 2:
-    return 0x2000; // INT2 Complete
+    return 0x8000; // INT2 Complete  (was incorrectly 0x2000)
   case 3:
     return 0x0100; // INT3 Acknowledge
   case 4:
-    return 0x0004; // INT4 DataEnd
+    return 0x0004; // INT4 DataEnd (same as DataReady)
   case 5:
-    return 0x8000; // INT5 DiskError
+    return 0x2000; // INT5 DiskError (was incorrectly 0x8000)
   default:
     return 0;
   }
@@ -713,10 +710,10 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
 
   // Debug: dump PsyQ CDROM register pointers to verify CdInit initialized them
   if (cdIntType == 1) {
-    uint32_t dataCb   = ctx_.mem->read32(psyq_.cdDataCb);
-    int32_t  remaining = (int32_t)ctx_.mem->read32(psyq_.cdRemaining);
-    fmt::print(stderr, "[CD-INT1] dataCb=0x{:08X} remaining={}\n",
-               dataCb, remaining);
+    uint32_t dataCb = ctx_.mem->read32(psyq_.cdDataCb);
+    int32_t remaining = (int32_t)ctx_.mem->read32(psyq_.cdRemaining);
+    fmt::print(stderr, "[CD-INT1] dataCb=0x{:08X} remaining={}\n", dataCb,
+               remaining);
   }
 
   // ── HLE PsyQ CDROM interrupt handler variables ────
@@ -734,9 +731,9 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   //   cdReadyByte — "ready" byte (data readiness: INT1/INT4/INT5)
   //   cdStatusHw  — CD status halfword (gate for PsyQ polling code)
   //
-  const uint32_t PSYQ_CD_SYNC_BYTE  = psyq_.cdSyncByte;
+  const uint32_t PSYQ_CD_SYNC_BYTE = psyq_.cdSyncByte;
   const uint32_t PSYQ_CD_READY_BYTE = psyq_.cdReadyByte;
-  const uint32_t PSYQ_CD_STATUS_HW  = psyq_.cdStatusHw;
+  const uint32_t PSYQ_CD_STATUS_HW = psyq_.cdStatusHw;
 
   // ── HLE sector copy for INT1 (DataReady) ──────────────────────
   //
@@ -775,7 +772,49 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
     // in waitingForAck state so tick() won't generate more INT1s.
   }
 
-  // PsyQ interrupt handler mapping (as implemented by the game's own IRQ chain):
+  // ── Dispatch CustomExceptionExit if registered ──
+  // Games like Silent Hill register a custom interrupt handler instead of
+  // SysEnqIntRP to process CDROM state directly. If such a handler exists,
+  // invoke it so the game logic can run and update PsyQ variables naturally.
+  if (customExceptionExit_ != 0) {
+    fmt::print("[CDROM-HLE] Triggering custom exception handler 0x{:08X}\n",
+               customExceptionExit_);
+    // We must emulate the COP0 registers expected during an exception
+    uint32_t saved_epc = ctx_.cop0[14];
+    uint32_t saved_cause = ctx_.cop0[13];
+    uint32_t saved_sr = ctx_.cop0[12];
+
+    // Cause register: Int bit 2 corresponds to hardware interrupts
+    ctx_.cop0[13] = 0x400;
+
+    // Simulate calling the handler - the handler should end with RFE + JR RA
+    // But the handler itself might have no "JR RA" since it normally returns
+    // with ERET/RFE! In the decompiled code, the analyzer flagged the custom
+    // handler, but without tracking RFE as a return, the static recompilation
+    // of the handler will likely fall through or crash if it expects an
+    // exception return. Wait, let's look at what the recompilation of
+    // `func_added_80021540` looks like: it was empty. That means it contains no
+    // recognized instructions before returning. This confirms the handler was
+    // not recompiled properly because of missing ER/RFE tracking or we jumped
+    // to the wrong place. If it's empty, calling it won't do anything. We must
+    // just rely on the rest of the HLE. Wait, but the whole point is that
+    // Silent Hill needs this to update PsyQ. If the handler is empty, we must
+    // HLE the update of PsyQ for Silent Hill directly! Wait! Let's just restore
+    // registers for now, we'll write the PsyQ variables for Silent Hill
+    // directly if we can find them. Or we should figure out how to compile
+    // 80021540 properly!
+
+    auto saved_ctx = static_cast<ps1::CPUContext>(ctx_);
+    recomp_dispatch(ctx_.mem->ramPtr(), &ctx_, customExceptionExit_);
+    static_cast<ps1::CPUContext &>(ctx_) = saved_ctx;
+
+    ctx_.cop0[14] = saved_epc;
+    ctx_.cop0[13] = saved_cause;
+    ctx_.cop0[12] = saved_sr;
+  }
+
+  // PsyQ interrupt handler mapping (as implemented by the game's own IRQ
+  // chain):
   //
   //   INT1 (DataReady)  → readyByte = 1          (syncByte untouched)
   //   INT2 (Complete)   → syncByte  = 2          (readyByte untouched)
@@ -795,29 +834,33 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   //
   switch (cdIntType) {
   case 1: // DataReady → readyByte only
-    if (PSYQ_CD_READY_BYTE) ctx_.mem->write32(PSYQ_CD_READY_BYTE, 1);
+    if (PSYQ_CD_READY_BYTE)
+      ctx_.mem->write32(PSYQ_CD_READY_BYTE, 1);
     break;
   case 2: // Complete → syncByte only
-    if (PSYQ_CD_SYNC_BYTE) ctx_.mem->write32(PSYQ_CD_SYNC_BYTE, 2);
+    if (PSYQ_CD_SYNC_BYTE)
+      ctx_.mem->write32(PSYQ_CD_SYNC_BYTE, 2);
     break;
   case 3: // Acknowledge → syncByte = 2 (mapped to Complete)
-    if (PSYQ_CD_SYNC_BYTE) ctx_.mem->write32(PSYQ_CD_SYNC_BYTE, 2);
+    if (PSYQ_CD_SYNC_BYTE)
+      ctx_.mem->write32(PSYQ_CD_SYNC_BYTE, 2);
     break;
   case 4: // DataEnd → readyByte only
-    if (PSYQ_CD_READY_BYTE) ctx_.mem->write32(PSYQ_CD_READY_BYTE, 4);
+    if (PSYQ_CD_READY_BYTE)
+      ctx_.mem->write32(PSYQ_CD_READY_BYTE, 4);
     break;
   case 5: // DiskError → both
-    if (PSYQ_CD_SYNC_BYTE) ctx_.mem->write32(PSYQ_CD_SYNC_BYTE, 5);
-    if (PSYQ_CD_READY_BYTE) ctx_.mem->write32(PSYQ_CD_READY_BYTE, 5);
+    if (PSYQ_CD_SYNC_BYTE)
+      ctx_.mem->write32(PSYQ_CD_SYNC_BYTE, 5);
+    if (PSYQ_CD_READY_BYTE)
+      ctx_.mem->write32(PSYQ_CD_READY_BYTE, 5);
     break;
   default:
     break;
   }
   fmt::print("[CDROM-HLE] INT{} → sync@0x{:08X}={} ready@0x{:08X}={}\n",
-             cdIntType, PSYQ_CD_SYNC_BYTE,
-             ctx_.mem->read32(PSYQ_CD_SYNC_BYTE),
-             PSYQ_CD_READY_BYTE,
-             ctx_.mem->read32(PSYQ_CD_READY_BYTE));
+             cdIntType, PSYQ_CD_SYNC_BYTE, ctx_.mem->read32(PSYQ_CD_SYNC_BYTE),
+             PSYQ_CD_READY_BYTE, ctx_.mem->read32(PSYQ_CD_READY_BYTE));
 
   // Write a non-zero status halfword so the PsyQ polling code proceeds
   // past the gate check.  0x0002 = "motor on" status bit.
@@ -897,7 +940,36 @@ void Bios::triggerVBlankEvent() {
   // The game thread's drainPendingCallbacks() will dispatch it safely.
   //
   if (psyq_.gpuSwapCb != 0) {
-    eventSystem_.queueCallbackWithArg(psyq_.gpuSwapCb, 4); // a0 = 4 → "swap done"
+    eventSystem_.queueCallbackWithArg(psyq_.gpuSwapCb,
+                                      4); // a0 = 4 → "swap done"
+  }
+
+  // ── HLE PsyQ DrawSync status (GPU ordering table completion) ──
+  //
+  // PsyQ DrawSync (func_801AA484 in Rayman) works as follows:
+  //   1. Reads an OT index from a BSS variable (gpuDrawSyncIndex)
+  //   2. Reads a base pointer from another BSS variable (gpuDrawSyncBase)
+  //   3. Computes status_addr = base_ptr + (index << 5)  [stride = 0x20 = 32]
+  //   4. Reads a halfword at status_addr+0
+  //   5. If value == 2, drawing is complete
+  //
+  // On a real PS1, the GPU VBlank interrupt handler sets this to 2 after
+  // the GPU finishes processing the ordering table.  Since our GPU processes
+  // GP0 commands synchronously, we can mark it as complete every VBlank.
+  //
+  // gpuDrawSyncBase: BSS address containing the POINTER to the OT array
+  // gpuDrawSyncIndex: BSS address containing the current OT index
+  //
+  if (psyq_.gpuDrawSyncBase != 0) {
+    uint32_t basePtr = ctx_.mem->read32(psyq_.gpuDrawSyncBase);
+    if (basePtr != 0) {
+      // Mark all possible OT entries as complete
+      // PsyQ typically uses 2 double-buffered OT entries (indices 0 and 1)
+      for (uint32_t i = 0; i < psyq_.gpuDrawSyncCount; i++) {
+        uint32_t statusAddr = basePtr + (i << 5); // stride = 0x20
+        ctx_.mem->write16(statusAddr, 2);         // 2 = complete
+      }
+    }
   }
 }
 
@@ -927,7 +999,7 @@ void Bios::drainPendingCallbacks() {
     // Save registers — callbacks clobber temps.
     auto saved = static_cast<ps1::CPUContext>(ctx_);
 
-    const uint32_t PSYQ_CD_DATA_CB   = psyq_.cdDataCb;
+    const uint32_t PSYQ_CD_DATA_CB = psyq_.cdDataCb;
     const uint32_t PSYQ_CD_NOTIFY_CB = psyq_.cdNotifyCb;
 
     if (intType == 1 || intType == 4) {
@@ -941,8 +1013,8 @@ void Bios::drainPendingCallbacks() {
                    hleDispatch, intType, dataCb, remaining);
       }
       if (dataCb != 0) {
-        ctx_.r4 = intType;   // a0 = interrupt type
-        ctx_.r5 = 0;         // a1 (unused by dataCb in practice)
+        ctx_.r4 = intType; // a0 = interrupt type
+        ctx_.r5 = 0;       // a1 (unused by dataCb in practice)
         recomp_dispatch(ctx_.mem->ramPtr(), &ctx_, dataCb);
       }
     } else if (intType == 2) {

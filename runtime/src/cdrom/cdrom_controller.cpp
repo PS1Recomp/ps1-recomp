@@ -81,7 +81,8 @@ uint8_t CdromController::buildStatusByte() const {
 void CdromController::writeRegister(uint32_t addr, uint8_t val) {
   uint32_t port = addr & 3;
 
-  // fmt::print("[CDROM-IO] Write port{}.idx{} = 0x{:02X}\n", port, indexReg_, val);
+  // fmt::print("[CDROM-IO] Write port{}.idx{} = 0x{:02X}\n", port, indexReg_,
+  //            val);
 
   if (port == 0) {
     indexReg_ = val & 3;
@@ -97,7 +98,7 @@ void CdromController::writeRegister(uint32_t addr, uint8_t val) {
       // where the game's tight polling loop times out before the main
       // thread's per-frame tick() ever processes the command.
       pendingCommand_ = val;
-      commandPending_ = false;  // no deferred processing needed
+      commandPending_ = false; // no deferred processing needed
       executeCommand(val);
       break;
     case 2: // Parameter FIFO
@@ -111,7 +112,7 @@ void CdromController::writeRegister(uint32_t addr, uint8_t val) {
     break;
   case 1:
     switch (port) {
-    case 3: // Interrupt flag (ack by writing bits)
+    case 3: // Interrupt flag (ack by writing bits) — Index 1
       interruptFlag_ &= ~(val & 0x1F);
       // When the game clears interrupt bits, it has finished processing
       // the interrupt (including reading the response and calling any
@@ -129,11 +130,29 @@ void CdromController::writeRegister(uint32_t addr, uint8_t val) {
     case 2: // Interrupt enable
       interruptEnable_ = val & 0x1F;
       break;
+    case 3: // Interrupt flag (ack by writing bits) — Index 2
+      // Some docs say index 2/3 port 3 also ACKs IF.
+      // PsyQ CdInit writes port3.idx2 = 0x00 (no-op clear).
+      interruptFlag_ &= ~(val & 0x1F);
+      if (val & 0x1F)
+        waitingForAck_ = false;
+      if (val & 0x40)
+        paramFifo_.clear();
+      break;
     }
     break;
   case 3:
     switch (port) {
     case 1: // Volume apply
+      break;
+    case 3: // Interrupt flag (ack by writing bits) — Index 3
+      // PS1 CDROM: port 3 with ODD index (1 or 3) = write to IF ACK.
+      // PsyQ CdInit writes port3.idx3 = 0x20 to clear param FIFO.
+      interruptFlag_ &= ~(val & 0x1F);
+      if (val & 0x1F)
+        waitingForAck_ = false;
+      if (val & 0x40)
+        paramFifo_.clear();
       break;
     }
     break;
@@ -157,7 +176,8 @@ uint8_t CdromController::readRegister(uint32_t addr) {
     // bit 7: command/parameter busy
     if (commandPending_)
       stat |= (1 << 7);
-    // fmt::print("[CDROM-IO] Read port0 = 0x{:02X} (idx={})\n", stat, indexReg_);
+    // fmt::print("[CDROM-IO] Read port0 = 0x{:02X} (idx={})\n", stat,
+    // indexReg_);
     return stat;
   }
 
@@ -168,15 +188,19 @@ uint8_t CdromController::readRegister(uint32_t addr) {
       result = responseFifo_.front();
       responseFifo_.pop_front();
     }
-    // fmt::print("[CDROM-IO] Read port1.idx{} = 0x{:02X} (response)\n", indexReg_, result);
+    // fmt::print(
+    //     "[CDROM-IO] Read port1.idx{} = 0x{:02X} (response, remaining={})\n",
+    //     indexReg_, result, responseFifo_.size());
     return result;
-  case 2:     // Data read (sector data)
-    // fmt::print("[CDROM-IO] Read port2.idx{} = 0x00 (data stub)\n", indexReg_);
+  case 2: // Data read (sector data)
+    // fmt::print("[CDROM-IO] Read port2.idx{} = 0x00 (data stub)\n",
+    // indexReg_);
     return 0; // DMA should be used instead
   case 3:
     if (indexReg_ == 0 || indexReg_ == 2) {
       result = interruptEnable_ | 0xE0;
-      // fmt::print("[CDROM-IO] Read port3.idx{} = 0x{:02X} (IE)\n", indexReg_, result);
+      // fmt::print("[CDROM-IO] Read port3.idx{} = 0x{:02X} (IE)\n", indexReg_,
+      // result);
     } else {
       result = interruptFlag_ | 0xE0;
       static int ifReadCount = 0;
@@ -199,9 +223,7 @@ void CdromController::ackInterrupt(uint8_t val) {
   // Use clearWaitingForAck() explicitly after the data callback has run.
 }
 
-void CdromController::clearWaitingForAck() {
-  waitingForAck_ = false;
-}
+void CdromController::clearWaitingForAck() { waitingForAck_ = false; }
 
 // ─── Tick ───────────────────────────────────────────────
 
@@ -425,14 +447,17 @@ void CdromController::cmdInit() {
   state_ = CdromState::Idle;
   mode_ = 0;
   motorOn_ = true;
+
+  // Deliver INT3 (Acknowledge)
   pushResponse(INT_ACKNOWLEDGE, {buildStatusByte()});
 
-  // Push INT2 (Complete) immediately after INT3 (Acknowledge).
-  // On a real PS1 there's a delay, but in our recompiled model the game
-  // thread runs ahead of the main thread's tick(), so we must deliver
-  // both responses inline. The interruptCallback_ fires for each push,
-  // triggering the corresponding BIOS events that PsyQ CdInit polls.
-  pushResponse(INT_COMPLETE, {buildStatusByte()});
+  // Secondary response: INT2 (Complete) after a short delay
+  // This allows the game's polling loop to see INT3, acknowledge it,
+  // and then wait for INT2 instead of them arriving simultaneously.
+  hasSecondaryResponse_ = true;
+  secondaryResponseDelay_ = 20000; // Simulated init delay
+  secondaryInterrupt_ = INT_COMPLETE;
+  secondaryData_ = {buildStatusByte()};
 }
 
 void CdromController::cmdMute() {
@@ -461,7 +486,8 @@ void CdromController::cmdSetMode() {
 }
 
 void CdromController::cmdGetParam() {
-  pushResponse(INT_ACKNOWLEDGE, {buildStatusByte(), mode_, xaFilterFile_, xaFilterChannel_});
+  pushResponse(INT_ACKNOWLEDGE,
+               {buildStatusByte(), mode_, xaFilterFile_, xaFilterChannel_});
 }
 
 void CdromController::cmdGetLocL() {

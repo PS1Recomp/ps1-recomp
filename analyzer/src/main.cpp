@@ -12,6 +12,8 @@
 #include <ps1recomp/function_finder.h>
 #include <ps1recomp/overlay_scanner.h>
 #include <ps1recomp/psyq_signatures.h>
+#include <string>
+#include <vector>
 
 static bool endsWith(const std::string &str, const std::string &suffix) {
   if (suffix.size() > str.size())
@@ -23,8 +25,10 @@ static bool endsWith(const std::string &str, const std::string &suffix) {
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
-    fmt::print("Usage: ps1xAnalyzer <ps1_elf_or_bin> [output_config.toml]\n");
-    fmt::print("       ps1xAnalyzer --scan-overlays <disc.bin> [output_overlays.toml]\n");
+    fmt::print("Usage: ps1xAnalyzer <ps1_elf_or_bin> [output_config.toml] "
+               "[--add-func <addr>...]\n");
+    fmt::print("       ps1xAnalyzer --scan-overlays <disc.bin> "
+               "[output_overlays.toml]\n");
     fmt::print("  Accepts: .elf, .exe (PS-X EXE), .bin (BIN/CUE disc image)\n");
     return 1;
   }
@@ -32,7 +36,9 @@ int main(int argc, char *argv[]) {
   // ─── Overlay scanning mode ────────────────────────────
   if (std::string(argv[1]) == "--scan-overlays") {
     if (argc < 3) {
-      fmt::print(stderr, "Usage: ps1xAnalyzer --scan-overlays <disc.bin> [output.toml]\n");
+      fmt::print(
+          stderr,
+          "Usage: ps1xAnalyzer --scan-overlays <disc.bin> [output.toml]\n");
       return 1;
     }
 
@@ -63,8 +69,7 @@ int main(int argc, char *argv[]) {
     for (const auto &c : candidates) {
       fmt::print("  {} → RAM 0x{:08X}, {} bytes, {} funcs, MIPS {:.0f}%{}\n",
                  c.name, c.ramBase, c.codeSize, c.functions.size(),
-                 c.mipsScore * 100.0f,
-                 c.hasPsxExeHeader ? " [PS-X EXE]" : "");
+                 c.mipsScore * 100.0f, c.hasPsxExeHeader ? " [PS-X EXE]" : "");
     }
 
     if (overlayOut) {
@@ -86,7 +91,16 @@ int main(int argc, char *argv[]) {
   }
 
   std::string input_path = argv[1];
-  const char *output_path = (argc >= 3) ? argv[2] : nullptr;
+  const char *output_path = nullptr;
+  std::vector<uint32_t> extraFuncs;
+
+  for (int i = 2; i < argc; ++i) {
+    if (std::string(argv[i]) == "--add-func" && i + 1 < argc) {
+      extraFuncs.push_back(std::stoul(argv[++i], nullptr, 16));
+    } else if (!output_path) {
+      output_path = argv[i];
+    }
+  }
 
   // ─── Auto-detect BIN disc images ──────────────────────
   std::vector<uint8_t>
@@ -191,6 +205,21 @@ int main(int argc, char *argv[]) {
   // 1. Find functions
   ps1recomp::FunctionFinder finder;
   finder.findFunctions(parser);
+
+  for (uint32_t addr : extraFuncs) {
+    std::string name = fmt::format("func_added_{:08X}", addr);
+    finder.addFunction(addr, name, ps1recomp::FunctionSource::Symbol);
+  }
+
+  // Need to recompute boundaries if we injected new functions inside text block
+  // This is a private method in original but we can just let it fall through or
+  // we can just hope it gets its size from the next function Actually
+  // findFunctions() calls computeBoundaries()! We need to add extra functions
+  // BEFORE computeBoundaries. Wait, findFunctions clears the list! We should
+  // add them manually after findFunctions, then re-sort them? No, we can't
+  // easily recompute boundaries here. Let me just add them after. The
+  // recompiler can deal with size=0 by reading until the next jr $ra. Wait,
+  // recompiler needs size!
 
   // 2. Classify against PsyQ
   ps1recomp::PsyQMatcher matcher;

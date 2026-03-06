@@ -1,0 +1,1371 @@
+skips = []
+stubs = []
+passthroughs = []
+
+[[functions]]
+leaf = false
+size = 864
+source = "jal_target"
+address = "0x80010770"
+name = "func_80010770"
+
+[[functions]]
+leaf = true
+size = 84
+source = "jal_target"
+address = "0x80010AD0"
+name = "func_80010AD0"
+
+[[functions]]
+leaf = true
+size = 48
+source = "jal_target"
+address = "0x80010B24"
+name = "func_80010B24"
+
+[[functions]]
+leaf = false
+size = 52
+source = "prologue"
+address = "0x80010B54"
+name = "func_80010B54"
+
+[[functions]]
+leaf = true
+size = 216
+source = "jal_target"
+address = "0x80010B88"
+name = "func_80010B88"
+
+[[functions]]
+leaf = true
+size = 288
+source = "jal_target"
+address = "0x80010C60"
+name = "func_80010C60"
+
+[[functions]]
+leaf = false
+size = 232
+source = "prologue"
+address = "0x80010D80"
+name = "func_80010D80"
+
+[[functions]]
+leaf = true
+size = 28
+source = "jal_target"
+address = "0x80010E68"
+name = "func_80010E68"
+
+[[functions]]
+leaf = false
+size = 72
+source = "prologue"
+address = "0x80010E84"
+name = "func_80010E84"
+
+[[functions]]
+leaf = false
+size = 104
+source = "prologue"
+address = "0x80010ECC"
+name = "func_80010ECC"
+
+[[functions]]
+leaf = false
+size = 52
+source = "prologue"
+address = "0x80010F34"
+name = "func_80010F34"
+
+[[functions]]
+leaf = false
+size = 52
+source = "jal_target"
+address = "0x80010F68"
+name = "func_80010F68"
+
+[[functions]]
+leaf = false
+size = 124
+source = "jal_target"
+address = "0x80010F9C"
+name = "func_80010F9C"
+
+[[functions]]
+leaf = false
+size = 92
+source = "prologue"
+address = "0x80011018"
+name = "func_80011018"
+
+[[functions]]
+leaf = false
+size = 252
+source = "jal_target"
+address = "0x80011074"
+name = "func_80011074"
+
+[[functions]]
+leaf = false
+size = 108
+source = "jal_target"
+address = "0x80011170"
+name = "func_80011170"
+
+[[functions]]
+leaf = false
+size = 132
+source = "prologue"
+address = "0x800111DC"
+name = "func_800111DC"
+
+[[functions]]
+leaf = false
+size = 284
+source = "jal_target"
+address = "0x80011260"
+name = "func_80011260"
+
+[[functions]]
+leaf = false
+size = 328
+source = "jal_target"
+address = "0x8001137C"
+name = "func_8001137C"
+
+[[functions]]
+leaf = false
+size = 364
+source = "jal_target"
+address = "0x800114C4"
+name = "func_800114C4"
+
+[[functions]]
+leaf = false
+size = 140
+source = "jal_target"
+address = "0x80011630"
+name = "func_80011630"
+
+[[functions]]
+leaf = false
+size = 240
+source = "jal_target"
+address = "0x800116BC"
+name = "func_800116BC"
+
+[[functions]]
+leaf = true
+size = 60
+source = "jal_target"
+address = "0x800117AC"
+name = "func_800117AC"
+
+[[functions]]
+leaf = false
+size = 68
+source = "jal_target"
+address = "0x800117E8"
+name = "func_800117E8"
+
+[[functions]]
+leaf = false
+size = 88
+source = "jal_target"
+address = "0x8001182C"
+name = "func_8001182C"
+
+[[functions]]
+leaf = false
+size = 136
+source = "jal_target"
+address = "0x80011884"
+name = "func_80011884"
+
+[[functions]]
+leaf = false
+size = 320
+source = "prologue"
+address = "0x8001190C"
+name = "func_8001190C"
+
+[[functions]]
+leaf = false
+size = 216
+source = "jal_target"
+address = "0x80011A4C"
+name = "func_80011A4C"
+
+[[functions]]
+leaf = false
+size = 280
+source = "jal_target"
+address = "0x80011B24"
+name = "func_80011B24"
+
+[[functions]]
+leaf = false
+size = 52
+source = "jal_target"
+address = "0x80011C3C"
+name = "func_80011C3C"
+
+[[functions]]
+leaf = true
+size = 148
+source = "jal_target"
+address = "0x80011C70"
+name = "func_80011C70"
+
+[[functions]]
+leaf = false
+size = 328
+source = "jal_target"
+address = "0x80011D04"
+name = "func_80011D04"
+
+[[functions]]
+leaf = true
+size = 132
+source = "jal_target"
+address = "0x80011E4C"
+name = "func_80011E4C"
+
+[[functions]]
+leaf = false
+size = 120
+source = "prologue"
+address = "0x80011ED0"
+name = "func_80011ED0"
+
+[[functions]]
+leaf = true
+size = 48
+source = "jal_target"
+address = "0x80011F48"
+name = "func_80011F48"
+
+[[functions]]
+leaf = true
+size = 320
+source = "jal_target"
+address = "0x80011F78"
+name = "func_80011F78"
+
+[[functions]]
+leaf = true
+size = 44
+source = "jal_target"
+address = "0x800120B8"
+name = "func_800120B8"
+
+[[functions]]
+leaf = false
+size = 56
+source = "prologue"
+address = "0x800120E4"
+name = "func_800120E4"
+
+[[functions]]
+leaf = false
+size = 160
+source = "prologue"
+address = "0x8001211C"
+name = "func_8001211C"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x800121BC"
+name = "func_800121BC"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x800121CC"
+name = "func_800121CC"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x800121DC"
+name = "func_800121DC"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x800121EC"
+name = "func_800121EC"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x800121FC"
+name = "func_800121FC"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x8001220C"
+name = "func_8001220C"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x8001221C"
+name = "func_8001221C"
+
+[[functions]]
+leaf = true
+size = 32
+source = "jal_target"
+address = "0x8001222C"
+name = "func_8001222C"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x8001224C"
+name = "func_8001224C"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x8001225C"
+name = "func_8001225C"
+
+[[functions]]
+leaf = false
+size = 32
+source = "jal_target"
+address = "0x8001226C"
+name = "func_8001226C"
+
+[[functions]]
+leaf = false
+size = 232
+source = "jal_target"
+address = "0x8001228C"
+name = "func_8001228C"
+
+[[functions]]
+leaf = false
+size = 120
+source = "jal_target"
+address = "0x80012374"
+name = "func_80012374"
+
+[[functions]]
+leaf = false
+size = 640
+source = "jal_target"
+address = "0x800123EC"
+name = "func_800123EC"
+
+[[functions]]
+leaf = false
+size = 804
+source = "jal_target"
+address = "0x8001266C"
+name = "func_8001266C"
+
+[[functions]]
+leaf = false
+size = 772
+source = "jal_target"
+address = "0x80012990"
+name = "func_80012990"
+
+[[functions]]
+leaf = false
+size = 100
+source = "prologue"
+address = "0x80012C94"
+name = "func_80012C94"
+
+[[functions]]
+leaf = true
+size = 380
+source = "jal_target"
+address = "0x80012CF8"
+name = "func_80012CF8"
+
+[[functions]]
+leaf = true
+size = 40
+source = "jal_target"
+address = "0x80012E74"
+name = "func_80012E74"
+
+[[functions]]
+leaf = true
+size = 40
+source = "jal_target"
+address = "0x80012E9C"
+name = "func_80012E9C"
+
+[[functions]]
+leaf = true
+size = 104
+source = "jal_target"
+address = "0x80012EC4"
+name = "func_80012EC4"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x80012F2C"
+name = "func_80012F2C"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x80012F3C"
+name = "func_80012F3C"
+
+[[functions]]
+leaf = false
+size = 48
+source = "jal_target"
+address = "0x80012F4C"
+name = "func_80012F4C"
+
+[[functions]]
+leaf = false
+size = 168
+source = "entry_point"
+address = "0x80012F7C"
+name = "__start"
+
+[[functions]]
+leaf = false
+size = 216
+source = "jal_target"
+address = "0x80013024"
+name = "func_80013024"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x800130FC"
+name = "func_800130FC"
+
+[[functions]]
+leaf = false
+size = 376
+source = "jal_target"
+address = "0x8001310C"
+name = "func_8001310C"
+
+[[functions]]
+leaf = false
+size = 152
+source = "jal_target"
+address = "0x80013284"
+name = "func_80013284"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x8001331C"
+name = "func_8001331C"
+
+[[functions]]
+leaf = true
+size = 24
+source = "jal_target"
+address = "0x8001332C"
+name = "func_8001332C"
+
+[[functions]]
+leaf = true
+size = 24
+source = "jal_target"
+address = "0x80013344"
+name = "func_80013344"
+
+[[functions]]
+leaf = false
+size = 48
+source = "jal_target"
+address = "0x8001335C"
+name = "func_8001335C"
+
+[[functions]]
+leaf = false
+size = 48
+source = "jal_target"
+address = "0x8001338C"
+name = "func_8001338C"
+
+[[functions]]
+leaf = false
+size = 48
+source = "jal_target"
+address = "0x800133BC"
+name = "func_800133BC"
+
+[[functions]]
+leaf = false
+size = 196
+source = "prologue"
+address = "0x800133EC"
+name = "func_800133EC"
+
+[[functions]]
+leaf = true
+size = 40
+source = "jal_target"
+address = "0x800134B0"
+name = "func_800134B0"
+
+[[functions]]
+leaf = true
+size = 24
+source = "jal_target"
+address = "0x800134D8"
+name = "func_800134D8"
+
+[[functions]]
+leaf = false
+size = 216
+source = "prologue"
+address = "0x800134F0"
+name = "func_800134F0"
+
+[[functions]]
+leaf = false
+size = 464
+source = "jal_target"
+address = "0x800135C8"
+name = "func_800135C8"
+
+[[functions]]
+leaf = false
+size = 328
+source = "prologue"
+address = "0x80013798"
+name = "func_80013798"
+
+[[functions]]
+leaf = false
+size = 160
+source = "prologue"
+address = "0x800138E0"
+name = "func_800138E0"
+
+[[functions]]
+leaf = false
+size = 120
+source = "prologue"
+address = "0x80013980"
+name = "func_80013980"
+
+[[functions]]
+leaf = true
+size = 44
+source = "jal_target"
+address = "0x800139F8"
+name = "func_800139F8"
+
+[[functions]]
+leaf = true
+size = 24
+source = "jal_target"
+address = "0x80013A24"
+name = "func_80013A24"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x80013A3C"
+name = "func_80013A3C"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x80013A4C"
+name = "func_80013A4C"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x80013A5C"
+name = "func_80013A5C"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x80013A6C"
+name = "func_80013A6C"
+
+[[functions]]
+leaf = false
+size = 240
+source = "jal_target"
+address = "0x80013A7C"
+name = "func_80013A7C"
+
+[[functions]]
+leaf = true
+size = 48
+source = "jal_target"
+address = "0x80013B6C"
+name = "func_80013B6C"
+
+[[functions]]
+leaf = false
+size = 632
+source = "jal_target"
+address = "0x80013B9C"
+name = "func_80013B9C"
+
+[[functions]]
+leaf = true
+size = 60
+source = "jal_target"
+address = "0x80013E14"
+name = "func_80013E14"
+
+[[functions]]
+leaf = true
+size = 28
+source = "jal_target"
+address = "0x80013E50"
+name = "func_80013E50"
+
+[[functions]]
+leaf = false
+size = 144
+source = "jal_target"
+address = "0x80013E6C"
+name = "func_80013E6C"
+
+[[functions]]
+leaf = false
+size = 60
+source = "jal_target"
+address = "0x80013EFC"
+name = "func_80013EFC"
+
+[[functions]]
+leaf = false
+size = 40
+source = "prologue"
+address = "0x80013F38"
+name = "func_80013F38"
+
+[[functions]]
+leaf = false
+size = 40
+source = "prologue"
+address = "0x80013F60"
+name = "func_80013F60"
+
+[[functions]]
+leaf = false
+size = 52
+source = "prologue"
+address = "0x80013F88"
+name = "func_80013F88"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x80013FBC"
+name = "func_80013FBC"
+
+[[functions]]
+leaf = true
+size = 32
+source = "jal_target"
+address = "0x80013FCC"
+name = "func_80013FCC"
+
+[[functions]]
+leaf = true
+size = 12
+source = "jal_target"
+address = "0x80013FEC"
+name = "func_80013FEC"
+
+[[functions]]
+leaf = false
+size = 108
+source = "jal_target"
+address = "0x80013FF8"
+name = "func_80013FF8"
+
+[[functions]]
+leaf = false
+size = 156
+source = "jal_target"
+address = "0x80014064"
+name = "func_80014064"
+
+[[functions]]
+leaf = false
+size = 32
+source = "jal_target"
+address = "0x80014100"
+name = "func_80014100"
+
+[[functions]]
+leaf = false
+size = 32
+source = "jal_target"
+address = "0x80014120"
+name = "func_80014120"
+
+[[functions]]
+leaf = true
+size = 20
+source = "jal_target"
+address = "0x80014140"
+name = "func_80014140"
+
+[[functions]]
+leaf = true
+size = 20
+source = "jal_target"
+address = "0x80014154"
+name = "func_80014154"
+
+[[functions]]
+leaf = false
+size = 316
+source = "jal_target"
+address = "0x80014168"
+name = "func_80014168"
+
+[[functions]]
+leaf = false
+size = 308
+source = "jal_target"
+address = "0x800142A4"
+name = "func_800142A4"
+
+[[functions]]
+leaf = false
+size = 332
+source = "jal_target"
+address = "0x800143D8"
+name = "func_800143D8"
+
+[[functions]]
+leaf = false
+size = 32
+source = "prologue"
+address = "0x80014524"
+name = "func_80014524"
+
+[[functions]]
+leaf = false
+size = 32
+source = "jal_target"
+address = "0x80014544"
+name = "func_80014544"
+
+[[functions]]
+leaf = false
+size = 32
+source = "jal_target"
+address = "0x80014564"
+name = "func_80014564"
+
+[[functions]]
+leaf = false
+size = 36
+source = "jal_target"
+address = "0x80014584"
+name = "func_80014584"
+
+[[functions]]
+leaf = false
+size = 32
+source = "jal_target"
+address = "0x800145A8"
+name = "func_800145A8"
+
+[[functions]]
+leaf = true
+size = 260
+source = "jal_target"
+address = "0x800145C8"
+name = "func_800145C8"
+
+[[functions]]
+leaf = true
+size = 128
+source = "jal_target"
+address = "0x800146CC"
+name = "func_800146CC"
+
+[[functions]]
+leaf = false
+size = 1372
+source = "jal_target"
+address = "0x8001474C"
+name = "func_8001474C"
+
+[[functions]]
+leaf = false
+size = 640
+source = "jal_target"
+address = "0x80014CA8"
+name = "func_80014CA8"
+
+[[functions]]
+leaf = false
+size = 712
+source = "jal_target"
+address = "0x80014F28"
+name = "func_80014F28"
+
+[[functions]]
+leaf = false
+size = 1036
+source = "jal_target"
+address = "0x800151F0"
+name = "func_800151F0"
+
+[[functions]]
+leaf = true
+size = 136
+source = "jal_target"
+address = "0x800155FC"
+name = "func_800155FC"
+
+[[functions]]
+leaf = true
+size = 212
+source = "jal_target"
+address = "0x80015684"
+name = "func_80015684"
+
+[[functions]]
+leaf = true
+size = 240
+source = "jal_target"
+address = "0x80015758"
+name = "func_80015758"
+
+[[functions]]
+leaf = false
+size = 76
+source = "jal_target"
+address = "0x80015848"
+name = "func_80015848"
+
+[[functions]]
+leaf = false
+size = 480
+source = "jal_target"
+address = "0x80015894"
+name = "func_80015894"
+
+[[functions]]
+leaf = false
+size = 360
+source = "jal_target"
+address = "0x80015A74"
+name = "func_80015A74"
+
+[[functions]]
+leaf = true
+size = 256
+source = "jal_target"
+address = "0x80015BDC"
+name = "func_80015BDC"
+
+[[functions]]
+leaf = false
+size = 464
+source = "jal_target"
+address = "0x80015CDC"
+name = "func_80015CDC"
+
+[[functions]]
+leaf = false
+size = 52
+source = "prologue"
+address = "0x80015EAC"
+name = "func_80015EAC"
+
+[[functions]]
+leaf = false
+size = 628
+source = "prologue"
+address = "0x80015EE0"
+name = "func_80015EE0"
+
+[[functions]]
+leaf = false
+size = 208
+source = "prologue"
+address = "0x80016154"
+name = "func_80016154"
+
+[[functions]]
+leaf = false
+size = 904
+source = "jal_target"
+address = "0x80016224"
+name = "func_80016224"
+
+[[functions]]
+leaf = false
+size = 412
+source = "jal_target"
+address = "0x800165AC"
+name = "func_800165AC"
+
+[[functions]]
+leaf = false
+size = 308
+source = "jal_target"
+address = "0x80016748"
+name = "func_80016748"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x8001687C"
+name = "func_8001687C"
+
+[[functions]]
+leaf = false
+size = 100
+source = "jal_target"
+address = "0x8001688C"
+name = "func_8001688C"
+
+[[functions]]
+leaf = false
+size = 64
+source = "prologue"
+address = "0x800168F0"
+name = "func_800168F0"
+
+[[functions]]
+leaf = false
+size = 680
+source = "prologue"
+address = "0x80016930"
+name = "func_80016930"
+
+[[functions]]
+leaf = false
+size = 280
+source = "jal_target"
+address = "0x80016BD8"
+name = "func_80016BD8"
+
+[[functions]]
+leaf = false
+size = 372
+source = "jal_target"
+address = "0x80016CF0"
+name = "func_80016CF0"
+
+[[functions]]
+leaf = false
+size = 4760
+source = "jal_target"
+address = "0x80016E64"
+name = "func_80016E64"
+
+[[functions]]
+leaf = false
+size = 372
+source = "jal_target"
+address = "0x800180FC"
+name = "func_800180FC"
+
+[[functions]]
+leaf = false
+size = 92
+source = "prologue"
+address = "0x80018270"
+name = "func_80018270"
+
+[[functions]]
+leaf = false
+size = 164
+source = "prologue"
+address = "0x800182CC"
+name = "func_800182CC"
+
+[[functions]]
+leaf = true
+size = 16
+source = "jal_target"
+address = "0x80018370"
+name = "func_80018370"
+
+[[functions]]
+leaf = false
+size = 96
+source = "prologue"
+address = "0x80018380"
+name = "func_80018380"
+
+[[functions]]
+leaf = false
+size = 152
+source = "jal_target"
+address = "0x800183E0"
+name = "func_800183E0"
+
+[[functions]]
+leaf = false
+size = 104
+source = "jal_target"
+address = "0x80018478"
+name = "func_80018478"
+
+[[functions]]
+leaf = false
+size = 284
+source = "jal_target"
+address = "0x800184E0"
+name = "func_800184E0"
+
+[[functions]]
+leaf = false
+size = 144
+source = "prologue"
+address = "0x800185FC"
+name = "func_800185FC"
+
+[[functions]]
+leaf = false
+size = 152
+source = "jal_target"
+address = "0x8001868C"
+name = "func_8001868C"
+
+[[functions]]
+leaf = false
+size = 96
+source = "jal_target"
+address = "0x80018724"
+name = "func_80018724"
+
+[[functions]]
+leaf = false
+size = 96
+source = "prologue"
+address = "0x80018784"
+name = "func_80018784"
+
+[[functions]]
+leaf = false
+size = 556
+source = "prologue"
+address = "0x800187E4"
+name = "func_800187E4"
+
+[[functions]]
+leaf = false
+size = 204
+source = "jal_target"
+address = "0x80018A10"
+name = "func_80018A10"
+
+[[functions]]
+leaf = false
+size = 192
+source = "jal_target"
+address = "0x80018ADC"
+name = "func_80018ADC"
+
+[[functions]]
+leaf = false
+size = 216
+source = "prologue"
+address = "0x80018B9C"
+name = "func_80018B9C"
+
+[[functions]]
+leaf = false
+size = 52
+source = "prologue"
+address = "0x80018C74"
+name = "func_80018C74"
+
+[[functions]]
+leaf = false
+size = 1272
+source = "jal_target"
+address = "0x80018CA8"
+name = "func_80018CA8"
+
+[[functions]]
+leaf = false
+size = 100
+source = "prologue"
+address = "0x800191A0"
+name = "func_800191A0"
+
+[[functions]]
+leaf = false
+size = 56
+source = "prologue"
+address = "0x80019204"
+name = "func_80019204"
+
+[[functions]]
+leaf = false
+size = 128
+source = "prologue"
+address = "0x8001923C"
+name = "func_8001923C"
+
+[[functions]]
+leaf = false
+size = 144
+source = "prologue"
+address = "0x800192BC"
+name = "func_800192BC"
+
+[[functions]]
+leaf = false
+size = 84
+source = "prologue"
+address = "0x8001934C"
+name = "func_8001934C"
+
+[[functions]]
+leaf = false
+size = 504
+source = "prologue"
+address = "0x800193A0"
+name = "func_800193A0"
+
+[[functions]]
+leaf = false
+size = 624
+source = "jal_target"
+address = "0x80019598"
+name = "func_80019598"
+
+[[functions]]
+leaf = true
+size = 32
+source = "jal_target"
+address = "0x80019808"
+name = "func_80019808"
+
+[[functions]]
+leaf = true
+size = 152
+source = "jal_target"
+address = "0x80019828"
+name = "func_80019828"
+
+[[functions]]
+leaf = true
+size = 152
+source = "jal_target"
+address = "0x800198C0"
+name = "func_800198C0"
+
+[[functions]]
+leaf = true
+size = 28
+source = "jal_target"
+address = "0x80019958"
+name = "func_80019958"
+
+[[functions]]
+leaf = true
+size = 152
+source = "jal_target"
+address = "0x80019974"
+name = "func_80019974"
+
+[[functions]]
+leaf = false
+size = 224
+source = "prologue"
+address = "0x80019A0C"
+name = "func_80019A0C"
+
+[[functions]]
+leaf = false
+size = 560
+source = "prologue"
+address = "0x80019AEC"
+name = "func_80019AEC"
+
+[[functions]]
+leaf = false
+size = 572
+source = "prologue"
+address = "0x80019D1C"
+name = "func_80019D1C"
+
+[[functions]]
+leaf = false
+size = 760
+source = "prologue"
+address = "0x80019F58"
+name = "func_80019F58"
+
+[[functions]]
+leaf = true
+size = 72
+source = "jal_target"
+address = "0x8001A250"
+name = "func_8001A250"
+
+[[functions]]
+leaf = true
+size = 48
+source = "jal_target"
+address = "0x8001A298"
+name = "func_8001A298"
+
+[[functions]]
+leaf = false
+size = 36
+source = "prologue"
+address = "0x8001A2C8"
+name = "func_8001A2C8"
+
+[[functions]]
+leaf = false
+size = 688
+source = "jal_target"
+address = "0x8001A2EC"
+name = "func_8001A2EC"
+
+[[functions]]
+leaf = false
+size = 608
+source = "jal_target"
+address = "0x8001A59C"
+name = "func_8001A59C"
+
+[[functions]]
+leaf = false
+size = 336
+source = "jal_target"
+address = "0x8001A7FC"
+name = "func_8001A7FC"
+
+[[functions]]
+leaf = false
+size = 316
+source = "prologue"
+address = "0x8001A94C"
+name = "func_8001A94C"
+
+[[functions]]
+leaf = false
+size = 52
+source = "jal_target"
+address = "0x8001AA88"
+name = "func_8001AA88"
+
+[[functions]]
+leaf = false
+size = 324
+source = "jal_target"
+address = "0x8001AABC"
+name = "func_8001AABC"
+
+[[functions]]
+leaf = true
+size = 160
+source = "jal_target"
+address = "0x8001AC00"
+name = "func_8001AC00"
+
+[[functions]]
+leaf = false
+size = 236
+source = "prologue"
+address = "0x8001ACA0"
+name = "func_8001ACA0"
+
+[[functions]]
+leaf = false
+size = 236
+source = "prologue"
+address = "0x8001AD8C"
+name = "func_8001AD8C"
+
+[[functions]]
+leaf = false
+size = 576
+source = "prologue"
+address = "0x8001AE78"
+name = "func_8001AE78"
+
+[[functions]]
+leaf = false
+size = 40
+source = "prologue"
+address = "0x8001B0B8"
+name = "func_8001B0B8"
+
+[[functions]]
+leaf = true
+size = 44
+source = "jal_target"
+address = "0x8001B0E0"
+name = "func_8001B0E0"
+
+[[functions]]
+leaf = false
+size = 34548
+source = "jal_target"
+address = "0x8001B10C"
+name = "func_8001B10C"
+
+[[functions]]
+leaf = false
+size = 0
+source = "symbol"
+address = "0x80021540"
+name = "func_added_80021540"
+
+[stats]
+skips = 0
+stubs = 0
+game_functions = 193
+psyq_functions = 0
+passthroughs = 0
+total_functions = 193
+
+[binary]
+total_data_size = 0
+text_size = 79872
+total_code_size = 79872
+entry_point = "0x80012F7C"
+text_start = "0x80010000"
+path = "test_roms/Silent Hill/Silent Hill (USA).bin.boot.exe"
+

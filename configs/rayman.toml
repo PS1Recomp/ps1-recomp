@@ -1,0 +1,30 @@
+# Rayman (USA) — ps1-recomp runtime configuration
+# Serial: SLUS-00005
+# PsyQ BSS addresses extracted from Rayman (USA) via disassembly
+
+[game]
+name = "Rayman"
+serial = "SLUS-00005"
+region = "USA"
+
+[psyq_addresses]
+# VBlank counter — PsyQ rcnt[3] counter incremented by BIOS IRQ handler
+vsync_counter = 0x801CF2CC
+
+# CD-ROM HLE addresses
+cd_sync_byte  = 0x801CF1DC   # CD command completion flag
+cd_ready_byte = 0x801CF1E0   # CD data readiness flag
+cd_remaining  = 0x801CF640   # Sectors remaining to read
+cd_dest_ptr   = 0x801CF638   # Destination pointer for CD data
+cd_word_count = 0x801CF63C   # Words per sector to copy
+cd_data_cb    = 0x801F99F8   # CD data callback function pointer
+cd_notify_cb  = 0x801F7D30   # CD notify callback function pointer
+
+# GPU HLE addresses
+gpu_swap_cb       = 0x801300AC  # PsyQ display swap callback
+gpu_drawsync_base = 0x801F5430  # BSS addr holding pointer to OT status array
+gpu_drawsync_count = 2          # Number of double-buffered OT entries
+
+[disc]
+cue_path = "test_roms/Rayman/Rayman (USA).cue"
+exe_path = "test_roms/Rayman/Rayman (USA) (Track 01).bin.boot.exe"

@@ -615,6 +615,20 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
         }
       }
 
+      // ── Auto-inject drainPendingCallbacks for backward branches ──
+      // Backward branches indicate potential busy-wait / polling loops.
+      // We inject a yield point so the game thread can process pending
+      // hardware callbacks (CD-ROM sector delivery, VBlank events, etc).
+      // Without this, any recompiled polling loop would spin forever.
+      std::string yieldCode;
+      if (inst.isBranch()) {
+        uint32_t brTarget = inst.branchTarget(addr);
+        if (brTarget <= addr) {
+          yieldCode =
+              "    if (ctx->bios) ctx->bios->drainPendingCallbacks();\n";
+        }
+      }
+
       if (!conflictRegs.empty()) {
         // Save conflicting registers, run delay slot, then branch/jump
         // using the saved values.  Wrap in a block scope so that the
@@ -629,13 +643,15 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
         std::string branchCode = code;
         for (int r : conflictRegs) {
           replaceRegRef(branchCode, fmt::format("ctx->r{}", r),
-                     fmt::format("_ds_r{}", r));
+                        fmt::format("_ds_r{}", r));
         }
+        result += yieldCode;
         result += fmt::format("      {}\n", branchCode);
         result += "    }\n";
       } else {
         // No conflict — emit delay slot then branch/jump (original order)
         result += fmt::format("    {} // delay slot\n", delayCode);
+        result += yieldCode;
         result += fmt::format("    {}\n", code);
       }
       ++i; // Skip delay slot instruction

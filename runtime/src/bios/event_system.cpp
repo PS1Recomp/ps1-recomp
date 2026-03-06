@@ -3,7 +3,8 @@
 #include "runtime/memory.h"
 #include <fmt/core.h>
 
-// Forward declare recomp_dispatch (defined in recompiled_out.cpp, global namespace)
+// Forward declare recomp_dispatch (defined in recompiled_out.cpp, global
+// namespace)
 extern void recomp_dispatch(uint8_t *rdram, recomp_context *ctx,
                             uint32_t target_pc);
 
@@ -59,21 +60,27 @@ uint32_t EventSystem::waitEvent(uint32_t eventId) {
   if (eventId >= events_.size())
     return 0;
 
-  fmt::print("[BIOS] WaitEvent({}) [STUB]\n", eventId);
+  // Check if the event has been triggered via the atomic bitmask
+  uint32_t bit = 1u << eventId;
+  uint32_t bits = triggeredBits_.load(std::memory_order_acquire);
+  if (bits & bit) {
+    // Clear this bit atomically (acknowledge) — same pattern as testEvent
+    triggeredBits_.fetch_and(~bit, std::memory_order_release);
+    return 1;
+  }
 
-  // Proper emulation requires yielding the recompiled thread and waiting for an
-  // interrupt to trigger this event. In a pure recompiler without threading,
-  // this requires returning to a scheduling loop or fast-forwarding time.
-  events_[eventId].triggered = false; // Acknowledge wait
-
-  return 1;
+  // Not triggered yet — on a real PS1, this would spin-wait.
+  // In our HLE, the caller (recompiled code) is in a polling loop
+  // that will call drainPendingCallbacks() before re-checking.
+  return 0;
 }
 
 uint32_t EventSystem::testEvent(uint32_t eventId) {
   if (eventId >= events_.size())
     return 0;
 
-  // Use atomic bitmask for thread-safe check (main thread writes, game thread reads)
+  // Use atomic bitmask for thread-safe check (main thread writes, game thread
+  // reads)
   uint32_t bit = 1u << eventId;
   uint32_t bits = triggeredBits_.load(std::memory_order_acquire);
   if (bits & bit) {
@@ -111,7 +118,8 @@ void EventSystem::triggerEvent(uint32_t classId, uint32_t specId) {
     if (ev.classId == classId && ev.specId == specId && ev.enabled) {
       found = true;
       // Set bit in atomic bitmask (thread-safe for main→game thread visibility)
-      uint32_t oldBits = triggeredBits_.fetch_or(1u << i, std::memory_order_release);
+      uint32_t oldBits =
+          triggeredBits_.fetch_or(1u << i, std::memory_order_release);
       if (ev.mode == 0x1000 && ev.handler != 0) {
         // Queue for game-thread dispatch instead of calling recomp_dispatch
         // directly (which would be thread-unsafe when called from main thread).
@@ -125,7 +133,8 @@ void EventSystem::triggerEvent(uint32_t classId, uint32_t specId) {
     static int cardTriggerCount = 0;
     cardTriggerCount++;
     if (cardTriggerCount <= 30) {
-      fmt::print("[EVTDBG] triggerEvent(0x{:08X}, 0x{:04X}) found={} evCount={} bits=0x{:08X}\n",
+      fmt::print("[EVTDBG] triggerEvent(0x{:08X}, 0x{:04X}) found={} "
+                 "evCount={} bits=0x{:08X}\n",
                  classId, specId, found, events_.size(), triggeredBits_.load());
     }
   }
@@ -135,8 +144,10 @@ void EventSystem::triggerEvent(uint32_t classId, uint32_t specId) {
     vsyncTriggerCount++;
     if (vsyncTriggerCount <= 10) {
       std::lock_guard<std::mutex> lk2(cbMtx_);
-      fmt::print("[VSYNC-DBG] triggerEvent(0x{:08X}, 0x{:04X}) found={} pendingCBs={} evCount={}\n",
-                 classId, specId, found, pendingCallbacks_.size(), events_.size());
+      fmt::print("[VSYNC-DBG] triggerEvent(0x{:08X}, 0x{:04X}) found={} "
+                 "pendingCBs={} evCount={}\n",
+                 classId, specId, found, pendingCallbacks_.size(),
+                 events_.size());
     }
   }
 }
@@ -153,30 +164,20 @@ void EventSystem::drainPendingCallbacks() {
     std::lock_guard<std::mutex> lk(cbMtx_);
     if (pendingCallbacks_.empty())
       return;
-    static int drainCount = 0;
-    drainCount++;
-    if (drainCount <= 10) {
-      fmt::print("[DRAIN-DBG] drainPendingCallbacks called with {} pending\n",
-                 pendingCallbacks_.size());
-    }
     local = std::move(pendingCallbacks_);
     pendingCallbacks_.clear();
   }
 
   for (const auto &cb : local) {
     // Save and restore registers around EACH callback individually.
-    // Each callback must start with the game's original register state
-    // so that callbacks don't see corrupted registers from previous ones.
     auto saved = static_cast<ps1::CPUContext>(ctx_);
 
-    // Set up register arguments before dispatch if needed
     if (cb.hasArg) {
       ctx_.r4 = cb.a0;
     }
     if (cb.hasA1) {
       ctx_.r5 = cb.a1;
     }
-    fmt::print("[BIOS] Dispatching event callback 0x{:08X}\n", cb.handlerPc);
     recomp_dispatch(ctx_.mem->ramPtr(), &ctx_, cb.handlerPc);
 
     // Restore all registers that the game was using
