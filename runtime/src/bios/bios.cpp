@@ -116,15 +116,39 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] =
         static_cast<uint32_t>(std::abs(static_cast<int32_t>(ctx_.r[A0])));
     break;
-  case 0x13: // setjmp — stub: return 0 (first call)
-    fmt::print("[BIOS] setjmp(buf: 0x{:08X}) [STUB]\n", ctx_.r[A0]);
+  case 0x13: { // setjmp
+    uint32_t buf = ctx_.r[A0];
+    fmt::print("[BIOS] setjmp(buf: 0x{:08X})\n", buf);
+    // PsyQ jmp_buf is an array of 12 integers (48 bytes):
+    // [0]=RA [1]=SP [2]=FP [3]=S0 [4]=S1 [5]=S2 [6]=S3 [7]=S4 [8]=S5 [9]=S6
+    // [10]=S7 [11]=GP
+    ctx_.mem->write32(buf + 0, ctx_.r[31]); // RA
+    ctx_.mem->write32(buf + 4, ctx_.r[29]); // SP
+    ctx_.mem->write32(buf + 8, ctx_.r[30]); // FP
+    for (int i = 0; i < 8; i++) {
+      ctx_.mem->write32(buf + 12 + (i * 4), ctx_.r[16 + i]); // S0-S7
+    }
+    ctx_.mem->write32(buf + 44, ctx_.r[28]); // GP
     ctx_.r[V0] = 0;
     break;
-  case 0x14: // longjmp — stub
-    fmt::print("[BIOS] longjmp(buf: 0x{:08X}, val: {}) [STUB]\n", ctx_.r[A0],
-               ctx_.r[A1]);
-    ctx_.r[V0] = ctx_.r[A1] ? ctx_.r[A1] : 1;
+  }
+  case 0x14: { // longjmp
+    uint32_t buf = ctx_.r[A0];
+    uint32_t val = ctx_.r[A1];
+    fmt::print("[BIOS] longjmp(buf: 0x{:08X}, val: {})\n", buf, val);
+
+    ctx_.r[31] = ctx_.mem->read32(buf + 0); // RA
+    ctx_.r[29] = ctx_.mem->read32(buf + 4); // SP
+    ctx_.r[30] = ctx_.mem->read32(buf + 8); // FP
+    for (int i = 0; i < 8; i++) {
+      ctx_.r[16 + i] = ctx_.mem->read32(buf + 12 + (i * 4)); // S0-S7
+    }
+    ctx_.r[28] = ctx_.mem->read32(buf + 44); // GP
+
+    ctx_.pc = ctx_.r[31]; // Jump to RA
+    ctx_.r[V0] = val ? val : 1;
     break;
+  }
   case 0x15: { // strcpy
     uint32_t dst = ctx_.r[A0];
     uint32_t src = ctx_.r[A1];
@@ -777,40 +801,38 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // SysEnqIntRP to process CDROM state directly. If such a handler exists,
   // invoke it so the game logic can run and update PsyQ variables naturally.
   if (customExceptionExit_ != 0) {
-    fmt::print("[CDROM-HLE] Triggering custom exception handler 0x{:08X}\n",
-               customExceptionExit_);
-    // We must emulate the COP0 registers expected during an exception
-    uint32_t saved_epc = ctx_.cop0[14];
-    uint32_t saved_cause = ctx_.cop0[13];
-    uint32_t saved_sr = ctx_.cop0[12];
+    fmt::print(
+        "[CDROM-HLE] Executing custom exception handler jump to 0x{:08X}\n",
+        customExceptionExit_);
 
-    // Cause register: Int bit 2 corresponds to hardware interrupts
+    // The "handler" is actually a jmp_buf address passed to
+    // SetCustomExitFromException. The game expects the BIOS exception
+    // dispatcher to effectively execute a longjmp(buf, 1).
+    uint32_t buf = customExceptionExit_;
+
+    ctx_.r[31] = ctx_.mem->read32(buf + 0); // RA
+    ctx_.r[29] = ctx_.mem->read32(buf + 4); // SP
+    ctx_.r[30] = ctx_.mem->read32(buf + 8); // FP
+    for (int i = 0; i < 8; i++) {
+      ctx_.r[16 + i] = ctx_.mem->read32(buf + 12 + (i * 4)); // S0-S7
+    }
+    ctx_.r[28] = ctx_.mem->read32(buf + 44); // GP
+
+    // Cause register: Int bit 2 corresponds to hardware interrupts (as seen
+    // from typical HLE)
     ctx_.cop0[13] = 0x400;
 
-    // Simulate calling the handler - the handler should end with RFE + JR RA
-    // But the handler itself might have no "JR RA" since it normally returns
-    // with ERET/RFE! In the decompiled code, the analyzer flagged the custom
-    // handler, but without tracking RFE as a return, the static recompilation
-    // of the handler will likely fall through or crash if it expects an
-    // exception return. Wait, let's look at what the recompilation of
-    // `func_added_80021540` looks like: it was empty. That means it contains no
-    // recognized instructions before returning. This confirms the handler was
-    // not recompiled properly because of missing ER/RFE tracking or we jumped
-    // to the wrong place. If it's empty, calling it won't do anything. We must
-    // just rely on the rest of the HLE. Wait, but the whole point is that
-    // Silent Hill needs this to update PsyQ. If the handler is empty, we must
-    // HLE the update of PsyQ for Silent Hill directly! Wait! Let's just restore
-    // registers for now, we'll write the PsyQ variables for Silent Hill
-    // directly if we can find them. Or we should figure out how to compile
-    // 80021540 properly!
+    // Do the jump!
+    ctx_.pc = ctx_.r[31];
+    ctx_.r[V0] = 1; // setjmp returns 1 on longjmp
 
-    auto saved_ctx = static_cast<ps1::CPUContext>(ctx_);
-    recomp_dispatch(ctx_.mem->ramPtr(), &ctx_, customExceptionExit_);
-    static_cast<ps1::CPUContext &>(ctx_) = saved_ctx;
+    // Emulate ReturnFromException characteristics by clearing exception bits
+    uint32_t sr = ctx_.cop0[12];
+    ctx_.cop0[12] = (sr & ~0xF) | ((sr >> 2) & 0xF);
 
-    ctx_.cop0[14] = saved_epc;
-    ctx_.cop0[13] = saved_cause;
-    ctx_.cop0[12] = saved_sr;
+    // Return early: We performed a direct jump, we don't want to fall through
+    // to the standard PsyQ event dispatcher because the game handles it!
+    return;
   }
 
   // PsyQ interrupt handler mapping (as implemented by the game's own IRQ
