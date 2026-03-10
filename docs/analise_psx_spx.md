@@ -8,9 +8,9 @@ Este repositório é a versão em Markdown da lendária documentação "No$PSX S
 ## Documentos Absolutamente Críticos para o `ps1-recomp`
 Nossa emulação de Alto Nível (HLE) no `runtime` depende inteiramente de replicar perfeitamente o comportamento do hardware como documentado aqui. Arquivos essenciais absorvidos:
 
-1. **`kernelbios.md`**
-   - Detalha todas as funções da BIOS (A0, B0, C0), incluindo as que acabamos de lutar com (como `setjmp`, `longjmp`, matrizes de interrupção e chamadas de rotina do CDROM).
-   - Deve ser consultado sempre que formos emular uma nova syscall na nossa classe `Bios`.
+1. **`kernelbios.md` e Especificações ABI**
+   - Detalha todas as funções da BIOS (A0, B0, C0). 
+   - **Deep Dive (`setjmp/longjmp`):** A documentação afirma explicitly que `setjmp` salva um buffer de *30h bytes* (48 bytes) contendo registradores ABI (S0-S7, GP, SP, FP, RA). Ele retorna 0 na chamada inicial, e o caller do `longjmp` é instruído a "tomar cuidado para que param seja não-zero, para que o programador diferencie a primeira chamada de um rollback". Isso bate 100% com a lógica que codificamos recentemente para consertar o Silent Hill, validando nossa emulação de exceção.
 
 2. **`cdromdrive.md` e `cdrominternalinfoonpsxcdromcontroller.md`**
    - Contém a máquina de estados exata do controlador de CD, os tempos de resposta para as interrupções (`INT1`, `INT2`, `INT3`) e como os comandos da porta `1F80180x` interagem.
