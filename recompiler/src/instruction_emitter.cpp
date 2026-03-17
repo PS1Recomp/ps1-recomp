@@ -549,6 +549,13 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
     }
   }
 
+  // Register jump table targets so labels are emitted for them.
+  for (const auto &jt : func.jumpTables) {
+    for (uint32_t target : jt.targets) {
+      classifyTarget(target);
+    }
+  }
+
   // ─── Pass 2: Emit code ─────────────────────────────────
   // Track reachability: after JR/JALR + delay slot, treat subsequent
   // words as data comments until the next branch target label.
@@ -581,6 +588,29 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
 
     Instruction inst = MipsDecoder::decode(func.instructions[i]);
     std::string code = emitInstruction(inst, addr);
+
+    // ── Jump table override ──────────────────────────────────
+    // If this JR $rx has a detected jump table, replace JUMP_INDIRECT
+    // with a static switch/goto over the known target addresses.
+    // A JUMP_INDIRECT fallback is kept for safety.
+    if (inst.id == InstrId::JR && inst.rs != 31 && !func.jumpTables.empty()) {
+      for (const auto &jt : func.jumpTables) {
+        if (jt.jrInstrIdx == i && !jt.targets.empty()) {
+          std::string sw;
+          sw += fmt::format("{{ // switch table ({} entries)\n", jt.targets.size());
+          sw += fmt::format("    uint32_t _sw_target = static_cast<uint32_t>({});\n",
+                            reg(inst.rs));
+          for (uint32_t target : jt.targets) {
+            sw += fmt::format("    if (_sw_target == 0x{:08X}u) goto {};\n",
+                              target, label(target));
+          }
+          sw += fmt::format("    JUMP_INDIRECT(ctx, {}); // fallback\n", reg(inst.rs));
+          sw += "    }";
+          code = sw;
+          break;
+        }
+      }
+    }
 
     // Handle branch delay slots: if this instruction has a delay slot,
     // emit the next instruction BEFORE the branch/jump.
