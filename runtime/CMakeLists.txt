@@ -24,6 +24,7 @@ add_library(ps1xRuntime_lib STATIC
     src/save_state.cpp
     src/config.cpp
     src/overlay_manager.cpp
+    src/psyq/psyq_hle.cpp
 )
 
 target_include_directories(ps1xRuntime_lib
