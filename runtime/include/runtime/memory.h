@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <stdexcept>
 #include <string>
 
@@ -282,6 +283,11 @@ public:
     if (phys < RAM_SIZE) {
       std::memcpy(&ram_[phys], &val, sizeof(val));
       std::atomic_thread_fence(std::memory_order_release);
+      // Fire write watchpoint if registered for this address
+      if (watchpointPhysAddr_ != 0 && phys == watchpointPhysAddr_ &&
+          watchpointCb_) {
+        watchpointCb_(val);
+      }
       return;
     }
 
@@ -292,6 +298,7 @@ public:
       return;
     }
     if (phys == 0x1F801814) {
+      { static int cnt=0; if(cnt++<30) fprintf(stderr,"[MEM-GP1] write32 GP1=0x%08X (addr=0x%08X)\n",val,addr); }
       if (gpu_)
         gpu_->writeGP1(val);
       return;
@@ -392,6 +399,21 @@ public:
   void setTimers(Timers *timers) { timers_ = timers; }
   void setInterruptController(InterruptController *irq) { irqCtrl_ = irq; }
 
+  // ─── Write Watchpoint ──────────────────────────────
+  // Register a single-address watchpoint: fires cb(newValue) whenever
+  // the 32-bit word at virtAddr is written.  Used by the BIOS to detect
+  // when the game clears cdSyncByte (writes 0) so that a deferred INT2
+  // can be delivered immediately on the game thread.
+  void setWriteWatchpoint(uint32_t virtAddr,
+                          std::function<void(uint32_t)> cb) {
+    watchpointPhysAddr_ = toPhysical(virtAddr);
+    watchpointCb_ = std::move(cb);
+  }
+  void clearWriteWatchpoint() {
+    watchpointPhysAddr_ = 0;
+    watchpointCb_ = nullptr;
+  }
+
 private:
   uint8_t ram_[RAM_SIZE];
   uint8_t scratchpad_[SCRATCHPAD_SIZE];
@@ -406,6 +428,10 @@ private:
   mdec::MDEC *mdec_ = nullptr;
   Timers *timers_ = nullptr;
   InterruptController *irqCtrl_ = nullptr;
+
+  // Write watchpoint (single address, optional)
+  uint32_t watchpointPhysAddr_ = 0;
+  std::function<void(uint32_t)> watchpointCb_;
 
 public:
   /// Convert virtual address to physical address
