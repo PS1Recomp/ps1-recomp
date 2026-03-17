@@ -1,5 +1,6 @@
 #include "runtime/gpu/gpu.h"
 #include <algorithm>
+#include <cstring>
 #include <cstdint>
 #include <fmt/format.h>
 #include <initializer_list>
@@ -17,7 +18,9 @@ GPU::GPU() {
 GPU::~GPU() {}
 
 void GPU::reset() {
-  gpuStat_ = 0x14802000;
+  // 0x14802000 is the post-reset default, but bit 23 = display disabled.
+  // Real BIOS sends GP1(0x03,0) to enable display. We enable it here.
+  gpuStat_ = 0x14002000; // bit 23 cleared = display enabled
   gpuRead_ = 0;
   expectedCommandWords_ = 0;
   isCommandExecuting_ = false;
@@ -45,6 +48,11 @@ void GPU::reset() {
 
   std::fill(vram_.begin(), vram_.end(), Color16{0});
   std::fill(displayVram_.begin(), displayVram_.end(), Color16{0});
+}
+
+void GPU::loadVram(const uint8_t *data) {
+  // Reinterpret the raw bytes as 16-bit pixels (little-endian matches PS1)
+  std::memcpy(vram_.data(), data, VRAM_WIDTH * VRAM_HEIGHT * sizeof(Color16));
 }
 
 void GPU::snapshotDisplayBuffer() {
@@ -105,8 +113,8 @@ void GPU::writeGP0(uint32_t val) {
     uint16_t p2 = (val >> 16) & 0xFFFF;
 
     auto putPixel = [&](uint16_t p) {
-      uint32_t x = vramTransfer_.currX;
-      uint32_t y = vramTransfer_.currY;
+      uint32_t x = vramTransfer_.currX % VRAM_WIDTH;
+      uint32_t y = vramTransfer_.currY % VRAM_HEIGHT;
       vram_[y * VRAM_WIDTH + x] = Color16{p};
       vramTransfer_.currX++;
       if (vramTransfer_.currX >= vramTransfer_.destX + vramTransfer_.width) {
@@ -279,13 +287,28 @@ void GPU::writeGP0(uint32_t val) {
     case 0x7F:
       expectedCommandWords_ = 3;
       break; // 16x16 Tex Rect
-    case 0x80:
+    case 0x80: case 0x81: case 0x82: case 0x83: case 0x84: case 0x85:
+    case 0x86: case 0x87: case 0x88: case 0x89: case 0x8A: case 0x8B:
+    case 0x8C: case 0x8D: case 0x8E: case 0x8F: case 0x90: case 0x91:
+    case 0x92: case 0x93: case 0x94: case 0x95: case 0x96: case 0x97:
+    case 0x98: case 0x99: case 0x9A: case 0x9B: case 0x9C: case 0x9D:
+    case 0x9E: case 0x9F:
       expectedCommandWords_ = 4;
       break; // Copy Rectangle (VRAM to VRAM)
-    case 0xA0:
+    case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5:
+    case 0xA6: case 0xA7: case 0xA8: case 0xA9: case 0xAA: case 0xAB:
+    case 0xAC: case 0xAD: case 0xAE: case 0xAF: case 0xB0: case 0xB1:
+    case 0xB2: case 0xB3: case 0xB4: case 0xB5: case 0xB6: case 0xB7:
+    case 0xB8: case 0xB9: case 0xBA: case 0xBB: case 0xBC: case 0xBD:
+    case 0xBE: case 0xBF:
       expectedCommandWords_ = 3;
       break; // Copy Rectangle (CPU to VRAM)
-    case 0xC0:
+    case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5:
+    case 0xC6: case 0xC7: case 0xC8: case 0xC9: case 0xCA: case 0xCB:
+    case 0xCC: case 0xCD: case 0xCE: case 0xCF: case 0xD0: case 0xD1:
+    case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD7:
+    case 0xD8: case 0xD9: case 0xDA: case 0xDB: case 0xDC: case 0xDD:
+    case 0xDE: case 0xDF:
       expectedCommandWords_ = 3;
       break; // Copy Rectangle (VRAM to CPU)
     case 0xE1:
@@ -345,6 +368,8 @@ void GPU::writeGP1(uint32_t val) {
   case 0x05: // Start of Display Area (in VRAM)
     displayVRAMXStart_ = val & 0x3FF;
     displayVRAMYStart_ = (val >> 10) & 0x1FF;
+    { static int cnt=0; if(cnt++<20) fmt::print(stderr,"[GPU] GP1(0x05): display area -> ({},{})\n",
+      displayVRAMXStart_, displayVRAMYStart_); }
     break;
   case 0x06: // Horizontal Display Range
     displayX1_ = val & 0xFFF;
@@ -439,6 +464,11 @@ void GPU::processLinkedList(uint32_t startAddr, const uint8_t *ram) {
 }
 
 void GPU::executeGP0Command() {
+  if (commandQueue_.size() < expectedCommandWords_) {
+    fmt::print(stderr, "[GPU] BUG: executeGP0Command called with queue={} < expected={}\n",
+               commandQueue_.size(), expectedCommandWords_);
+    return;
+  }
   uint32_t cmd = commandQueue_.front();
   uint32_t opcode = cmd >> 24;
 
@@ -1225,6 +1255,14 @@ void GPU::executeFillRect() {
 void GPU::executeCPUToVRAM() {
   uint32_t pos = commandQueue_[1];
   uint32_t size = commandQueue_[2];
+
+  static int cpuVramCount = 0;
+  if (++cpuVramCount <= 20) {
+    fmt::print(stderr, "[GPU] CPU→VRAM #{}: dest=({},{}) size={}x{} (opcode=0x{:02X})\n",
+               cpuVramCount, pos & 0x3FF, (pos >> 16) & 0x1FF,
+               size & 0xFFFF, (size >> 16) & 0xFFFF,
+               commandQueue_[0] >> 24);
+  }
 
   vramTransfer_.destX = pos & 0x3FF;
   vramTransfer_.destY = (pos >> 16) & 0x1FF;
