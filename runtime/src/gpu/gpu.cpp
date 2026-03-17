@@ -18,9 +18,10 @@ GPU::GPU() {
 GPU::~GPU() {}
 
 void GPU::reset() {
-  // 0x14802000 is the post-reset default, but bit 23 = display disabled.
-  // Real BIOS sends GP1(0x03,0) to enable display. We enable it here.
-  gpuStat_ = 0x14002000; // bit 23 cleared = display enabled
+  // 0x14802000: post-reset hardware default, bit 23 = display disabled.
+  // The real BIOS sends GP1(0x03,0) to enable display after booting.
+  // main_host.cpp does this explicitly after initialization.
+  gpuStat_ = 0x14802000;
   gpuRead_ = 0;
   expectedCommandWords_ = 0;
   isCommandExecuting_ = false;

@@ -16,6 +16,7 @@ struct Event {
   uint32_t handler;
   bool enabled;
   bool triggered;
+  bool pendingTrigger; // trigger fired while disabled; applied on EnableEvent
 };
 
 struct PendingCallback {

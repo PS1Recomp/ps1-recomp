@@ -36,14 +36,12 @@ uint32_t EventSystem::openEvent(uint32_t classId, uint32_t specId,
   ev.specId = specId;
   ev.mode = mode;
   ev.handler = handler;
-  // Auto-enable: on real PS1, games typically call EnableEvent immediately
-  // after OpenEvent.  In our HLE the ordering is not guaranteed (e.g. the
-  // CdInit loop calls _96_CdInitSubFunc which fires triggerCdromEvent BEFORE
-  // the game has a chance to call EnableEvent).  Auto-enabling on open ensures
-  // triggerEvent can set the bit immediately, so testEvent returns 1 correctly.
-  // This matches the psxrecomp approach (TestEvent always returns 1).
-  ev.enabled = true;
+  // Events start disabled per PS1 hardware spec.
+  // Triggers that arrive before EnableEvent are stored as pendingTrigger and
+  // applied when EnableEvent is called, so late CDROM interrupts aren't lost.
+  ev.enabled = false;
   ev.triggered = false;
+  ev.pendingTrigger = false;
 
   events_.push_back(ev);
 
@@ -60,6 +58,7 @@ uint32_t EventSystem::closeEvent(uint32_t eventId) {
     return 0;
 
   events_[eventId].enabled = false;
+  events_[eventId].pendingTrigger = false;
   events_[eventId].classId = 0xFFFFFFFF; // Mark inactive
   triggeredBits_.fetch_and(~(1u << eventId), std::memory_order_release);
 
@@ -107,7 +106,14 @@ uint32_t EventSystem::enableEvent(uint32_t eventId) {
   std::lock_guard<std::mutex> lk(eventsMtx_);
   if (eventId >= events_.size())
     return 0;
-  events_[eventId].enabled = true;
+  auto &ev = events_[eventId];
+  ev.enabled = true;
+  // Apply any trigger that arrived before EnableEvent was called.
+  if (ev.pendingTrigger) {
+    ev.pendingTrigger = false;
+    triggeredBits_.fetch_or(1u << eventId, std::memory_order_release);
+    EVT_LOG("[BIOS] EnableEvent({}): applied pending trigger\n", eventId);
+  }
   EVT_LOG("[BIOS] EnableEvent({})\n", eventId);
   return 1;
 }
@@ -126,8 +132,13 @@ void EventSystem::triggerEvent(uint32_t classId, uint32_t specId) {
   bool found = false;
   for (size_t i = 0; i < events_.size(); i++) {
     auto &ev = events_[i];
-    if (ev.classId == classId && ev.specId == specId && ev.enabled) {
+    if (ev.classId == classId && ev.specId == specId) {
       found = true;
+      if (!ev.enabled) {
+        // Buffer the trigger; will be applied when EnableEvent is called.
+        ev.pendingTrigger = true;
+        continue;
+      }
       // Set bit in atomic bitmask (thread-safe for main→game thread visibility)
       uint32_t oldBits =
           triggeredBits_.fetch_or(1u << i, std::memory_order_release);

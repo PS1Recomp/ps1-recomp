@@ -208,6 +208,10 @@ int main(int argc, char *argv[]) {
   bios.setInputController(&input);
   bios.setCdromController(&cdromCtrl);
 
+  // Enable display (GP1 0x03, val=0): mirrors what the real BIOS does during boot.
+  // reset() leaves bit 23 = 1 (display off) per hardware spec.
+  gpu.writeGP1(0x03000000);
+
   // ── Per-game PsyQ BSS address configuration ──
   // Priority: TOML config file > environment variables > defaults (0)
   {
