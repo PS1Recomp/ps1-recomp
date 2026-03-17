@@ -13,6 +13,15 @@ namespace ps1recomp {
 
 // ─── Function context for emission ──────────────────────
 
+/// Detected jump table for an indirect JR instruction.
+/// When a JR $rx (rx != $ra) is preceded by the canonical
+///   LUI + ADDIU + ADDU + LW + JR  pattern, we can replace the
+///   JUMP_INDIRECT with a static switch/goto over the table entries.
+struct JumpTableEntry {
+  uint32_t jrInstrIdx;           ///< Index in instructions[] of the JR instruction
+  std::vector<uint32_t> targets; ///< Jump target addresses read from the ELF data
+};
+
 /// Represents a function being recompiled
 struct RecompFunction {
   std::string name;
@@ -23,6 +32,9 @@ struct RecompFunction {
   /// Whether a given address within this function is a branch/jump target
   /// (used for label generation)
   std::vector<bool> isLabelTarget;
+
+  /// Detected jump tables for indirect jumps within this function
+  std::vector<JumpTableEntry> jumpTables;
 };
 
 // ─── Function call resolver ─────────────────────────────

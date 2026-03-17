@@ -57,6 +57,9 @@ public:
   // Get a pointer to the 1024x512 VRAM framebuffer (live — game thread writes here)
   const Color16 *getVRAM() const { return vram_.data(); }
 
+  // Load 1024×512×2 bytes of VRAM from a save-state buffer.
+  void loadVram(const uint8_t *data);
+
   // Get the display-safe snapshot (captured at VBlank)
   const Color16 *getDisplayVRAM() const { return displayVram_.data(); }
 
