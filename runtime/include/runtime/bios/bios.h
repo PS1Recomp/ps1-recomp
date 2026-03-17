@@ -50,15 +50,17 @@ public:
     uint32_t gpuSwapCb = 0; // PsyQ display swap callback (SysEnqIntRP chain)
     // ── DrawSync HLE ──
     // PsyQ DrawSync reads base_ptr from a BSS var, then polls:
-    //   status_addr = base_ptr + (index << 5)  [stride=0x20, status at offset
-    //   0]
+    //   status_addr = base_ptr + (index << 5)  [stride=0x20, status at offset 0]
     // Since our GPU is fully synchronous, we mark all entries as complete.
-    uint32_t gpuDrawSyncBase = 0; // BSS addr holding POINTER to OT status array
-    uint32_t gpuDrawSyncCount =
-        2; // Number of OT entries (usually 2, double-buffered)
+    uint32_t gpuDrawSyncBase = 0;      // BSS addr holding POINTER to OT status array
+    uint32_t gpuDrawSyncCount = 2;     // Number of OT entries (usually 2, double-buffered)
+    uint32_t gpuDrawSyncIndexAddr = 0; // BSS addr holding current OT index (optional precision)
   };
 
-  void setPsyqAddresses(const PsyqAddresses &addrs) { psyq_ = addrs; }
+  void setPsyqAddresses(const PsyqAddresses &addrs) {
+    psyq_ = addrs;
+    setupCdSyncWatchpoint();
+  }
   const PsyqAddresses &psyqAddresses() const { return psyq_; }
 
   // The single entry-point when PC jumps to A0, B0 or C0.
@@ -118,6 +120,10 @@ private:
 
   // Common memory card/IO stubs (A0)
   void stub_printf();
+
+  // Set up the cdSyncByte write watchpoint so INT2 fires on the game thread
+  // immediately after the game clears cdSyncByte (ACKs INT3).
+  void setupCdSyncWatchpoint();
 };
 
 } // namespace ps1::bios

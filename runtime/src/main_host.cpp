@@ -13,6 +13,7 @@
 #include <iostream>
 #include <ps1recomp/elf_parser.h>
 #include <runtime/bios/bios.h>
+#include <runtime/psyq/psyq_hle.h>
 #include <runtime/cdrom/cdrom_controller.h>
 #include <runtime/cdrom/virtual_fs.h>
 #include <runtime/cpu_context.h>
@@ -239,6 +240,7 @@ int main(int argc, char *argv[]) {
           readToml("gpu_swap_cb", addrs.gpuSwapCb);
           readToml("gpu_drawsync_base", addrs.gpuDrawSyncBase);
           readToml("gpu_drawsync_count", addrs.gpuDrawSyncCount);
+          readToml("gpu_drawsync_index_addr", addrs.gpuDrawSyncIndexAddr);
         }
       } catch (const std::exception &e) {
         fmt::print(stderr,
@@ -267,6 +269,7 @@ int main(int argc, char *argv[]) {
     readEnvHex("PSYQ_GPU_SWAP_CB", addrs.gpuSwapCb);
     readEnvHex("PSYQ_GPU_DRAWSYNC_BASE", addrs.gpuDrawSyncBase);
     readEnvHex("PSYQ_GPU_DRAWSYNC_COUNT", addrs.gpuDrawSyncCount);
+    readEnvHex("PSYQ_GPU_DRAWSYNC_INDEX_ADDR", addrs.gpuDrawSyncIndexAddr);
 
     // 3. Warn if critical addresses are not configured
     if (addrs.vblankCounter == 0)
@@ -282,6 +285,17 @@ int main(int argc, char *argv[]) {
           "[WARN] gpu_drawsync_base not set — DrawSync polling will block\n");
 
     bios.setPsyqAddresses(addrs);
+
+    // Also configure the psyq_hle layer so that named PsyQ stubs
+    // (VSync, DrawSync, etc.) have the correct per-game addresses.
+    ps1::psyq::HleConfig hleCfg;
+    hleCfg.vblankCounter    = addrs.vblankCounter;
+    hleCfg.drawSyncBase     = addrs.gpuDrawSyncBase;
+    hleCfg.drawSyncIndexAddr = addrs.gpuDrawSyncIndexAddr;
+    hleCfg.drawSyncCount    = addrs.gpuDrawSyncCount;
+    hleCfg.drainCallbacks   = [&bios]() { bios.drainPendingCallbacks(); };
+    ps1::psyq::configure(hleCfg);
+
     fmt::print("[CONFIG] PsyQ addresses configured\n");
   }
 
@@ -407,6 +421,26 @@ int main(int argc, char *argv[]) {
   recomp_init_dispatch_table();
   fmt::print("[Dispatch] Table initialized.\n");
 
+  // ─── VBlank ticker thread ─────────────────────────────
+  // The game spins polling the vblank counter (0x801CF2CC).  The main SDL
+  // loop only fires at ~60fps but the game thread runs at full CPU speed, so
+  // thousands of VSync calls time out before the SDL loop fires even once.
+  // A dedicated 60Hz ticker thread writes to the vblank counter independently
+  // of SDL rendering, ensuring the counter advances at the right rate and the
+  // game's VSync loop exits quickly.
+  std::thread vblankThread([&]() {
+    using namespace std::chrono;
+    const auto period = microseconds(16667); // ~60 Hz
+    auto next = steady_clock::now() + period;
+    while (!gameFinished.load(std::memory_order_acquire)) {
+      std::this_thread::sleep_until(next);
+      next += period;
+      bios.triggerVBlankEvent();
+      gpu.snapshotDisplayBuffer();
+      bios.updatePadBuffers();
+    }
+  });
+
   // Launch game thread
   std::thread gameThread([&]() {
     try {
@@ -466,16 +500,9 @@ int main(int argc, char *argv[]) {
     // VBlank IRQ (once per frame)
     irqCtrl.raiseInterrupt(ps1::IRQ_VBLANK);
 
-    // Trigger VBlank events in the BIOS event system (PsyQ VSync callbacks)
-    bios.triggerVBlankEvent();
-
-    // Snapshot VRAM for display at VBlank time
-    // This captures a coherent frame for the renderer while the game thread
-    // continues drawing the next frame in live VRAM.
-    gpu.snapshotDisplayBuffer();
-
-    // Update pad buffers (BIOS InitPAD/StartPAD)
-    bios.updatePadBuffers();
+    // VBlank events (triggerVBlankEvent, snapshotDisplayBuffer, updatePadBuffers)
+    // are now fired by the dedicated vblankThread above at a steady 60Hz,
+    // so they run independently of the SDL render loop speed.
 
     // Other IRQs
     if (cdromCtrl.hasInterrupt()) {
@@ -551,6 +578,27 @@ int main(int argc, char *argv[]) {
     // No additional SDL_Delay needed — it would double the frame time.
   }
 
+  // ─── Final VRAM dump ──────────────────────────────
+  {
+    const auto *vram = gpu.getVRAM();
+    FILE *f = fopen("/tmp/vram_final.ppm", "wb");
+    if (f) {
+      fprintf(f, "P6\n1024 512\n255\n");
+      for (int i = 0; i < 1024 * 512; i++) {
+        uint16_t c = vram[i].raw;
+        uint8_t r = (c & 0x1F) << 3;
+        uint8_t g = ((c >> 5) & 0x1F) << 3;
+        uint8_t b = ((c >> 10) & 0x1F) << 3;
+        fwrite(&r, 1, 1, f);
+        fwrite(&g, 1, 1, f);
+        fwrite(&b, 1, 1, f);
+      }
+      fclose(f);
+      fmt::print("[DEBUG] Final VRAM dumped to /tmp/vram_final.ppm (frame {})\n",
+                 frameCount);
+    }
+  }
+
   // ─── Cleanup ──────────────────────────────────────
 
   // Wait for game thread (with timeout)
@@ -566,6 +614,10 @@ int main(int argc, char *argv[]) {
       fmt::print("[Main] Game thread detached (still running)\n");
     }
   }
+
+  // Join vblank ticker (gameFinished is already set above, so it will exit)
+  if (vblankThread.joinable())
+    vblankThread.join();
 
   if (audioDevice > 0) {
     SDL_CloseAudioDevice(audioDevice);
