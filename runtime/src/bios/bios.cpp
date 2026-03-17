@@ -15,6 +15,13 @@ namespace ps1::bios {
 
 // ─── Helpers ─────────────────────────────────────────────
 
+// Set PS1_BIOS_DEBUG=1 in the environment to enable verbose per-call logging.
+static const bool s_biosVerbose = (std::getenv("PS1_BIOS_DEBUG") != nullptr);
+
+// Convenience macro: only prints when verbose mode is enabled.
+// Usage: BIOS_LOG("[BIOS] {}\n", value);
+#define BIOS_LOG(...) do { if (s_biosVerbose) fmt::print(__VA_ARGS__); } while(0)
+
 static uint32_t sRandSeed = 1;
 
 // Read a NUL-terminated string from emulated RAM
@@ -63,22 +70,22 @@ Bios::~Bios() = default;
 void Bios::executeA0() {
   uint32_t index =
       ctx_.r[T1]; // In PS1 BIOS standard, t1(r9) holds the function index
-  fmt::print("[BIOS] A0:{:02X} (a0={:08X} a1={:08X} RA={:08X})\n", index,
-             ctx_.r[A0], ctx_.r[A1], ctx_.r[RA]);
+  BIOS_LOG("[BIOS] A0:{:02X} (a0={:08X} a1={:08X} RA={:08X})\n", index,
+           ctx_.r[A0], ctx_.r[A1], ctx_.r[RA]);
   handleA0(index);
 }
 
 void Bios::executeB0() {
   uint32_t index = ctx_.r[T1];
-  fmt::print("[BIOS] B0:{:02X} (a0={:08X} a1={:08X} a2={:08X} RA={:08X})\n",
-             index, ctx_.r[A0], ctx_.r[A1], ctx_.r[A2], ctx_.r[RA]);
+  BIOS_LOG("[BIOS] B0:{:02X} (a0={:08X} a1={:08X} a2={:08X} RA={:08X})\n",
+           index, ctx_.r[A0], ctx_.r[A1], ctx_.r[A2], ctx_.r[RA]);
   handleB0(index);
 }
 
 void Bios::executeC0() {
   uint32_t index = ctx_.r[T1];
-  fmt::print("[BIOS] C0:{:02X} (a0={:08X} a1={:08X} RA={:08X})\n", index,
-             ctx_.r[A0], ctx_.r[A1], ctx_.r[RA]);
+  BIOS_LOG("[BIOS] C0:{:02X} (a0={:08X} a1={:08X} RA={:08X})\n", index,
+           ctx_.r[A0], ctx_.r[A1], ctx_.r[RA]);
   handleC0(index);
 }
 
@@ -118,7 +125,7 @@ void Bios::handleA0(uint32_t index) {
     break;
   case 0x13: { // setjmp
     uint32_t buf = ctx_.r[A0];
-    fmt::print("[BIOS] setjmp(buf: 0x{:08X})\n", buf);
+    BIOS_LOG("[BIOS] setjmp(buf: 0x{:08X})\n", buf);
     // PsyQ jmp_buf is an array of 12 integers (48 bytes):
     // [0]=RA [1]=SP [2]=FP [3]=S0 [4]=S1 [5]=S2 [6]=S3 [7]=S4 [8]=S5 [9]=S6
     // [10]=S7 [11]=GP
@@ -135,7 +142,7 @@ void Bios::handleA0(uint32_t index) {
   case 0x14: { // longjmp
     uint32_t buf = ctx_.r[A0];
     uint32_t val = ctx_.r[A1];
-    fmt::print("[BIOS] longjmp(buf: 0x{:08X}, val: {})\n", buf, val);
+    BIOS_LOG("[BIOS] longjmp(buf: 0x{:08X}, val: {})\n", buf, val);
 
     ctx_.r[31] = ctx_.mem->read32(buf + 0); // RA
     ctx_.r[29] = ctx_.mem->read32(buf + 4); // SP
@@ -404,7 +411,7 @@ void Bios::handleA0(uint32_t index) {
     heap_.initHeap(ctx_.r[A0], ctx_.r[A1]);
     break;
   case 0x3B: // _exit
-    fmt::print("[BIOS] _exit({})\n", static_cast<int32_t>(ctx_.r[A0]));
+    BIOS_LOG("[BIOS] _exit({})\n", static_cast<int32_t>(ctx_.r[A0]));
     break;
 
   // ── Printf ─────────────────────────────────
@@ -413,9 +420,66 @@ void Bios::handleA0(uint32_t index) {
     break;
 
   // ── GPU functions ───────────────────────────
+  case 0x46: { // GPU_dw — copy data block to GP0 (used by PutDispEnv init)
+    // A0=src_addr, A1=count (words). Sends each word to GP0.
+    uint32_t addr = ctx_.r[A0];
+    uint32_t count = ctx_.r[A1];
+    BIOS_LOG("[BIOS] GPU_dw(addr: 0x{:08X}, count: {})\n", addr, count);
+    if (gpu_) {
+      for (uint32_t i = 0; i < count; i++) {
+        uint32_t word = ctx_.mem->read32(addr + i * 4);
+        gpu_->writeGP0(word);
+      }
+    }
+    break;
+  }
+  case 0x47: { // gpu_send_dma — wait for DMA, then trigger GPU DMA
+    BIOS_LOG("[BIOS] gpu_send_dma() [STUB]\n");
+    ctx_.r[V0] = 0;
+    break;
+  }
+  case 0x48: { // SendGP1Command — write single word to GP1 (0x1F801814)
+    // PutDispEnv calls this to set display area (GP1 0x05), ranges (0x06/0x07),
+    // and display mode (0x08). Critical for double-buffer display swap.
+    uint32_t cmd = ctx_.r[A0];
+    BIOS_LOG("[BIOS] SendGP1Command(0x{:08X})\n", cmd);
+    if (gpu_) {
+      gpu_->writeGP1(cmd);
+    }
+    ctx_.r[V0] = cmd;
+    break;
+  }
+  case 0x4B: { // send_gpu_linked_list — send GP0 OT via DMA-like walk
+    // A0 = pointer to linked list tail. Walk the list sending GP0 commands.
+    // Each entry: [23:0]=next_ptr, [31:24]=word_count, followed by count words.
+    uint32_t ptr = ctx_.r[A0];
+    BIOS_LOG("[BIOS] send_gpu_linked_list(0x{:08X})\n", ptr);
+    if (gpu_) {
+      int safety = 0;
+      while ((ptr & 0xFFFFFF) != 0xFFFFFF && safety++ < 100000) {
+        uint32_t hdr = ctx_.mem->read32(ptr);
+        uint32_t wordCount = (hdr >> 24) & 0xFF;
+        for (uint32_t i = 0; i < wordCount; i++) {
+          gpu_->writeGP0(ctx_.mem->read32(ptr + 4 + i * 4));
+        }
+        ptr = hdr & 0xFFFFFF;
+        if (ptr != 0xFFFFFF) ptr |= 0x80000000u; // restore KSEG0 bit
+      }
+    }
+    break;
+  }
+  case 0x4D: { // GetGPUStatus — read GPUSTAT register
+    ctx_.r[V0] = gpu_ ? gpu_->readGPUSTAT() : 0x14802000;
+    break;
+  }
+  case 0x4E: { // gpu_sync — wait for GPU to be idle
+    // Our GPU is always synchronous, so this is a NOP.
+    ctx_.r[V0] = 0;
+    break;
+  }
   case 0x49: { // GPU_cw — send single GP0 command word
     uint32_t cmd = ctx_.r[A0];
-    fmt::print("[BIOS] GPU_cw(0x{:08X})\n", cmd);
+    BIOS_LOG("[BIOS] GPU_cw(0x{:08X})\n", cmd);
     if (gpu_) {
       gpu_->writeGP0(cmd);
     }
@@ -424,7 +488,7 @@ void Bios::handleA0(uint32_t index) {
   case 0x4A: { // GPU_cwp — send multiple GP0 command words from RAM
     uint32_t addr = ctx_.r[A0];
     uint32_t count = ctx_.r[A1];
-    fmt::print("[BIOS] GPU_cwp(addr: 0x{:08X}, count: {})\n", addr, count);
+    BIOS_LOG("[BIOS] GPU_cwp(addr: 0x{:08X}, count: {})\n", addr, count);
     if (gpu_) {
       for (uint32_t i = 0; i < count; i++) {
         uint32_t word = ctx_.mem->read32(addr + i * 4);
@@ -441,29 +505,47 @@ void Bios::handleA0(uint32_t index) {
 
   // ── CD-ROM stubs ───────────────────────────
   case 0x70: // _bu_init
-    fmt::print("[BIOS] _bu_init() [STUB]\n");
+    BIOS_LOG("[BIOS] _bu_init() [STUB]\n");
     break;
   case 0x72: // _96_CdStop
-    fmt::print("[BIOS] _96_CdStop() [STUB]\n");
+    BIOS_LOG("[BIOS] _96_CdStop() [STUB]\n");
     break;
   case 0x78: // _96_CdAutoPause
-    fmt::print("[BIOS] _96_CdAutoPause({}) [STUB]\n", ctx_.r[A0]);
+    BIOS_LOG("[BIOS] _96_CdAutoPause({}) [STUB]\n", ctx_.r[A0]);
     break;
   case 0x7C: // _96_CdReadSector
-    fmt::print("[BIOS] _96_CdReadSector() [STUB]\n");
+    BIOS_LOG("[BIOS] _96_CdReadSector() [STUB]\n");
     ctx_.r[V0] = 0;
     break;
 
   case 0xAB: // _96_CdInitSubFunc — PsyQ CD initialization sub-function
-    fmt::print("[BIOS] _96_CdInitSubFunc({}) — setting up CD internal state\n",
+    BIOS_LOG("[BIOS] _96_CdInitSubFunc({}) — firing INT3+INT2\n",
                ctx_.r[A0]);
-    // On a real PS1, this initializes the CD exception handler chain.
-    // In our HLE environment, the event system is already set up.
+    // On real hardware _96_CdInitSubFunc runs as the INT2 completion handler
+    // for the CdlInit command.  Before returning it sends a GetStat (0x01)
+    // which immediately generates INT3 (Ack).  The CdInit polling loop then
+    // checks testEvent(0) [spec=0x0004 = INT3] to verify the drive responded.
+    // We fire INT3 first so that testEvent(0) succeeds, then INT2 for event 1.
+    triggerCdromEvent(3); // INT3 Ack  → spec 0x0004 → event 0 (GetStat Ack)
+    triggerCdromEvent(2); // INT2 Complete → spec 0x8000 → event 1
     ctx_.r[V0] = 0; // success
     break;
 
+  case 0xAC: { // _96_CdGetStatus — send GetStat to query disc/drive state
+    // PsyQ CdInit calls this after _96_CdInitSubFunc to probe disc presence.
+    // On real HW: sends GetStat(0x01), which fires INT3(Ack) with status byte.
+    // The CdInit polling loop waits for testEvent(0) [spec=0x0004 = INT3] to fire.
+    BIOS_LOG("[BIOS] _96_CdGetStatus() — sending GetStat to confirm disc\n");
+    if (cdrom_) {
+      cdrom_->writeRegister(0x1F801800, 0);    // index = 0
+      cdrom_->writeRegister(0x1F801801, 0x01); // GetStat
+    }
+    ctx_.r[V0] = 0;
+    break;
+  }
+
   case 0xAD: { // _96_CdReset — send CdlInit (hardware reset)
-    fmt::print("[BIOS] _96_CdReset() — sending CdlInit via CDROM controller\n");
+    BIOS_LOG("[BIOS] _96_CdReset() — sending CdlInit via CDROM controller\n");
     if (cdrom_) {
       cdrom_->writeRegister(0x1F801800, 0);    // index = 0
       cdrom_->writeRegister(0x1F801801, 0x0A); // CdlInit
@@ -473,7 +555,7 @@ void Bios::handleA0(uint32_t index) {
   }
 
   default:
-    fmt::print("[BIOS] Unimplemented A0 call: 0x{:02X} (A0: {:08X}, A1: "
+    BIOS_LOG("[BIOS] Unimplemented A0 call: 0x{:02X} (A0: {:08X}, A1: "
                "{:08X}, A2: {:08X})\n",
                index, ctx_.r[A0], ctx_.r[A1], ctx_.r[A2]);
     break;
@@ -485,7 +567,7 @@ void Bios::handleA0(uint32_t index) {
 void Bios::handleB0(uint32_t index) {
   switch (index) {
   case 0x00: // alloc_kernel_memory
-    fmt::print("[BIOS] alloc_kernel_memory({}) [STUB]\n", ctx_.r[A0]);
+    BIOS_LOG("[BIOS] alloc_kernel_memory({}) [STUB]\n", ctx_.r[A0]);
     ctx_.r[V0] = 0;
     break;
   case 0x07: // DeliverEvent
@@ -510,7 +592,7 @@ void Bios::handleB0(uint32_t index) {
     ctx_.r[V0] = eventSystem_.testEvent(ctx_.r[A0]);
     testEventCallCount++;
     if (testEventCallCount <= 50 || ctx_.r[V0] != 0) {
-      fmt::print("[BIOS] B0:0B testEvent({}) -> {} (call #{})\n", ctx_.r[A0],
+      BIOS_LOG("[BIOS] B0:0B testEvent({}) -> {} (call #{})\n", ctx_.r[A0],
                  ctx_.r[V0], testEventCallCount);
     }
     break;
@@ -527,18 +609,18 @@ void Bios::handleB0(uint32_t index) {
     padBuf2Addr_ = ctx_.r[A2];
     padBuf2Size_ = ctx_.r[A3];
     padActive_ = false; // Needs StartPAD to activate
-    fmt::print("[BIOS] InitPAD(buf1: 0x{:08X}, sz1: {}, buf2: 0x{:08X}, sz2: "
+    BIOS_LOG("[BIOS] InitPAD(buf1: 0x{:08X}, sz1: {}, buf2: 0x{:08X}, sz2: "
                "{})\n",
                padBuf1Addr_, padBuf1Size_, padBuf2Addr_, padBuf2Size_);
     break;
   }
   case 0x13: // StartPAD — begin controller polling during VBlank
     padActive_ = true;
-    fmt::print("[BIOS] StartPAD() — polling active\n");
+    BIOS_LOG("[BIOS] StartPAD() — polling active\n");
     break;
   case 0x14: // StopPAD — stop controller polling
     padActive_ = false;
-    fmt::print("[BIOS] StopPAD()\n");
+    BIOS_LOG("[BIOS] StopPAD()\n");
     break;
   case 0x17: { // ReturnFromException
     // Restore PC from EPC (COP0 reg 14) and shift Status Register
@@ -549,15 +631,15 @@ void Bios::handleB0(uint32_t index) {
     break;
   }
   case 0x18: // SetDefaultExitFromException
-    fmt::print("[BIOS] SetDefaultExitFromException() [STUB]\n");
+    BIOS_LOG("[BIOS] SetDefaultExitFromException() [STUB]\n");
     break;
   case 0x19: // SetCustomExitFromException
-    fmt::print("[BIOS] SetCustomExitFromException(handler: 0x{:08X})\n",
+    BIOS_LOG("[BIOS] SetCustomExitFromException(handler: 0x{:08X})\n",
                ctx_.r[A0]);
     customExceptionExit_ = ctx_.r[A0];
     break;
   case 0x20: // UnDeliverEvent
-    fmt::print("[BIOS] UnDeliverEvent(class: 0x{:X}, spec: 0x{:X}) [STUB]\n",
+    BIOS_LOG("[BIOS] UnDeliverEvent(class: 0x{:X}, spec: 0x{:X}) [STUB]\n",
                ctx_.r[A0], ctx_.r[A1]);
     break;
   case 0x32: // open
@@ -572,7 +654,7 @@ void Bios::handleB0(uint32_t index) {
     ctx_.r[V0] = fileIo_.read(ctx_.r[A0], ctx_.r[A1], ctx_.r[A2]);
     break;
   case 0x35: // write — stub (stdout)
-    fmt::print("[BIOS] write(fd: {}, src: 0x{:08X}, len: {}) [STUB]\n",
+    BIOS_LOG("[BIOS] write(fd: {}, src: 0x{:08X}, len: {}) [STUB]\n",
                ctx_.r[A0], ctx_.r[A1], ctx_.r[A2]);
     if (ctx_.r[A0] == 1) { // stdout
       for (uint32_t i = 0; i < ctx_.r[A2]; i++) {
@@ -597,36 +679,45 @@ void Bios::handleB0(uint32_t index) {
     stub_printf();
     break;
   case 0x47: // AddDevice
-    fmt::print("[BIOS] AddDevice(device_info: 0x{:08X}) [STUB]\n", ctx_.r[A0]);
+    BIOS_LOG("[BIOS] AddDevice(device_info: 0x{:08X}) [STUB]\n", ctx_.r[A0]);
     ctx_.r[V0] = 1; // Success
     break;
   case 0x48: // RemoveDevice
-    fmt::print("[BIOS] RemoveDevice(device_info: 0x{:08X}) [STUB]\n",
+    BIOS_LOG("[BIOS] RemoveDevice(device_info: 0x{:08X}) [STUB]\n",
                ctx_.r[A0]);
     ctx_.r[V0] = 1;
     break;
   case 0x4A: // InitCARD
-    fmt::print("[BIOS] InitCARD(pad_enable: {})\n", ctx_.r[A0]);
+    BIOS_LOG("[BIOS] InitCARD(pad_enable: {})\n", ctx_.r[A0]);
     break;
   case 0x4B: // StartCARD
-    fmt::print("[BIOS] StartCARD()\n");
+    BIOS_LOG("[BIOS] StartCARD()\n");
     break;
   case 0x4C: // StopCARD
-    fmt::print("[BIOS] StopCARD()\n");
+    BIOS_LOG("[BIOS] StopCARD()\n");
     break;
   case 0x56: // GetC0Table — return pointer to C0 jump table
-    fmt::print("[BIOS] GetC0Table() -> 0x{:08X}\n", ctx_.r[K1]);
+    BIOS_LOG("[BIOS] GetC0Table() -> 0x{:08X}\n", ctx_.r[K1]);
     ctx_.r[V0] = ctx_.r[K1];
     break;
   case 0x57: // GetB0Table — return pointer to B0 jump table
-    fmt::print("[BIOS] GetB0Table() -> 0x{:08X}\n", ctx_.r[K0]);
+    BIOS_LOG("[BIOS] GetB0Table() -> 0x{:08X}\n", ctx_.r[K0]);
     ctx_.r[V0] = ctx_.r[K0];
     break;
+  case 0x42: // B0:42 — internal PsyQ CdInit verification (SetConf/cdioctl-like)
+    // Called by CdInit after 2 rounds of _96_CdInitSubFunc+testEvent+GetStat.
+    // Return value: 1 = success (CdInit succeeds), 0 = failure (enters 5-retry
+    // hardware loop then prints "CdInit: Init failed").
+    // Returning 1 here skips the retry loop and lets CdInit succeed.
+    BIOS_LOG("[BIOS] B0:42 [STUB] (a0=0x{:08X}, a1=0x{:08X}, a2={})\n",
+               ctx_.r[A0], ctx_.r[A1], ctx_.r[A2]);
+    ctx_.r[V0] = 1; // success — skip retry loop
+    break;
   case 0x5B: // ChangeClearPad
-    fmt::print("[BIOS] ChangeClearPad({}) [STUB]\n", ctx_.r[A0]);
+    BIOS_LOG("[BIOS] ChangeClearPad({}) [STUB]\n", ctx_.r[A0]);
     break;
   default:
-    fmt::print("[BIOS] Unimplemented B0 call: 0x{:02X} (A0: {:08X}, A1: "
+    BIOS_LOG("[BIOS] Unimplemented B0 call: 0x{:02X} (A0: {:08X}, A1: "
                "{:08X}, A2: {:08X})\n",
                index, ctx_.r[A0], ctx_.r[A1], ctx_.r[A2]);
     break;
@@ -638,7 +729,7 @@ void Bios::handleB0(uint32_t index) {
 void Bios::handleC0(uint32_t index) {
   switch (index) {
   case 0x00: // InstallExceptionHandler — stub
-    fmt::print("[BIOS] InstallExceptionHandler() [STUB]\n");
+    BIOS_LOG("[BIOS] InstallExceptionHandler() [STUB]\n");
     break;
   case 0x01: // SysEnqIntRP
     // Registers a handler in the interrupt priority chain.
@@ -646,40 +737,40 @@ void Bios::handleC0(uint32_t index) {
     // the given priority level.  In our HLE, we deliver events directly
     // from the main thread, so the handler chain isn't needed.
     // We still acknowledge the call properly (return 0 = success).
-    fmt::print("[BIOS] SysEnqIntRP(priority: {}, handler: 0x{:08X})\n",
+    BIOS_LOG("[BIOS] SysEnqIntRP(priority: {}, handler: 0x{:08X})\n",
                ctx_.r[A0], ctx_.r[A1]);
     ctx_.r[V0] = 0;
     break;
   case 0x02: // SysDeqIntRP
     // Removes a handler from the interrupt priority chain.
-    fmt::print("[BIOS] SysDeqIntRP(priority: {}, handler: 0x{:08X})\n",
+    BIOS_LOG("[BIOS] SysDeqIntRP(priority: {}, handler: 0x{:08X})\n",
                ctx_.r[A0], ctx_.r[A1]);
     ctx_.r[V0] = 0;
     break;
   case 0x03: // SysInitMemory
-    fmt::print("[BIOS] SysInitMemory(addr: 0x{:08X}, size: {}) [STUB]\n",
+    BIOS_LOG("[BIOS] SysInitMemory(addr: 0x{:08X}, size: {}) [STUB]\n",
                ctx_.r[A0], ctx_.r[A1]);
     break;
   case 0x07: // InstallExceptionHandlers
-    fmt::print("[BIOS] InstallExceptionHandlers() [STUB]\n");
+    BIOS_LOG("[BIOS] InstallExceptionHandlers() [STUB]\n");
     break;
   case 0x08: // SysInitKMem
-    fmt::print("[BIOS] SysInitKMem() [STUB]\n");
+    BIOS_LOG("[BIOS] SysInitKMem() [STUB]\n");
     break;
   case 0x0A: // ChangeClearRCnt
     // Controls whether root counter interrupts auto-clear after firing.
     // t (A0) = root counter index (0-3), flag (A1) = 0 or 1
     // Returns the old flag value.  We always return 0 (was auto-clear).
     // PsyQ VSync depends on this being called during init to set up RCnt3.
-    fmt::print("[BIOS] ChangeClearRCnt(t: {}, flag: {})\n", ctx_.r[A0],
+    BIOS_LOG("[BIOS] ChangeClearRCnt(t: {}, flag: {})\n", ctx_.r[A0],
                ctx_.r[A1]);
     ctx_.r[V0] = 0; // return old value
     break;
   case 0x0C: // InitDefInt
-    fmt::print("[BIOS] InitDefInt(priority: {}) [STUB]\n", ctx_.r[A0]);
+    BIOS_LOG("[BIOS] InitDefInt(priority: {}) [STUB]\n", ctx_.r[A0]);
     break;
   default:
-    fmt::print("[BIOS] Unimplemented C0 call: 0x{:02X} (A0: {:08X}, A1: "
+    BIOS_LOG("[BIOS] Unimplemented C0 call: 0x{:02X} (A0: {:08X}, A1: "
                "{:08X}, A2: {:08X})\n",
                index, ctx_.r[A0], ctx_.r[A1], ctx_.r[A2]);
     break;
@@ -694,16 +785,14 @@ void Bios::handleC0(uint32_t index) {
 // into event system notifications.  In a real PS1 the IRQ handler
 // at 0x80000080 would do this, but we HLE it here.
 //
-// Mapping (from PsyQ libcd / BIOS analysis):
-//   INT1 (DataReady)   → event spec 0x0004
-//   INT2 (Complete)    → event spec 0x8000
-//   INT3 (Acknowledge) → event spec 0x0100
-//   INT4 (DataEnd)     → event spec 0x0004  (same as DataReady)
-//   INT5 (Error)       → event spec 0x2000
-//
-// Games typically open events for class 0xF4000001 with specs
-// 0x0004, 0x8000, 0x0100, 0x2000 — matching the above mapping.
-// They may also mirror them on class 0xF0000011.
+// Mapping (empirically derived from Rayman openEvent calls):
+//   Rayman opens class 0xF4000001 with 4 specs: {0x0004, 0x8000, 0x0100, 0x2000}
+//   Matching against CDROM INT types:
+//   INT1 (DataReady)   → event spec 0x0100  ← Rayman ID2 (sector read complete)
+//   INT2 (Complete)    → event spec 0x8000  ← Rayman ID1 (init/cmd done)
+//   INT3 (Acknowledge) → event spec 0x0004  ← Rayman ID0 (cmd accepted)
+//   INT4 (DataEnd)     → event spec 0x0100  ← same as DataReady
+//   INT5 (DiskError)   → event spec 0x2000  ← Rayman ID3 (error)
 
 static constexpr uint32_t CDROM_EVENT_CLASS_1 = 0xF4000001;
 static constexpr uint32_t CDROM_EVENT_CLASS_2 = 0xF0000011;
@@ -711,15 +800,15 @@ static constexpr uint32_t CDROM_EVENT_CLASS_2 = 0xF0000011;
 static uint32_t cdIntToEventSpec(uint8_t intType) {
   switch (intType) {
   case 1:
-    return 0x0004; // INT1 DataReady
+    return 0x0100; // INT1 DataReady
   case 2:
-    return 0x8000; // INT2 Complete  (was incorrectly 0x2000)
+    return 0x8000; // INT2 Complete
   case 3:
-    return 0x0100; // INT3 Acknowledge
+    return 0x0004; // INT3 Acknowledge
   case 4:
-    return 0x0004; // INT4 DataEnd (same as DataReady)
+    return 0x0100; // INT4 DataEnd (same class as DataReady)
   case 5:
-    return 0x2000; // INT5 DiskError (was incorrectly 0x8000)
+    return 0x2000; // INT5 DiskError
   default:
     return 0;
   }
@@ -729,16 +818,8 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   uint32_t spec = cdIntToEventSpec(cdIntType);
   if (spec == 0)
     return;
-  fmt::print("[BIOS] triggerCdromEvent: INT{} -> spec 0x{:04X}\n", cdIntType,
-             spec);
-
-  // Debug: dump PsyQ CDROM register pointers to verify CdInit initialized them
-  if (cdIntType == 1) {
-    uint32_t dataCb = ctx_.mem->read32(psyq_.cdDataCb);
-    int32_t remaining = (int32_t)ctx_.mem->read32(psyq_.cdRemaining);
-    fmt::print(stderr, "[CD-INT1] dataCb=0x{:08X} remaining={}\n", dataCb,
-               remaining);
-  }
+  BIOS_LOG("[BIOS] triggerCdromEvent: INT{} -> spec 0x{:04X}\n", cdIntType,
+           spec);
 
   // ── HLE PsyQ CDROM interrupt handler variables ────
   //
@@ -801,9 +882,8 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // SysEnqIntRP to process CDROM state directly. If such a handler exists,
   // invoke it so the game logic can run and update PsyQ variables naturally.
   if (customExceptionExit_ != 0) {
-    fmt::print(
-        "[CDROM-HLE] Executing custom exception handler jump to 0x{:08X}\n",
-        customExceptionExit_);
+    BIOS_LOG("[CDROM-HLE] Executing custom exception handler jump to 0x{:08X}\n",
+             customExceptionExit_);
 
     // The "handler" is actually a jmp_buf address passed to
     // SetCustomExitFromException. The game expects the BIOS exception
@@ -880,9 +960,9 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   default:
     break;
   }
-  fmt::print("[CDROM-HLE] INT{} → sync@0x{:08X}={} ready@0x{:08X}={}\n",
-             cdIntType, PSYQ_CD_SYNC_BYTE, ctx_.mem->read32(PSYQ_CD_SYNC_BYTE),
-             PSYQ_CD_READY_BYTE, ctx_.mem->read32(PSYQ_CD_READY_BYTE));
+  BIOS_LOG("[CDROM-HLE] INT{} → sync@0x{:08X}={} ready@0x{:08X}={}\n",
+           cdIntType, PSYQ_CD_SYNC_BYTE, ctx_.mem->read32(PSYQ_CD_SYNC_BYTE),
+           PSYQ_CD_READY_BYTE, ctx_.mem->read32(PSYQ_CD_READY_BYTE));
 
   // Write a non-zero status halfword so the PsyQ polling code proceeds
   // past the gate check.  0x0002 = "motor on" status bit.
@@ -982,14 +1062,27 @@ void Bios::triggerVBlankEvent() {
   // gpuDrawSyncBase: BSS address containing the POINTER to the OT array
   // gpuDrawSyncIndex: BSS address containing the current OT index
   //
+  // ── HLE PsyQ DrawSync status ──────────────────────────────────────────
+  // PsyQ DrawSync polls: status_hw = MEM16[base_ptr + index * 0x20]
+  // status == 2 means "drawing complete". Since our GPU processes GP0 commands
+  // synchronously, we can mark all entries as complete every VBlank.
+  //
+  // If gpuDrawSyncIndexAddr is set, we only write the current index's entry
+  // (more precise). Otherwise we write all gpuDrawSyncCount entries.
   if (psyq_.gpuDrawSyncBase != 0) {
     uint32_t basePtr = ctx_.mem->read32(psyq_.gpuDrawSyncBase);
     if (basePtr != 0) {
-      // Mark all possible OT entries as complete
-      // PsyQ typically uses 2 double-buffered OT entries (indices 0 and 1)
-      for (uint32_t i = 0; i < psyq_.gpuDrawSyncCount; i++) {
-        uint32_t statusAddr = basePtr + (i << 5); // stride = 0x20
-        ctx_.mem->write16(statusAddr, 2);         // 2 = complete
+      if (psyq_.gpuDrawSyncIndexAddr != 0) {
+        // Precise: write only the current OT index entry
+        uint32_t idx = ctx_.mem->read32(psyq_.gpuDrawSyncIndexAddr);
+        uint32_t statusAddr = basePtr + (idx << 5); // stride = 0x20
+        ctx_.mem->write16(statusAddr, 2);            // 2 = complete
+      } else {
+        // Broad: write all double-buffered entries
+        for (uint32_t i = 0; i < psyq_.gpuDrawSyncCount; i++) {
+          uint32_t statusAddr = basePtr + (i << 5); // stride = 0x20
+          ctx_.mem->write16(statusAddr, 2);          // 2 = complete
+        }
       }
     }
   }
@@ -1030,7 +1123,7 @@ void Bios::drainPendingCallbacks() {
       int32_t remaining = (int32_t)ctx_.mem->read32(psyq_.cdRemaining);
       static int hleDispatch = 0;
       hleDispatch++;
-      if (hleDispatch <= 20) {
+      if (s_biosVerbose && hleDispatch <= 20) {
         fmt::print(stderr, "[CD-CB] #{} INT{} dataCb=0x{:08X} remaining={}\n",
                    hleDispatch, intType, dataCb, remaining);
       }
@@ -1083,6 +1176,35 @@ void Bios::drainPendingCallbacks() {
       }
     }
   }
+}
+
+void Bios::setupCdSyncWatchpoint() {
+  if (psyq_.cdSyncByte == 0 || !ctx_.mem)
+    return;
+  // Register a write watchpoint on cdSyncByte.
+  //
+  // The PsyQ CdInit retry loop does:
+  //   1. Write CdlInit → INT3 fires synchronously → cdSyncByte = 2
+  //   2. First wait: sees cdSyncByte = 2 → passes immediately
+  //   3. CLEAR cdSyncByte = 0  ←── watchpoint fires HERE
+  //   4. Second wait: needs cdSyncByte ≠ 0 (INT2)
+  //
+  // By firing INT2 (fireSecondaryNow) in the watchpoint callback, cdSyncByte
+  // is set back to 2 BEFORE the second wait loop runs.  This makes the second
+  // wait exit in its first iteration, allowing CdInit to succeed.
+  //
+  // This fires entirely on the game thread (the same thread that is executing
+  // the retry loop), so there are no cross-thread data races.
+  ctx_.mem->setWriteWatchpoint(psyq_.cdSyncByte, [this](uint32_t val) {
+    if (val != 0)
+      return; // only trigger when the game clears cdSyncByte to 0
+    if (cdrom_ && cdrom_->hasSecondaryResponse()) {
+      BIOS_LOG("[BIOS] cdSyncByte cleared → firing pending INT2 (CdInit fix)\n");
+      cdrom_->fireSecondaryNow();
+    }
+  });
+  BIOS_LOG("[BIOS] setupCdSyncWatchpoint: watching 0x{:08X}\n",
+           psyq_.cdSyncByte);
 }
 
 void Bios::stub_printf() {
