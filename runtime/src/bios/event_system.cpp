@@ -1,7 +1,12 @@
 #include "runtime/bios/event_system.h"
 #include "runtime/cpu_context.h"
 #include "runtime/memory.h"
+#include <cstdlib>
 #include <fmt/core.h>
+
+// Set PS1_BIOS_DEBUG=1 to enable verbose event system logging.
+static const bool s_evtVerbose = (std::getenv("PS1_BIOS_DEBUG") != nullptr);
+#define EVT_LOG(...) do { if (s_evtVerbose) fmt::print(__VA_ARGS__); } while(0)
 
 // Forward declare recomp_dispatch (defined in recompiled_out.cpp, global
 // namespace)
@@ -20,7 +25,7 @@ uint32_t EventSystem::openEvent(uint32_t classId, uint32_t specId,
                                 uint32_t mode, uint32_t handler) {
   std::lock_guard<std::mutex> lk(eventsMtx_);
   if (events_.size() >= MAX_EVENTS) {
-    fmt::print("[BIOS] OpenEvent failed: Max events reached\n");
+    EVT_LOG("[BIOS] OpenEvent failed: Max events reached\n");
     return INVALID_EVENT_ID;
   }
 
@@ -31,12 +36,18 @@ uint32_t EventSystem::openEvent(uint32_t classId, uint32_t specId,
   ev.specId = specId;
   ev.mode = mode;
   ev.handler = handler;
-  ev.enabled = false;
+  // Auto-enable: on real PS1, games typically call EnableEvent immediately
+  // after OpenEvent.  In our HLE the ordering is not guaranteed (e.g. the
+  // CdInit loop calls _96_CdInitSubFunc which fires triggerCdromEvent BEFORE
+  // the game has a chance to call EnableEvent).  Auto-enabling on open ensures
+  // triggerEvent can set the bit immediately, so testEvent returns 1 correctly.
+  // This matches the psxrecomp approach (TestEvent always returns 1).
+  ev.enabled = true;
   ev.triggered = false;
 
   events_.push_back(ev);
 
-  fmt::print("[BIOS] OpenEvent(class: 0x{:X}, spec: 0x{:X}, mode: 0x{:X}, "
+  EVT_LOG("[BIOS] OpenEvent(class: 0x{:X}, spec: 0x{:X}, mode: 0x{:X}, "
              "handler: 0x{:08X}) -> ID {}\n",
              classId, specId, mode, handler, eventId);
 
@@ -52,7 +63,7 @@ uint32_t EventSystem::closeEvent(uint32_t eventId) {
   events_[eventId].classId = 0xFFFFFFFF; // Mark inactive
   triggeredBits_.fetch_and(~(1u << eventId), std::memory_order_release);
 
-  fmt::print("[BIOS] CloseEvent({})\n", eventId);
+  EVT_LOG("[BIOS] CloseEvent({})\n", eventId);
   return 1;
 }
 
@@ -97,7 +108,7 @@ uint32_t EventSystem::enableEvent(uint32_t eventId) {
   if (eventId >= events_.size())
     return 0;
   events_[eventId].enabled = true;
-  fmt::print("[BIOS] EnableEvent({})\n", eventId);
+  EVT_LOG("[BIOS] EnableEvent({})\n", eventId);
   return 1;
 }
 
@@ -106,7 +117,7 @@ uint32_t EventSystem::disableEvent(uint32_t eventId) {
   if (eventId >= events_.size())
     return 0;
   events_[eventId].enabled = false;
-  fmt::print("[BIOS] DisableEvent({})\n", eventId);
+  EVT_LOG("[BIOS] DisableEvent({})\n", eventId);
   return 1;
 }
 
@@ -133,7 +144,7 @@ void EventSystem::triggerEvent(uint32_t classId, uint32_t specId) {
     static int cardTriggerCount = 0;
     cardTriggerCount++;
     if (cardTriggerCount <= 30) {
-      fmt::print("[EVTDBG] triggerEvent(0x{:08X}, 0x{:04X}) found={} "
+      EVT_LOG("[EVTDBG] triggerEvent(0x{:08X}, 0x{:04X}) found={} "
                  "evCount={} bits=0x{:08X}\n",
                  classId, specId, found, events_.size(), triggeredBits_.load());
     }
@@ -144,7 +155,7 @@ void EventSystem::triggerEvent(uint32_t classId, uint32_t specId) {
     vsyncTriggerCount++;
     if (vsyncTriggerCount <= 10) {
       std::lock_guard<std::mutex> lk2(cbMtx_);
-      fmt::print("[VSYNC-DBG] triggerEvent(0x{:08X}, 0x{:04X}) found={} "
+      EVT_LOG("[VSYNC-DBG] triggerEvent(0x{:08X}, 0x{:04X}) found={} "
                  "pendingCBs={} evCount={}\n",
                  classId, specId, found, pendingCallbacks_.size(),
                  events_.size());
@@ -169,6 +180,9 @@ void EventSystem::drainPendingCallbacks() {
   }
 
   for (const auto &cb : local) {
+    if (cb.handlerPc == 0)
+      continue; // Guard: skip null callbacks
+
     // Save and restore registers around EACH callback individually.
     auto saved = static_cast<ps1::CPUContext>(ctx_);
 
@@ -178,6 +192,10 @@ void EventSystem::drainPendingCallbacks() {
     if (cb.hasA1) {
       ctx_.r5 = cb.a1;
     }
+    static int dispCbCount = 0;
+    if (dispCbCount++ < 5)
+      fmt::print(stderr, "[EVT] drainPendingCallbacks: dispatching 0x{:08X} a0=0x{:X}\n",
+                 cb.handlerPc, cb.hasArg ? cb.a0 : 0);
     recomp_dispatch(ctx_.mem->ramPtr(), &ctx_, cb.handlerPc);
 
     // Restore all registers that the game was using
