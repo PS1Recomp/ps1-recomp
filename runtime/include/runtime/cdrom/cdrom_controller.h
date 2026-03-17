@@ -84,6 +84,13 @@ public:
   // HLE helper: stop an active read (equivalent to CdlPause from the game's perspective)
   void stopReading() { state_ = CdromState::Idle; }
 
+  // Returns true if a secondary response (e.g. INT2 after CdlInit INT3) is queued.
+  bool hasSecondaryResponse() const { return hasSecondaryResponse_; }
+
+  // Deliver any queued secondary response immediately (e.g. INT2 after CdlInit).
+  // Exposed publicly so the BIOS watchpoint can fire it from the game thread.
+  void fireSecondaryNow();
+
 private:
   // ─── State ──────────────────────
   CdromState state_ = CdromState::Idle;
@@ -135,6 +142,8 @@ private:
 
   // ─── Status byte ────────────────
   uint8_t buildStatusByte() const;
+
+  // (fireSecondaryNow is now public — see above)
 
   // ─── Command processing ─────────
   uint8_t pendingCommand_ = 0;

@@ -1,6 +1,11 @@
 #include "runtime/cdrom/cdrom_controller.h"
+#include <cstdlib>
 #include <cstring>
 #include <fmt/format.h>
+
+// Set PS1_BIOS_DEBUG=1 to enable verbose CDROM controller logging.
+static const bool s_cdVerbose = (std::getenv("PS1_BIOS_DEBUG") != nullptr);
+#define CDROM_LOG(...) do { if (s_cdVerbose) fmt::print(__VA_ARGS__); } while(0)
 
 namespace ps1::cdrom {
 
@@ -61,6 +66,19 @@ void CdromController::attachVirtualFs(VirtualFs *vfs) { vfs_ = vfs; }
 
 // ─── Status Byte ────────────────────────────────────────
 
+void CdromController::fireSecondaryNow() {
+  if (!hasSecondaryResponse_)
+    return;
+  hasSecondaryResponse_ = false;
+  secondaryResponseDelay_ = 0;
+  responseFifo_.clear();
+  for (auto b : secondaryData_)
+    responseFifo_.push_back(b);
+  interruptFlag_ = static_cast<uint8_t>(secondaryInterrupt_);
+  if (interruptCallback_ && secondaryInterrupt_ != INT_NONE)
+    interruptCallback_(static_cast<uint8_t>(secondaryInterrupt_));
+}
+
 uint8_t CdromController::buildStatusByte() const {
   uint8_t stat = 0;
   if (motorOn_)
@@ -83,6 +101,8 @@ void CdromController::writeRegister(uint32_t addr, uint8_t val) {
 
   // fmt::print("[CDROM-IO] Write port{}.idx{} = 0x{:02X}\n", port, indexReg_,
   //            val);
+
+  CDROM_LOG("[CDROM-IO] Write port{}.idx{} = 0x{:02X}\n", port, indexReg_, val);
 
   if (port == 0) {
     indexReg_ = val & 3;
@@ -117,9 +137,12 @@ void CdromController::writeRegister(uint32_t addr, uint8_t val) {
       // When the game clears interrupt bits, it has finished processing
       // the interrupt (including reading the response and calling any
       // callbacks).  Clear the delivery gate so the CDROM can deliver
-      // the next sector.
-      if (val & 0x1F)
+      // the next sector, then immediately deliver any queued secondary
+      // response (e.g., INT2 Complete after Stop/Pause/Init INT3 ack).
+      if (val & 0x1F) {
         waitingForAck_ = false;
+        fireSecondaryNow();
+      }
       if (val & 0x40)
         paramFifo_.clear();
       break;
@@ -134,8 +157,10 @@ void CdromController::writeRegister(uint32_t addr, uint8_t val) {
       // Some docs say index 2/3 port 3 also ACKs IF.
       // PsyQ CdInit writes port3.idx2 = 0x00 (no-op clear).
       interruptFlag_ &= ~(val & 0x1F);
-      if (val & 0x1F)
+      if (val & 0x1F) {
         waitingForAck_ = false;
+        fireSecondaryNow();
+      }
       if (val & 0x40)
         paramFifo_.clear();
       break;
@@ -149,8 +174,10 @@ void CdromController::writeRegister(uint32_t addr, uint8_t val) {
       // PS1 CDROM: port 3 with ODD index (1 or 3) = write to IF ACK.
       // PsyQ CdInit writes port3.idx3 = 0x20 to clear param FIFO.
       interruptFlag_ &= ~(val & 0x1F);
-      if (val & 0x1F)
+      if (val & 0x1F) {
         waitingForAck_ = false;
+        fireSecondaryNow();
+      }
       if (val & 0x40)
         paramFifo_.clear();
       break;
@@ -203,12 +230,8 @@ uint8_t CdromController::readRegister(uint32_t addr) {
       // result);
     } else {
       result = interruptFlag_ | 0xE0;
-      static int ifReadCount = 0;
-      ifReadCount++;
-      if (ifReadCount <= 100) {
-        fmt::print(stderr, "[CDROM-IF] Read IF={} (interruptFlag_={}) idx={}\n",
-                   result, interruptFlag_, indexReg_);
-      }
+      CDROM_LOG("[CDROM-IF] Read IF=0x{:02X} (interruptFlag_={}) idx={}\n",
+                 result, interruptFlag_, indexReg_);
     }
     return result;
   }
@@ -299,7 +322,7 @@ void CdromController::pushResponse(CdromInt intType,
 // ─── Command Dispatch ───────────────────────────────────
 
 void CdromController::executeCommand(uint8_t cmd) {
-  fmt::print("[CDROM] Command 0x{:02X}\n", cmd);
+  CDROM_LOG("[CDROM] Command 0x{:02X}\n", cmd);
 
   switch (cmd) {
   case 0x01:
@@ -366,7 +389,7 @@ void CdromController::executeCommand(uint8_t cmd) {
     cmdReadS();
     break;
   default:
-    fmt::print("[CDROM] Unknown command: 0x{:02X}\n", cmd);
+    CDROM_LOG("[CDROM] Unknown command: 0x{:02X}\n", cmd);
     pushResponse(INT_ERROR, {buildStatusByte(), 0x40}); // Invalid command
     break;
   }
@@ -430,6 +453,14 @@ void CdromController::cmdStop() {
   state_ = CdromState::Idle;
   motorOn_ = false;
   pushResponse(INT_ACKNOWLEDGE, {buildStatusByte()});
+
+  // Secondary response: INT2 (Complete) after the spindle stops.
+  // On real hardware this takes a few hundred ms, but we fire it quickly
+  // (well within one frame) so the game's Stop-wait loop can proceed.
+  hasSecondaryResponse_ = true;
+  secondaryResponseDelay_ = 5000;
+  secondaryInterrupt_ = INT_COMPLETE;
+  secondaryData_ = {buildStatusByte()};
 }
 
 void CdromController::cmdPause() {
@@ -448,16 +479,27 @@ void CdromController::cmdInit() {
   mode_ = 0;
   motorOn_ = true;
 
-  // Deliver INT3 (Acknowledge)
+  // Deliver INT3 (Acknowledge) immediately.
   pushResponse(INT_ACKNOWLEDGE, {buildStatusByte()});
 
-  // Secondary response: INT2 (Complete) after a short delay
-  // This allows the game's polling loop to see INT3, acknowledge it,
-  // and then wait for INT2 instead of them arriving simultaneously.
-  hasSecondaryResponse_ = true;
-  secondaryResponseDelay_ = 20000; // Simulated init delay
-  secondaryInterrupt_ = INT_COMPLETE;
-  secondaryData_ = {buildStatusByte()};
+  // Deliver INT2 (Complete) immediately after INT3.
+  //
+  // The game's CdInit retry loop checks the CDROM interrupt flag register
+  // (interruptFlag_) after sending CdlInit to verify INT2 (Complete=2)
+  // was received.  Firing INT3 then INT2 in sequence ensures interruptFlag_=2
+  // when the game reads it, allowing the success condition to pass.
+  //
+  // On real hardware INT2 arrives ~300-400ms after INT3, but our HLE fires
+  // it synchronously.  hasSecondaryResponse_ is intentionally NOT set here —
+  // using the deferred secondary (via watchpoint) caused INT2 to fire
+  // BEFORE CdlInit was sent, leaving interruptFlag_=3 (INT3) when the game
+  // checked, which caused the 5-retry "CdInit: Init failed" loop.
+  responseFifo_.clear();
+  responseFifo_.push_back(buildStatusByte());
+  interruptFlag_ = static_cast<uint8_t>(INT_COMPLETE);
+  if (interruptCallback_)
+    interruptCallback_(static_cast<uint8_t>(INT_COMPLETE));
+  // hasSecondaryResponse_ = false (default) — no deferred INT2 needed.
 }
 
 void CdromController::cmdMute() {
@@ -481,7 +523,7 @@ void CdromController::cmdSetMode() {
     mode_ = paramFifo_[0];
     xaFilterEnabled_ = (mode_ & (1 << 4)) != 0;
   }
-  fmt::print("[CDROM] SetMode: mode_=0x{:02X}\n", mode_);
+  CDROM_LOG("[CDROM] SetMode: mode_=0x{:02X}\n", mode_);
   pushResponse(INT_ACKNOWLEDGE, {buildStatusByte()});
 }
 
