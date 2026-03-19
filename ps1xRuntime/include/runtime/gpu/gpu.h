@@ -70,6 +70,14 @@ public:
   // Check if display is enabled (GP1(0x03), GPUSTAT bit 23)
   bool isDisplayEnabled() const { return !(gpuStat_ & (1u << 23)); }
 
+  // True once the game has sent GP1(0x08) to explicitly set display mode.
+  // When false, the renderer uses safe 320x240 defaults instead of GPUSTAT.
+  bool isDisplayModeSet() const { return displayModeSet_; }
+
+  // True once the game has sent GP1(0x05) to explicitly set display area.
+  // When false, the renderer may auto-detect the active framebuffer.
+  bool isDisplayAreaSet() const { return displayAreaSet_; }
+
   // Dimensions of VRAM
   static constexpr uint32_t VRAM_WIDTH = 1024;
   static constexpr uint32_t VRAM_HEIGHT = 512;
@@ -121,6 +129,12 @@ private:
   int32_t drawAreaY2_;
   bool ditherEnable_;
   uint8_t blendMode_; // 0: B/2+F/2, 1: B+F, 2: B-F, 3: B+F/4
+
+  // Set once GP1(0x08) is received; renderer uses defaults until then.
+  bool displayModeSet_;
+
+  // Set once GP1(0x05) is received; renderer uses auto-detect until then.
+  bool displayAreaSet_;
 
   // Display attributes
   uint32_t displayVRAMXStart_;

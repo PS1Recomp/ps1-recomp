@@ -1,4 +1,5 @@
 #include "runtime/save_state.h"
+#include <cstring>
 #include <fmt/format.h>
 
 namespace ps1 {
@@ -58,9 +59,7 @@ bool SaveState::save(const std::string &path, const recomp_context &ctx,
   writeBytes(f, mem.scratchpadPtr(), Memory::SCRATCHPAD_SIZE);
 
   // ── GPU VRAM (1024×512×2 = 1MB) ──────────────────
-  // Write a placeholder — actual VRAM save requires non-const vramPtr
-  std::vector<uint8_t> vramZero(1024 * 512 * 2, 0);
-  writeBytes(f, vramZero.data(), vramZero.size());
+  writeBytes(f, gpu.getVRAM(), 1024 * 512 * sizeof(gpu::Color16));
 
   // ── GPU State ────────────────────────────────────
   uint32_t gpustat = gpu.readGPUSTAT();
@@ -108,7 +107,7 @@ bool SaveState::save(const std::string &path, const recomp_context &ctx,
 }
 
 bool SaveState::load(const std::string &path, recomp_context &ctx, Memory &mem,
-                     gpu::GPU & /*gpu*/, spu::SPU & /*spu*/, DMA &dma,
+                     gpu::GPU &gpu, spu::SPU &spu, DMA &dma,
                      cdrom::CdromController & /*cdrom*/, Timers & /*timers*/,
                      InterruptController &irq,
                      input::InputController & /*input*/) {
@@ -148,21 +147,19 @@ bool SaveState::load(const std::string &path, recomp_context &ctx, Memory &mem,
   // ── Scratchpad (1KB) ─────────────────────────────
   readBytes(f, mem.scratchpadPtr(), Memory::SCRATCHPAD_SIZE);
 
-  // ── GPU VRAM (skip for now — need mutable vramPtr) ──
-  // We'll read it but need a way to write back to GPU
-  std::vector<uint8_t> vramData(1024 * 512 * 2);
+  // ── GPU VRAM (1024×512×2 = 1MB) ──────────────────
+  std::vector<uint8_t> vramData(1024 * 512 * sizeof(gpu::Color16));
   readBytes(f, vramData.data(), vramData.size());
-  // TODO: gpu.loadVram(vramData.data()) when available
+  gpu.loadVram(vramData.data());
 
   // ── GPU State ────────────────────────────────────
   uint32_t gpustat;
   readBytes(f, &gpustat, sizeof(gpustat));
 
   // ── SPU Sound RAM (512KB) ────────────────────────
-  // Read into SPU's sound RAM
-  std::vector<uint8_t> spuRam(512 * 1024);
+  std::vector<uint8_t> spuRam(spu::SOUND_RAM_SIZE);
   readBytes(f, spuRam.data(), spuRam.size());
-  // TODO: spu.loadSoundRam(spuRam.data()) when available
+  spu.loadSoundRam(spuRam.data());
 
   // ── SPU Registers ────────────────────────────────
   uint16_t spuCnt;

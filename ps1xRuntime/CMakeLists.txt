@@ -39,7 +39,7 @@ target_link_libraries(ps1xRuntime_lib
 # ── Generate Recompiled Output (Phase 5 E2E Pipeline) ────
 # Auto-generation from spinningCube is disabled when using custom game configs.
 # To regenerate manually:
-#   cd build && ./recompiler/ps1xRecomp crash_config.toml ../runtime/src/recompiled_out.cpp
+#   cd build && ./ps1xRecomp/ps1xRecomp crash_config.toml ../ps1xRuntime/src/recompiled_out.cpp
 #
 # add_custom_command(
 #     OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/recompiled_out.cpp

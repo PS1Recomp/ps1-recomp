@@ -479,6 +479,13 @@ void CdromController::cmdInit() {
   mode_ = 0;
   motorOn_ = true;
 
+  // Cancel any pending secondary response from a previous command (e.g.,
+  // CdlPause INT2 that hasn't fired yet).  CdlInit is a full hardware reset;
+  // delivering a stale secondary after it would confuse the CdInit polling loop
+  // by re-triggering INT2 via the cdSyncByte watchpoint.
+  hasSecondaryResponse_ = false;
+  secondaryResponseDelay_ = 0;
+
   // Deliver INT3 (Acknowledge) immediately.
   pushResponse(INT_ACKNOWLEDGE, {buildStatusByte()});
 

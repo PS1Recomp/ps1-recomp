@@ -174,11 +174,12 @@ bool MDEC::rleDecode(const uint16_t *&src, const uint16_t *end, int16_t *block,
   if (src >= end)
     return false;
 
-  // First value is DC coefficient (10-bit signed + 6-bit quant scale)
+  // First word: [15:10] = q_scale (6-bit), [9:0] = DC coefficient (10-bit signed)
   uint16_t dcWord = *src++;
-  int16_t dc = static_cast<int16_t>(dcWord) >> 10; // DC value (signed)
-  // PS1 MDEC uses a custom DC format
-  block[0] = dc;
+  uint8_t qScale = (dcWord >> 10) & 0x3F;
+  int16_t dc = static_cast<int16_t>((dcWord & 0x3FF) << 6) >> 6; // sign-extend 10-bit
+  block[0] = static_cast<int16_t>(
+      std::clamp(((int32_t)dc * quantTable[0] + 4) >> 3, -1024, 1023));
 
   int pos = 0;
   while (src < end) {
@@ -194,8 +195,8 @@ bool MDEC::rleDecode(const uint16_t *&src, const uint16_t *end, int16_t *block,
     if (pos >= 64)
       break;
 
-    // Dequantize
-    int32_t val = (level * quantTable[ZIGZAG[pos]]) >> 3;
+    // Dequantize: AC uses both q_scale and quantization table entry
+    int32_t val = ((int32_t)level * qScale * quantTable[ZIGZAG[pos]] + 4) >> 3;
     block[ZIGZAG[pos]] = static_cast<int16_t>(std::clamp(val, -1024, 1023));
   }
 
@@ -244,71 +245,85 @@ uint8_t MDEC::clampU8(int32_t val) {
 void MDEC::yuvToRgb15(const int16_t *cr, const int16_t *cb, const int16_t *y1,
                       const int16_t *y2, const int16_t *y3, const int16_t *y4) {
   // 4 Y blocks (each 8×8) → 16×16 pixel macroblock
+  // Output in scan-line order (left-to-right, top-to-bottom), 2 pixels per word
   const int16_t *yBlocks[4] = {y1, y2, y3, y4};
 
-  for (int by = 0; by < 2; by++) {
-    for (int bx = 0; bx < 2; bx++) {
-      const int16_t *yBlock = yBlocks[by * 2 + bx];
+  for (int y = 0; y < 16; y++) {
+    int by = y >> 3;
+    int py = y & 7;
+    for (int x = 0; x < 16; x += 2) {
+      uint32_t word = 0;
+      for (int i = 0; i < 2; i++) {
+        int xi = x + i;
+        int bx = xi >> 3;
+        int px = xi & 7;
+        int cx = xi >> 1; // chroma x (2:1 subsampled)
+        int cy = y >> 1;  // chroma y (2:1 subsampled)
 
-      for (int py = 0; py < 8; py++) {
-        for (int px = 0; px < 8; px++) {
-          int cx = bx * 4 + px / 2;
-          int cy = by * 4 + py / 2;
+        const int16_t *yBlock = yBlocks[by * 2 + bx];
+        int32_t yVal = (int32_t)yBlock[py * 8 + px] + 128;
+        int32_t crVal = cr[cy * 8 + cx];
+        int32_t cbVal = cb[cy * 8 + cx];
 
-          int16_t yVal = yBlock[py * 8 + px] + 128;
-          int16_t crVal = cr[cy * 8 + cx];
-          int16_t cbVal = cb[cy * 8 + cx];
+        int32_t r = yVal + ((crVal * 91881) >> 16);
+        int32_t g = yVal - ((cbVal * 22554 + crVal * 46802) >> 16);
+        int32_t b = yVal + ((cbVal * 116130) >> 16);
 
-          int32_t r = yVal + ((crVal * 91881) >> 16);
-          int32_t g = yVal - ((cbVal * 22554 + crVal * 46802) >> 16);
-          int32_t b = yVal + ((cbVal * 116130) >> 16);
-
-          uint8_t r8 = clampU8(r);
-          uint8_t g8 = clampU8(g);
-          uint8_t b8 = clampU8(b);
-
-          uint16_t rgb15 = ((r8 >> 3) & 0x1F) | (((g8 >> 3) & 0x1F) << 5) |
-                           (((b8 >> 3) & 0x1F) << 10);
-          outputBuffer_.push_back(rgb15);
-        }
+        uint16_t rgb15 = ((clampU8(r) >> 3) & 0x1F) |
+                         (((clampU8(g) >> 3) & 0x1F) << 5) |
+                         (((clampU8(b) >> 3) & 0x1F) << 10);
+        word |= (uint32_t)rgb15 << (i * 16);
       }
+      outputBuffer_.push_back(word);
     }
   }
 }
 
 void MDEC::yuvToRgb24(const int16_t *cr, const int16_t *cb, const int16_t *y1,
                       const int16_t *y2, const int16_t *y3, const int16_t *y4) {
+  // 24bpp: 3 bytes per pixel packed continuously into 32-bit words (scan-line order)
+  // 256 pixels × 3 bytes = 768 bytes = 192 words
   const int16_t *yBlocks[4] = {y1, y2, y3, y4};
 
-  for (int by = 0; by < 2; by++) {
-    for (int bx = 0; bx < 2; bx++) {
+  uint32_t accum = 0;
+  int bytePos = 0;
+
+  auto pushByte = [&](uint8_t byte) {
+    accum |= (uint32_t)byte << (bytePos * 8);
+    bytePos++;
+    if (bytePos == 4) {
+      outputBuffer_.push_back(accum);
+      accum = 0;
+      bytePos = 0;
+    }
+  };
+
+  for (int y = 0; y < 16; y++) {
+    int by = y >> 3;
+    int py = y & 7;
+    for (int x = 0; x < 16; x++) {
+      int bx = x >> 3;
+      int px = x & 7;
+      int cx = x >> 1;
+      int cy = y >> 1;
+
       const int16_t *yBlock = yBlocks[by * 2 + bx];
+      int32_t yVal = (int32_t)yBlock[py * 8 + px] + 128;
+      int32_t crVal = cr[cy * 8 + cx];
+      int32_t cbVal = cb[cy * 8 + cx];
 
-      for (int py = 0; py < 8; py++) {
-        for (int px = 0; px < 8; px++) {
-          int cx = bx * 4 + px / 2;
-          int cy = by * 4 + py / 2;
+      int32_t r = yVal + ((crVal * 91881) >> 16);
+      int32_t g = yVal - ((cbVal * 22554 + crVal * 46802) >> 16);
+      int32_t b = yVal + ((cbVal * 116130) >> 16);
 
-          int16_t yVal = yBlock[py * 8 + px] + 128;
-          int16_t crVal = cr[cy * 8 + cx];
-          int16_t cbVal = cb[cy * 8 + cx];
-
-          int32_t r = yVal + ((crVal * 91881) >> 16);
-          int32_t g = yVal - ((cbVal * 22554 + crVal * 46802) >> 16);
-          int32_t b = yVal + ((cbVal * 116130) >> 16);
-
-          uint8_t r8 = clampU8(r);
-          uint8_t g8 = clampU8(g);
-          uint8_t b8 = clampU8(b);
-
-          // Pack 3 bytes per pixel, 2 pixels per uint32_t word
-          // For simplicity, pack as individual words
-          uint32_t pixel = r8 | (g8 << 8) | (b8 << 16);
-          outputBuffer_.push_back(pixel);
-        }
-      }
+      pushByte(clampU8(r));
+      pushByte(clampU8(g));
+      pushByte(clampU8(b));
     }
   }
+
+  if (bytePos > 0)
+    outputBuffer_.push_back(accum);
 }
 
 // ─── Decode Slice ───────────────────────────────────────

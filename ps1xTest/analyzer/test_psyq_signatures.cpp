@@ -281,6 +281,169 @@ TEST(PsyQMatcher, NoMatchForGameFunctions) {
 }
 
 // ──────────────────────────────────────────
+// Pass 3: Byte Signature Detection Tests
+// ──────────────────────────────────────────
+
+// Helper: write a 32-bit LE word into a byte buffer at position
+static void writeLE32(std::vector<uint8_t>& buf, size_t offset, uint32_t val) {
+    buf[offset + 0] = (val >>  0) & 0xFF;
+    buf[offset + 1] = (val >>  8) & 0xFF;
+    buf[offset + 2] = (val >> 16) & 0xFF;
+    buf[offset + 3] = (val >> 24) & 0xFF;
+}
+
+// Create an ELF whose .text section contains synthetic instruction bytes at
+// specific offsets relative to 0x80010000.
+static std::string createSyntheticELF(
+        const std::string& path,
+        // (name, address) pairs — these are func_ style (no symbols)
+        const std::vector<std::pair<std::string,uint32_t>>& funcs,
+        // (address, instruction_word) pairs to inject
+        const std::vector<std::pair<uint32_t,uint32_t>>& instrs) {
+
+    ELFIO::elfio writer;
+    writer.create(ELFIO::ELFCLASS32, ELFIO::ELFDATA2LSB);
+    writer.set_os_abi(ELFIO::ELFOSABI_NONE);
+    writer.set_type(ELFIO::ET_EXEC);
+    writer.set_machine(ELFIO::EM_MIPS);
+    writer.set_entry(0x80010000);
+
+    constexpr uint32_t TEXT_BASE = 0x80010000;
+    constexpr size_t   TEXT_SIZE = 0x100000; // 1MB
+
+    auto* text_sec = writer.sections.add(".text");
+    text_sec->set_type(ELFIO::SHT_PROGBITS);
+    text_sec->set_flags(ELFIO::SHF_ALLOC | ELFIO::SHF_EXECINSTR);
+    text_sec->set_addr_align(4);
+    text_sec->set_address(TEXT_BASE);
+
+    std::vector<uint8_t> text_data(TEXT_SIZE, 0x00);
+    for (const auto& [addr, word] : instrs) {
+        if (addr >= TEXT_BASE && addr < TEXT_BASE + TEXT_SIZE) {
+            writeLE32(text_data, addr - TEXT_BASE, word);
+        }
+    }
+    text_sec->set_data(reinterpret_cast<const char*>(text_data.data()),
+                       text_data.size());
+
+    // Add function symbols (STT_FUNC) so FunctionFinder can find them
+    auto* strtab = writer.sections.add(".strtab");
+    strtab->set_type(ELFIO::SHT_STRTAB);
+    ELFIO::string_section_accessor stra(strtab);
+
+    auto* symtab = writer.sections.add(".symtab");
+    symtab->set_type(ELFIO::SHT_SYMTAB);
+    symtab->set_info(2);
+    symtab->set_addr_align(4);
+    symtab->set_entry_size(writer.get_default_entry_size(ELFIO::SHT_SYMTAB));
+    symtab->set_link(strtab->get_index());
+
+    ELFIO::symbol_section_accessor syma(writer, symtab);
+    for (const auto& [name, addr] : funcs) {
+        syma.add_symbol(stra, name.c_str(), addr, 128,
+                        ELFIO::STB_GLOBAL, ELFIO::STT_FUNC, 0,
+                        text_sec->get_index());
+    }
+
+    auto* seg = writer.segments.add();
+    seg->set_type(ELFIO::PT_LOAD);
+    seg->set_virtual_address(TEXT_BASE);
+    seg->set_physical_address(TEXT_BASE);
+    seg->set_flags(ELFIO::PF_X | ELFIO::PF_R);
+    seg->set_align(0x1000);
+    seg->add_section_index(text_sec->get_index(), text_sec->get_addr_align());
+
+    writer.save(path);
+    return path;
+}
+
+TEST(PsyQMatcher, Pass3DetectsSpuInitBySPURegWrite) {
+    // SpuInit signature: lui at, 0x1F80 + sh zero, 0x1D80(at)
+    constexpr uint32_t FUNC_ADDR = 0x80050000;
+
+    createSyntheticELF("/tmp/ps1recomp_test_psyq_p3_spu.elf",
+        {{"func_80050000", FUNC_ADDR}},
+        {
+            {FUNC_ADDR + 0, 0x3C011F80u}, // lui at, 0x1F80
+            {FUNC_ADDR + 4, 0xA4201D80u}, // sh zero, 0x1D80(at)
+            {FUNC_ADDR + 8, 0x03E00008u},  // jr ra
+        });
+
+    ElfParser elf;
+    ASSERT_TRUE(elf.load("/tmp/ps1recomp_test_psyq_p3_spu.elf"));
+
+    FunctionFinder finder;
+    finder.findFunctions(elf);
+
+    PsyQMatcher matcher;
+    matcher.matchFunctions(elf, finder);
+
+    bool found = false;
+    for (const auto& m : matcher.getMatches())
+        if (m.name == "SpuInit" && m.address == FUNC_ADDR) found = true;
+    EXPECT_TRUE(found) << "Pass3 should detect SpuInit by SPU register write pattern";
+
+    std::remove("/tmp/ps1recomp_test_psyq_p3_spu.elf");
+}
+
+TEST(PsyQMatcher, Pass3DetectsCdInitByBIOSCallIndex) {
+    // CdInit signature: addiu t1,zero,0xAD + lui at,0 + addiu at,at,0xA0 + jr at
+    constexpr uint32_t FUNC_ADDR = 0x80060000;
+
+    createSyntheticELF("/tmp/ps1recomp_test_psyq_p3_cd.elf",
+        {{"func_80060000", FUNC_ADDR}},
+        {
+            {FUNC_ADDR +  0, 0x27BDFFF0u}, // addiu sp, sp, -0x10 (prologue)
+            {FUNC_ADDR +  4, 0xAFBF000Cu}, // sw ra, 0xC(sp)
+            {FUNC_ADDR +  8, 0x240900ADu}, // addiu t1, zero, 0xAD
+            {FUNC_ADDR + 12, 0x3C010000u}, // lui at, 0
+            {FUNC_ADDR + 16, 0x242100A0u}, // addiu at, at, 0xA0
+            {FUNC_ADDR + 20, 0x00200008u}, // jr at
+            {FUNC_ADDR + 24, 0x00000000u}, // nop (delay slot)
+        });
+
+    ElfParser elf;
+    ASSERT_TRUE(elf.load("/tmp/ps1recomp_test_psyq_p3_cd.elf"));
+
+    FunctionFinder finder;
+    finder.findFunctions(elf);
+
+    PsyQMatcher matcher;
+    matcher.matchFunctions(elf, finder);
+
+    bool found = false;
+    for (const auto& m : matcher.getMatches())
+        if (m.name == "CdInit" && m.address == FUNC_ADDR) found = true;
+    EXPECT_TRUE(found) << "Pass3 should detect CdInit by A0:0xAD BIOS call pattern";
+
+    std::remove("/tmp/ps1recomp_test_psyq_p3_cd.elf");
+}
+
+TEST(PsyQMatcher, Pass3DoesNotMatchUnrelatedFunction) {
+    // A function with only NOPs — should NOT match any signature
+    constexpr uint32_t FUNC_ADDR = 0x80070000;
+
+    createSyntheticELF("/tmp/ps1recomp_test_psyq_p3_nop.elf",
+        {{"func_80070000", FUNC_ADDR}},
+        {} /* no injected instructions — all NOPs */);
+
+    ElfParser elf;
+    ASSERT_TRUE(elf.load("/tmp/ps1recomp_test_psyq_p3_nop.elf"));
+
+    FunctionFinder finder;
+    finder.findFunctions(elf);
+
+    PsyQMatcher matcher;
+    matcher.matchFunctions(elf, finder);
+
+    // NOP-only function should not trigger any signature
+    EXPECT_EQ(matcher.getMatchCount(), 0u)
+        << "NOP-only function should not match any PsyQ signature";
+
+    std::remove("/tmp/ps1recomp_test_psyq_p3_nop.elf");
+}
+
+// ──────────────────────────────────────────
 // String Helper Tests
 // ──────────────────────────────────────────
 

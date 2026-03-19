@@ -17,6 +17,101 @@
 
 using namespace ps1recomp;
 
+// ─── Jump Table Auto-Detection ───────────────────────────
+//
+// Detects the canonical MIPS switch table pattern:
+//   LUI   $rbase, hi       ; rbase = upper address
+//   ADDIU $rbase, $rbase, lo ; rbase = table_base
+//   ADDU  $rtbl, $rbase, $ridx  ; rtbl = table_base + index*4
+//   LW    $rtgt, N($rtbl)  ; rtgt = table[index]
+//   JR    $rtgt             ; indirect jump
+//
+// When found, reads the target addresses from the ELF data section
+// and stores them in a JumpTableEntry on the RecompFunction.
+//
+// Returns a vector of target addresses (empty if pattern not found).
+static std::vector<uint32_t>
+detectJumpTable(const std::vector<uint32_t> &instrs, size_t jr_idx,
+                const ElfParser &parser) {
+  if (jr_idx == 0)
+    return {};
+
+  Instruction jr_inst = MipsDecoder::decode(instrs[jr_idx]);
+  uint8_t target_reg = jr_inst.rs; // register that holds the jump target
+
+  // Step 1: Find LW $target_reg, N($base_reg) within 6 instructions back
+  int lw_idx = -1;
+  uint8_t lw_base_reg = 0;
+  int16_t lw_imm = 0;
+  for (int j = (int)jr_idx - 1; j >= 0 && j >= (int)jr_idx - 6; j--) {
+    Instruction inst = MipsDecoder::decode(instrs[j]);
+    if (inst.id == InstrId::LW && inst.rt == target_reg) {
+      lw_idx = j;
+      lw_base_reg = inst.rs;
+      lw_imm = inst.imm16;
+      break;
+    }
+  }
+  if (lw_idx < 0)
+    return {};
+
+  // Step 2: Find ADDU $lw_base_reg, $rconst, $rscale within 8 instructions back.
+  // One of rs/rt should be a constant pointer, the other the scaled index.
+  uint8_t const_reg = 0xFF;
+  for (int j = lw_idx - 1; j >= 0 && j >= (int)jr_idx - 12; j--) {
+    Instruction inst = MipsDecoder::decode(instrs[j]);
+    if (inst.id == InstrId::ADDU && inst.rd == lw_base_reg) {
+      // Assume rs is the constant-address register (table_base)
+      const_reg = inst.rs;
+      break;
+    }
+  }
+  if (const_reg == 0xFF)
+    return {};
+
+  // Step 3: Track const_reg back to LUI (+ optional ADDIU) within 16 instrs
+  uint32_t lui_val = 0;
+  int16_t addiu_imm = 0;
+  bool found_lui = false;
+  for (int j = lw_idx - 1; j >= 0 && j >= (int)jr_idx - 20; j--) {
+    Instruction inst = MipsDecoder::decode(instrs[j]);
+    if (inst.id == InstrId::LUI && inst.rt == const_reg) {
+      lui_val = static_cast<uint32_t>(static_cast<uint16_t>(inst.imm16)) << 16;
+      found_lui = true;
+      break;
+    }
+    if ((inst.id == InstrId::ADDIU || inst.id == InstrId::ADDI) &&
+        inst.rt == const_reg && inst.rs == const_reg) {
+      addiu_imm = inst.imm16;
+    }
+  }
+  if (!found_lui)
+    return {};
+
+  uint32_t table_addr = lui_val + static_cast<uint32_t>(addiu_imm) +
+                        static_cast<uint32_t>(lw_imm);
+
+  // Step 4: Read table entries from ELF data section
+  const Section *section = parser.findSectionByAddress(table_addr);
+  if (!section || section->data == nullptr)
+    return {};
+
+  uint32_t offset = table_addr - section->vaddr;
+  std::vector<uint32_t> targets;
+  for (uint32_t i = 0; i < 64; i++) {
+    uint32_t entry_offset = offset + i * 4;
+    if (entry_offset + 4 > section->size)
+      break;
+    const uint8_t *ptr = section->data + entry_offset;
+    uint32_t entry = ptr[0] | (ptr[1] << 8) | (ptr[2] << 16) | (ptr[3] << 24);
+    // Valid PS1 KSEG0 address range: stop at anything outside it
+    if (entry < 0x80000000u || entry > 0x80400000u)
+      break;
+    targets.push_back(entry);
+  }
+  return targets;
+}
+
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     fmt::print("Usage: ps1xRecomp <config.toml> [output_file.cpp]\n");
@@ -48,7 +143,8 @@ int main(int argc, char *argv[]) {
     result_cpp += "#include <runtime/ps1_runtime_macros.h>\n";
     result_cpp += "#include <runtime/cpu_context.h>\n";
     result_cpp += "#include <runtime/gte.h>\n";
-    result_cpp += "#include <runtime/bios/bios.h>\n\n";
+    result_cpp += "#include <runtime/bios/bios.h>\n";
+    result_cpp += "#include <runtime/psyq/psyq_hle.h>\n\n";
     result_cpp += "// Forward declaration for OOB dispatch\n";
     result_cpp += "void recomp_dispatch(uint8_t* rdram, recomp_context* ctx, "
                   "uint32_t addr);\n\n";
@@ -168,6 +264,20 @@ int main(int argc, char *argv[]) {
                   target);
             }
           }
+        } else if (inst.id == InstrId::JR && inst.rs != 31) {
+          // ── Jump table auto-detection ──────────────────
+          // Try to detect the LUI+ADDIU+ADDU+LW+JR pattern and resolve
+          // the table entries from the ELF binary.
+          auto targets = detectJumpTable(rfunc.instructions, i, parser);
+          if (!targets.empty()) {
+            JumpTableEntry jt;
+            jt.jrInstrIdx = i;
+            jt.targets = std::move(targets);
+            fmt::print("  [jump table] func 0x{:08X}+{}: {} targets (table "
+                       "entries detected)\n",
+                       addr, i * 4, jt.targets.size());
+            rfunc.jumpTables.push_back(std::move(jt));
+          }
         }
       }
 
@@ -175,7 +285,10 @@ int main(int argc, char *argv[]) {
       result_cpp += "\n";
     }
 
-    // Emit stub implementations for PsyQ stubs!
+    // Emit stub implementations for PsyQ stubs.
+    // For well-known PsyQ SDK function names, delegate to the psyq_hle layer
+    // so that VSync/DrawSync/etc. have proper behaviour.
+    // Unknown names fall back to a safe no-op body.
     if (config.contains("stubs")) {
       const auto &stubs = toml::find<std::vector<toml::value>>(config, "stubs");
       for (const auto &s : stubs) {
@@ -183,9 +296,35 @@ int main(int argc, char *argv[]) {
         for (char &c : name)
           if (c == '.')
             c = '_';
-        result_cpp += fmt::format("void {}(uint8_t* rdram, recomp_context* "
-                                  "ctx) {{ /* PsyQ Stub */ }}\n",
-                                  name);
+
+        std::string body;
+        if (name == "VSync") {
+          body = "ps1::psyq::hle_VSync(ctx);";
+        } else if (name == "DrawSync") {
+          body = "ps1::psyq::hle_DrawSync(ctx);";
+        } else if (name == "ResetGraph") {
+          body = "ps1::psyq::hle_ResetGraph(ctx);";
+        } else if (name == "ClearOTag") {
+          body = "ps1::psyq::hle_ClearOTag(ctx);";
+        } else if (name == "ClearOTagR") {
+          body = "ps1::psyq::hle_ClearOTagR(ctx);";
+        } else if (name == "DrawOTag") {
+          body = "ps1::psyq::hle_DrawOTag(ctx);";
+        } else if (name == "SetDefDispEnv") {
+          body = "ps1::psyq::hle_SetDefDispEnv(ctx);";
+        } else if (name == "PutDispEnv") {
+          body = "ps1::psyq::hle_PutDispEnv(ctx);";
+        } else if (name == "SetDefDrawEnv") {
+          body = "ps1::psyq::hle_SetDefDrawEnv(ctx);";
+        } else if (name == "PutDrawEnv") {
+          body = "ps1::psyq::hle_PutDrawEnv(ctx);";
+        } else {
+          body = "/* PsyQ Stub */";
+        }
+
+        result_cpp += fmt::format(
+            "void {}(uint8_t* rdram, recomp_context* ctx) {{ {} }}\n",
+            name, body);
       }
     }
 

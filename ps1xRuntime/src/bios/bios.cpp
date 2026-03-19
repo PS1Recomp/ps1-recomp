@@ -612,6 +612,19 @@ void Bios::handleB0(uint32_t index) {
     BIOS_LOG("[BIOS] InitPAD(buf1: 0x{:08X}, sz1: {}, buf2: 0x{:08X}, sz2: "
                "{})\n",
                padBuf1Addr_, padBuf1Size_, padBuf2Addr_, padBuf2Size_);
+
+    // Pre-fill pad buffers immediately so the game doesn't read uninitialized
+    // zeros (which active-low encoding interprets as "all buttons pressed").
+    // Write: status=OK(0x00), type=Digital(0x41), no-buttons(0xFF,0xFF).
+    auto initBuf = [&](uint32_t addr, uint32_t sz) {
+      if (addr == 0 || sz < 4) return;
+      ctx_.mem->write8(addr + 0, 0x00); // status OK
+      ctx_.mem->write8(addr + 1, 0x41); // Digital pad
+      ctx_.mem->write8(addr + 2, 0xFF); // no buttons pressed (active-low)
+      ctx_.mem->write8(addr + 3, 0xFF); // no buttons pressed
+    };
+    initBuf(padBuf1Addr_, padBuf1Size_);
+    initBuf(padBuf2Addr_, padBuf2Size_);
     break;
   }
   case 0x13: // StartPAD — begin controller polling during VBlank

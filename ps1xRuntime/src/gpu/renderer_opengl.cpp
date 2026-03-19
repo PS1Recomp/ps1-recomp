@@ -187,13 +187,13 @@ void RendererOpenGL::renderFrame() {
   glClear(GL_COLOR_BUFFER_BIT);
 
   // Upload display snapshot (captured at VBlank) to texture.
-  // This avoids tearing from the game thread writing to VRAM concurrently.
+  // Always upload regardless of the display-enable flag: our HLE BIOS does not
+  // always re-send GP1(0x03) after a GPU reset, so isDisplayEnabled() can stay
+  // false even though VRAM has valid content.
   glBindTexture(GL_TEXTURE_2D, vramTexture_);
-  if (gpu_.isDisplayEnabled()) {
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, GPU::VRAM_WIDTH, GPU::VRAM_HEIGHT,
-                    GL_RGBA, GL_UNSIGNED_SHORT_1_5_5_5_REV,
-                    gpu_.getDisplayVRAM());
-  }
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, GPU::VRAM_WIDTH, GPU::VRAM_HEIGHT,
+                  GL_RGBA, GL_UNSIGNED_SHORT_1_5_5_5_REV,
+                  gpu_.getDisplayVRAM());
 
   glUseProgram(shaderProgram_);
 
@@ -201,36 +201,32 @@ void RendererOpenGL::renderFrame() {
   uint32_t vramX, vramY;
   gpu_.getDisplayArea(vramX, vramY);
 
-  uint32_t x1, x2, y1, y2;
-  gpu_.getDisplayRange(x1, x2, y1, y2);
+  // Never auto-detect vramX: the default (0,0) from reset is correct when the
+  // game doesn't send GP1(0x05). Games that store textures at x=320+ would
+  // fool a pixel-count heuristic into showing the texture page instead of the
+  // actual framebuffer.
 
-  // Calculate width and height of the display area out of the entire VRAM
-  // x1 and x2 are usually relative to the display pipeline.
-  // For basic PS1 resolution we assume W = x2 - x1 (scaled by clock
-  // multipliers, but loosely ~320 default) And H = y2 - y1 (usually ~240). Some
-  // games might have 0 or invalid widths early in boot, clamp to sensible
-  // defaults.
-  float dispW = (x2 > x1) ? (x2 - x1) : 320.0f;
-  float dispH = (y2 > y1) ? (y2 - y1) : 240.0f;
-
-  // Magic numbers for horizontal dots multiplier (3.2x etc) are common.
-  // A simplified rule is dividing width by typical dot clocks.
-  // For now to get visual output, width usually isn't purely 320, it can be
-  // 2560 for 320px depending on DOT dividers. We'll trust the GPU output
-  // display resolution instead:
+  // Derive width/height from GPUSTAT only when the game explicitly set
+  // GP1(0x08). Otherwise keep the 320x240 default — many games render 320px
+  // wide without ever sending GP1(0x08) (the GPUSTAT reset value of hres=0
+  // means "256px" but those bits are meaningless until the game configures them).
   uint32_t stat = gpu_.readGPUSTAT();
   int currentW = 320;
-  int currentH = (stat & (1 << 20)) ? 480 : 240;
-
-  int hres = (stat >> 17) & 3;
-  if (hres == 0)
-    currentW = 256;
-  else if (hres == 1)
-    currentW = 320;
-  else if (hres == 2)
-    currentW = 512;
-  else if (hres == 3)
-    currentW = 640;
+  int currentH = 240;
+  if (gpu_.isDisplayModeSet()) {
+    currentH = (stat & (1u << 20)) ? 480 : 240;
+    int hres = (stat >> 17) & 3;
+    if (stat & (1u << 16))
+      currentW = 368;
+    else if (hres == 0)
+      currentW = 256;
+    else if (hres == 1)
+      currentW = 320;
+    else if (hres == 2)
+      currentW = 512;
+    else
+      currentW = 640;
+  }
 
   float uX = vramX / 1024.0f;
   float uY = vramY / 512.0f;

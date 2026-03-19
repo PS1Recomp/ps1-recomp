@@ -298,6 +298,8 @@ int main(int argc, char *argv[]) {
     hleCfg.drawSyncIndexAddr = addrs.gpuDrawSyncIndexAddr;
     hleCfg.drawSyncCount    = addrs.gpuDrawSyncCount;
     hleCfg.drainCallbacks   = [&bios]() { bios.drainPendingCallbacks(); };
+    hleCfg.writeGP0         = [&gpu](uint32_t w) { gpu.writeGP0(w); };
+    hleCfg.writeGP1         = [&gpu](uint32_t w) { gpu.writeGP1(w); };
     ps1::psyq::configure(hleCfg);
 
     fmt::print("[CONFIG] PsyQ addresses configured\n");

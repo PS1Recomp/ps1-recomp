@@ -1,6 +1,7 @@
 #include "runtime/spu/spu.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <fmt/format.h>
 
 namespace ps1::spu {
@@ -284,6 +285,10 @@ uint16_t SPU::readSoundRam(uint32_t addr) const {
     return soundRam_[addr] | (soundRam_[addr + 1] << 8);
   }
   return 0;
+}
+
+void SPU::loadSoundRam(const uint8_t *data) {
+  std::memcpy(soundRam_, data, SOUND_RAM_SIZE);
 }
 
 void SPU::setTransferAddr(uint16_t val) {

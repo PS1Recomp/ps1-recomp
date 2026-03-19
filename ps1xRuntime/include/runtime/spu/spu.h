@@ -92,6 +92,9 @@ public:
   void writeSoundRam(uint32_t addr, uint16_t val);
   uint16_t readSoundRam(uint32_t addr) const;
 
+  // Load 512KB of Sound RAM from a save-state buffer.
+  void loadSoundRam(const uint8_t *data);
+
   // Transfer (manual via registers)
   void setTransferAddr(uint16_t val);
   void writeTransferData(uint16_t val);

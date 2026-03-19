@@ -97,6 +97,22 @@ public:
     /// Get human-readable stub type name.
     static const char* stubTypeName(StubType type);
 
+// ── Byte-level instruction signature (for Pass 3) ─────────────────────────
+struct InstrPattern {
+    uint32_t pattern; ///< Instruction bits that must match
+    uint32_t mask;    ///< 1-bits must match exactly; 0-bits are wildcards
+};
+
+/// A named MIPS instruction-level signature for a PsyQ function.
+/// Each entry in `instrs` must match a CONSECUTIVE instruction in the binary.
+/// The scan window starts within the first `scanWindow` instructions of the
+/// function (default 32).
+struct ByteSig {
+    std::string name;
+    std::vector<InstrPattern> instrs;   ///< Consecutive instruction patterns
+    uint32_t    scanWindow = 32;        ///< How far from func start to scan
+};
+
 private:
     std::vector<PsyQMatch> m_matches;
     std::unordered_map<std::string, PsyQFunction> m_database;
@@ -104,6 +120,10 @@ private:
     void initDatabase();
     void matchByName(const ElfParser& elf);
     void matchByPrefix(const ElfParser& elf, const FunctionFinder& finder);
+    void matchByByteSignature(const ElfParser& elf, const FunctionFinder& finder);
+
+    // Static signature table (built once, shared across all instances)
+    static const std::vector<ByteSig>& getSignatures();
 
     // Database registration helper
     void reg(const std::string& name, PsyQSubsystem sub, StubType type,

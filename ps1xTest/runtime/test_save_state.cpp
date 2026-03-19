@@ -10,7 +10,11 @@ protected:
   std::string tmpPath;
 
   void SetUp() override {
-    tmpPath = std::filesystem::temp_directory_path() / "ps1_test_savestate.sav";
+    // Use a unique path per test instance to avoid parallel-test races.
+    auto *info = ::testing::UnitTest::GetInstance()->current_test_info();
+    std::string name = std::string(info->test_case_name()) + "_" + info->name();
+    tmpPath = (std::filesystem::temp_directory_path() /
+               ("ps1_test_" + name + ".sav")).string();
   }
   void TearDown() override { std::remove(tmpPath.c_str()); }
 };

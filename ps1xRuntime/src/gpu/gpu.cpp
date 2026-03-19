@@ -34,6 +34,8 @@ void GPU::reset() {
   drawAreaX2_ = 1023;
   drawAreaY2_ = 511;
   ditherEnable_ = false;
+  displayModeSet_ = false;
+  displayAreaSet_ = false;
 
   displayVRAMXStart_ = 0;
   displayVRAMYStart_ = 0;
@@ -350,7 +352,31 @@ void GPU::writeGP1(uint32_t val) {
   uint32_t opcode = val >> 24;
   switch (opcode) {
   case 0x00: // Reset GPU
-    reset();
+    // Full hardware reset, but preserve display enable and area so we always
+    // get a picture. On real hardware the BIOS re-sends GP1(0x03/0x05/…) after
+    // reset; our HLE BIOS skips that, so the screen would go black otherwise.
+    {
+      uint32_t savedStat    = gpuStat_;
+      uint32_t savedX       = displayVRAMXStart_;
+      uint32_t savedY       = displayVRAMYStart_;
+      uint32_t savedX1      = displayX1_;
+      uint32_t savedX2      = displayX2_;
+      uint32_t savedY1      = displayY1_;
+      uint32_t savedY2      = displayY2_;
+      bool     savedModeSet = displayModeSet_;
+      bool     savedAreaSet = displayAreaSet_;
+      reset();
+      // Restore display pipeline state so the renderer keeps showing frames.
+      gpuStat_           = (gpuStat_ & ~(1u << 23)) | (savedStat & (1u << 23));
+      displayVRAMXStart_ = savedX;
+      displayVRAMYStart_ = savedY;
+      displayX1_         = savedX1;
+      displayX2_         = savedX2;
+      displayY1_         = savedY1;
+      displayY2_         = savedY2;
+      displayModeSet_    = savedModeSet;
+      displayAreaSet_    = savedAreaSet;
+    }
     break;
   case 0x01: // Reset Command Buffer
     commandQueue_.clear();
@@ -369,6 +395,7 @@ void GPU::writeGP1(uint32_t val) {
   case 0x05: // Start of Display Area (in VRAM)
     displayVRAMXStart_ = val & 0x3FF;
     displayVRAMYStart_ = (val >> 10) & 0x1FF;
+    displayAreaSet_ = true;
     { static int cnt=0; if(cnt++<20) fmt::print(stderr,"[GPU] GP1(0x05): display area -> ({},{})\n",
       displayVRAMXStart_, displayVRAMYStart_); }
     break;
@@ -390,6 +417,7 @@ void GPU::writeGP1(uint32_t val) {
     // Bit 7   Reverseflag (0=Normal, 1=Distorted)
     // We update GPUSTAT bits 17-19 (Hres), 20 (Vres), etc.
     gpuStat_ = (gpuStat_ & ~0x7F0000) | ((val & 0x7F) << 17);
+    displayModeSet_ = true;
     break;
   case 0x10: // Get GPU Info
   {

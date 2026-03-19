@@ -85,8 +85,8 @@ add_executable(ps1xRuntime_tests
 
 target_include_directories(ps1xRuntime_tests
     PRIVATE
-        ${CMAKE_SOURCE_DIR}/runtime/include
-        ${CMAKE_SOURCE_DIR}/runtime/src
+        ${CMAKE_SOURCE_DIR}/ps1xRuntime/include
+        ${CMAKE_SOURCE_DIR}/ps1xRuntime/src
 )
 
 target_link_libraries(ps1xRuntime_tests
