@@ -1,7 +1,11 @@
-# Build
+# Build artifacts
 build/
+build_*/
 cmake-build-*/
 .cache/
+
+# Generated file
+ps1xRuntime/src/recompiled_out.cpp
 
 # IDE
 .vscode/
@@ -26,3 +30,10 @@ test_roms/
 *.img
 *.cue
 *.ecm
+
+# Documentation (internal notes only)
+docs/
+
+# Python cache
+__pycache__/
+*.pyc

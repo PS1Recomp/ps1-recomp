@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "ps1-recomp": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "tools/ps1_mcp_server.py"
+      ]
+    },
+    "ghidra": {
+      "type": "sse",
+      "url": "http://localhost:8080/sse",
+      "_comment": "Start GhidraMCP plugin in Ghidra (port 8080). Load the PSX binary with ghidra_psx_ldr plugin. See: https://github.com/LaurieWired/GhidraMCP"
+    },
+    "pcsx-redux": {
+      "type": "sse",
+      "url": "http://localhost:8078/sse",
+      "_comment": "Start tools/pcsx_redux_mcp/server.py and load tools/pcsx_redux_mcp/startup.lua in PCSX-Redux Lua Console."
+    }
+  }
+}

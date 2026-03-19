@@ -21,9 +21,10 @@ cd_data_cb    = 0x801F99F8   # CD data callback function pointer
 cd_notify_cb  = 0x801F7D30   # CD notify callback function pointer
 
 # GPU HLE addresses
-gpu_swap_cb       = 0x801300AC  # PsyQ display swap callback
-gpu_drawsync_base = 0x801F5430  # BSS addr holding pointer to OT status array
-gpu_drawsync_count = 2          # Number of double-buffered OT entries
+gpu_swap_cb            = 0x801300AC  # PsyQ display swap callback
+gpu_drawsync_base      = 0x801F5430  # BSS addr holding pointer to OT status array
+gpu_drawsync_count     = 2           # Number of double-buffered OT entries
+gpu_drawsync_index_addr = 0x801CF518 # BSS addr holding current OT index (func_801AA484 r2)
 
 [disc]
 cue_path = "test_roms/Rayman/Rayman (USA).cue"
