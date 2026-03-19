@@ -51,9 +51,17 @@ target_link_libraries(ps1xRuntime_lib
 # )
 
 # ── Runtime Executable ──────────────────────────────────
+# Use the real recompiled game if available; fall back to stub for CI / tests.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/recompiled_out.cpp")
+    set(RECOMP_SRC src/recompiled_out.cpp)
+else()
+    set(RECOMP_SRC src/recompiled_out_stub.cpp)
+    message(STATUS "recompiled_out.cpp not found — using stub (CI/test build)")
+endif()
+
 add_executable(ps1xRuntime
     src/main_host.cpp
-    src/recompiled_out.cpp
+    ${RECOMP_SRC}
 )
 
 target_include_directories(ps1xRuntime
