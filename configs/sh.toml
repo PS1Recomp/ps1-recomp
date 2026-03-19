@@ -1,8 +1,0 @@
-# Silent Hill (USA)
-[game]
-name = "Silent Hill"
-serial = "SLUS-00707"
-
-[disc]
-cue_path = "test_roms/Silent Hill/Silent Hill (USA).cue"
-exe_path = "test_roms/Silent Hill/Silent Hill (USA).bin.boot.exe"

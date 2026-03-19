@@ -1,8 +1,0 @@
-# Crash Bandicoot (USA)
-[game]
-name = "Crash Bandicoot"
-serial = "SCUS-94900"
-
-[disc]
-cue_path = "test_roms/Crash Bandicoot /Crash Bandicoot (USA).cue"
-exe_path = "test_roms/Crash Bandicoot /Crash Bandicoot (USA).bin.boot.exe"

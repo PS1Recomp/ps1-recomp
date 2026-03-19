@@ -1,7 +1,0 @@
-# Spinning Cube Demo
-[game]
-name = "Spinning Cube Demo"
-serial = "DEMO"
-
-[disc]
-exe_path = "test_roms/example08_spinningCube.psexe"
