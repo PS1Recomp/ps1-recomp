@@ -1,12 +1,12 @@
-[submodule "lib/ELFIO"]
-	path = lib/ELFIO
+[submodule "third_party/ELFIO"]
+	path = third_party/ELFIO
 	url = https://github.com/serge1/ELFIO.git
-[submodule "lib/toml11"]
-	path = lib/toml11
+[submodule "third_party/toml11"]
+	path = third_party/toml11
 	url = https://github.com/ToruNiina/toml11.git
-[submodule "lib/fmt"]
-	path = lib/fmt
+[submodule "third_party/fmt"]
+	path = third_party/fmt
 	url = https://github.com/fmtlib/fmt.git
-[submodule "lib/googletest"]
-	path = lib/googletest
+[submodule "third_party/googletest"]
+	path = third_party/googletest
 	url = https://github.com/google/googletest.git

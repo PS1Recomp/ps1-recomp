@@ -6,9 +6,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Third-party libraries
-add_subdirectory(lib/ELFIO)
-add_subdirectory(lib/toml11)
-add_subdirectory(lib/fmt)
+add_subdirectory(third_party/ELFIO)
+add_subdirectory(third_party/toml11)
+add_subdirectory(third_party/fmt)
 
 # Project components
 add_subdirectory(ps1xAnalyzer)
@@ -20,7 +20,7 @@ option(PS1RECOMP_BUILD_TESTS "Build tests" ON)
 if(PS1RECOMP_BUILD_TESTS)
     # GoogleTest — disable install to avoid polluting the project
     set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-    add_subdirectory(lib/googletest)
+    add_subdirectory(third_party/googletest)
     include(GoogleTest)
     enable_testing()
     add_subdirectory(ps1xTest)
