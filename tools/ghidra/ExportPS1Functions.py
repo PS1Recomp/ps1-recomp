@@ -1,7 +1,7 @@
 # ExportPS1Functions.py — Ghidra Script
 #
 # Exports all non-thunk functions from a PS1 binary loaded in Ghidra to a CSV
-# file that ps1xAnalyzer can consume to skip its own function-boundary detection.
+# file that ps1Analyzer can consume to skip its own function-boundary detection.
 #
 # Usage (Ghidra Script Manager):
 #   1. Load your PS1 EXE / BIN in Ghidra and run auto-analysis.

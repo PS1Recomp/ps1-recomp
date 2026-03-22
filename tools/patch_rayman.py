@@ -25,7 +25,7 @@ import sys
 import re
 
 SRC = "build/rayman_recompiled.cpp"
-DST = "ps1xRuntime/src/recompiled_out.cpp"
+DST = "ps1Runtime/src/recompiled_out.cpp"
 
 print(f"Reading {SRC}...")
 with open(SRC, "r") as f:

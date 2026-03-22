@@ -24,10 +24,10 @@ from typing import Optional
 from mcp.server.fastmcp import FastMCP
 
 PROJECT_ROOT   = Path(__file__).parent.parent
-RUNTIME_BIN    = PROJECT_ROOT / "build" / "runtime" / "ps1xRuntime"
+RUNTIME_BIN    = PROJECT_ROOT / "build" / "ps1Runtime" / "ps1Runtime"
 CONFIG_DIR     = PROJECT_ROOT / "configs"
 TOOLS_DIR      = PROJECT_ROOT / "tools"
-RECOMPILED_SRC = PROJECT_ROOT / "runtime" / "src" / "recompiled_out.cpp"
+RECOMPILED_SRC = PROJECT_ROOT / "ps1Runtime" / "src" / "recompiled_out.cpp"
 
 mcp = FastMCP("ps1-recomp")
 
@@ -188,7 +188,16 @@ def _run_game(config: str, duration: int, bios_debug: bool) -> dict:
         return {"error": f"Config not found: {config_path}"}
 
     env = os.environ.copy()
-    env["DISPLAY"] = env.get("DISPLAY", ":1")
+    # Use Wayland if the compositor socket exists, else fall back to X11 at :1.
+    # SDL_AUDIODRIVER=dummy avoids blocking on audio init in headless envs.
+    import os as _os
+    wayland_sock = f"/run/user/{_os.getuid()}/wayland-1"
+    if _os.path.exists(wayland_sock):
+        env["WAYLAND_DISPLAY"] = "wayland-1"
+        env["SDL_VIDEODRIVER"] = "wayland"
+    else:
+        env.setdefault("DISPLAY", ":1")
+    env["SDL_AUDIODRIVER"] = "dummy"
     if bios_debug:
         env["PS1_BIOS_DEBUG"] = "1"
 
@@ -278,7 +287,7 @@ def build(target: str = "") -> str:
     """
     Build the project with cmake.
 
-    target: optional cmake target (e.g. "ps1xRuntime_tests"). Empty = build all.
+    target: optional cmake target (e.g. "ps1Runtime_tests"). Empty = build all.
     Returns stdout+stderr of the build command.
     """
     cmd = ["cmake", "--build", "build", f"-j{os.cpu_count() or 4}"]

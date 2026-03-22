@@ -24,7 +24,7 @@ import signal
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
-RUNTIME_BIN  = PROJECT_ROOT / "build" / "runtime" / "ps1xRuntime"
+RUNTIME_BIN  = PROJECT_ROOT / "build" / "runtime" / "ps1Runtime"
 CONFIG       = PROJECT_ROOT / "configs" / "rayman.toml"
 
 # ─── VRAM analysis ──────────────────────────────────────────────────────────
@@ -128,7 +128,7 @@ def parse_log(stdout: str, stderr: str) -> dict:
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="Run ps1xRuntime and report game state")
+    parser = argparse.ArgumentParser(description="Run ps1Runtime and report game state")
     parser.add_argument("--duration", type=int, default=15,
                         help="Seconds to run the game (default 15)")
     parser.add_argument("--output", type=str, default=None,
