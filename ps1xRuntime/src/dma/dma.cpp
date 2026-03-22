@@ -24,6 +24,13 @@ void DMA::writeRegister(uint32_t addr, uint32_t val) {
 
   // DPCR / DICR
   if (offset == 0x70) {
+    // On real PS1, the BIOS pre-enables GPU (Ch2) and OTC (Ch6) during init.
+    // Our BIOS HLE does not call the real BIOS init path, so games that write
+    // DPCR expecting those channels to already be enabled (e.g. for MDEC-only
+    // init during FMV) would inadvertently disable GPU DMA.
+    // Force the GPU (bit 11) and OTC (bit 27) enable bits to remain set.
+    val |= (1u << 11); // Ch2 GPU — always enabled
+    val |= (1u << 27); // Ch6 OTC — always enabled
     dpcr_ = val;
     return;
   }

@@ -3,6 +3,7 @@
 #include "runtime/gpu/gpu.h"
 #include "runtime/input/input.h"
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <fmt/format.h>
@@ -41,16 +42,23 @@ Bios::Bios(recomp_context &ctx, cdrom::VirtualFs &fs, Memory &mem)
   // Reset syscall and handlers
   // In a real PS1, vectors are at 0x80000080
 
-  // Set up dummy B0 and C0 tables at the end of RAM (2MB limit)
-  // B0 table size: ~0x60 entries * 4 bytes = 0x180 bytes
-  // C0 table size: ~0x20 entries * 4 bytes = 0x80 bytes
+  // Set up A0, B0, and C0 sentinel tables at the end of RAM (2MB limit).
+  // When a game reads GetXTable()[i] and does `jalr $v0`, $v0 will contain
+  // the sentinel 0x0000X0xx, which recomp_dispatch() maps to the BIOS handler.
+  // This covers both direct BIOS calls and indirect calls through stored table
+  // pointers (used by some games like Tomba that cache table pointers in BSS).
+  //
+  // Layout (growing downward from end of RAM):
+  //   A0 table: 0xC0 entries * 4 = 0x300 bytes  → starts at 0x801FFD00
+  //   B0 table: 0x60 entries * 4 = 0x180 bytes  → starts at 0x801FFE00 (was -0x200)
+  //   C0 table: 0x20 entries * 4 = 0x080 bytes  → starts at 0x801FFF80
+  uint32_t a0Addr = 0x80000000 + (2 * 1024 * 1024) - 0x500; // 0x801FFB00
   uint32_t b0Addr = 0x80000000 + (2 * 1024 * 1024) - 0x200; // 0x801FFE00
   uint32_t c0Addr = b0Addr + 0x180;                         // 0x801FFF80
 
-  // Fill tables with SENTINEL addresses that recomp_dispatch() recognizes.
-  // When a game reads GetB0Table()[i] and does `jalr $v0`, $v0 will contain
-  // the sentinel 0x0000B0xx, which dispatch maps to BIOS B0 function xx.
-  // This replaces the old JR RA approach which broke indirect calls.
+  for (int i = 0; i < 0xC0; i++) {
+    mem.write32(a0Addr + i * 4, 0x0000A000 + i); // Sentinel for A0:i
+  }
   for (int i = 0; i < 0x60; i++) {
     mem.write32(b0Addr + i * 4, 0x0000B000 + i); // Sentinel for B0:i
   }
@@ -58,8 +66,9 @@ Bios::Bios(recomp_context &ctx, cdrom::VirtualFs &fs, Memory &mem)
     mem.write32(c0Addr + i * 4, 0x0000C000 + i); // Sentinel for C0:i
   }
 
-  // Store the table pointers somewhere the BIOS can return them
-  ctx_.r[K0] = b0Addr; // Custom scratchpad storage
+  // Store the table pointers where BIOS calls can return them.
+  // K0/K1 are kernel-reserved registers; the game must not rely on them.
+  ctx_.r[K0] = b0Addr;
   ctx_.r[K1] = c0Addr;
 }
 
@@ -534,22 +543,35 @@ void Bios::handleA0(uint32_t index) {
   case 0xAC: { // _96_CdGetStatus — send GetStat to query disc/drive state
     // PsyQ CdInit calls this after _96_CdInitSubFunc to probe disc presence.
     // On real HW: sends GetStat(0x01), which fires INT3(Ack) with status byte.
-    // The CdInit polling loop waits for testEvent(0) [spec=0x0004 = INT3] to fire.
-    BIOS_LOG("[BIOS] _96_CdGetStatus() — sending GetStat to confirm disc\n");
+    // We deliver INT3 synchronously and cancel the controller's pending response
+    // to prevent double-interrupt for games using SetCustomExitFromException.
+    BIOS_LOG("[BIOS] _96_CdGetStatus() — HLE GetStat (synchronous)\n");
     if (cdrom_) {
       cdrom_->writeRegister(0x1F801800, 0);    // index = 0
       cdrom_->writeRegister(0x1F801801, 0x01); // GetStat
+      cdrom_->cancelPendingInterrupt();
     }
+    triggerCdromEvent(3); // INT3 Ack → disc-present status
     ctx_.r[V0] = 0;
     break;
   }
 
   case 0xAD: { // _96_CdReset — send CdlInit (hardware reset)
-    BIOS_LOG("[BIOS] _96_CdReset() — sending CdlInit via CDROM controller\n");
+    BIOS_LOG("[BIOS] _96_CdReset() — HLE CdlInit (synchronous)\n");
+    // Initialize the CDROM controller state without queuing an async response.
+    // We deliver INT3+INT2 synchronously below, so we DON'T want the controller
+    // to fire its own deferred INT3+INT2 later (that would cause double-events,
+    // disrupting games that use SetCustomExitFromException for CD interrupts).
     if (cdrom_) {
       cdrom_->writeRegister(0x1F801800, 0);    // index = 0
-      cdrom_->writeRegister(0x1F801801, 0x0A); // CdlInit
+      cdrom_->writeRegister(0x1F801801, 0x0A); // CdlInit → sets controller state
+      // Discard the queued response so tick() doesn't fire a duplicate event.
+      cdrom_->cancelPendingInterrupt();
     }
+    // Fire INT3+INT2 immediately on the game thread so CdSync/testEvent/
+    // SetCustomExitFromException handlers see the response right away.
+    triggerCdromEvent(3); // INT3 Ack      → cdSyncByte = 2
+    triggerCdromEvent(2); // INT2 Complete → cdSyncByte = 2
     ctx_.r[V0] = 0; // success
     break;
   }
@@ -890,43 +912,25 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
     // in waitingForAck state so tick() won't generate more INT1s.
   }
 
-  // ── Dispatch CustomExceptionExit if registered ──
-  // Games like Silent Hill register a custom interrupt handler instead of
-  // SysEnqIntRP to process CDROM state directly. If such a handler exists,
-  // invoke it so the game logic can run and update PsyQ variables naturally.
-  if (customExceptionExit_ != 0) {
-    BIOS_LOG("[CDROM-HLE] Executing custom exception handler jump to 0x{:08X}\n",
-             customExceptionExit_);
-
-    // The "handler" is actually a jmp_buf address passed to
-    // SetCustomExitFromException. The game expects the BIOS exception
-    // dispatcher to effectively execute a longjmp(buf, 1).
-    uint32_t buf = customExceptionExit_;
-
-    ctx_.r[31] = ctx_.mem->read32(buf + 0); // RA
-    ctx_.r[29] = ctx_.mem->read32(buf + 4); // SP
-    ctx_.r[30] = ctx_.mem->read32(buf + 8); // FP
-    for (int i = 0; i < 8; i++) {
-      ctx_.r[16 + i] = ctx_.mem->read32(buf + 12 + (i * 4)); // S0-S7
+  // ── Update internal generic CD state ──────────────────────────────────
+  //
+  // Always update BEFORE dispatching the longjmp or event, so that any
+  // handler (custom exit or standard event) sees the updated state.
+  {
+    std::lock_guard<std::mutex> lk(cdInternalMtx_);
+    switch (cdIntType) {
+    case 1: cdReadyInternal_.store(1, std::memory_order_relaxed); break;
+    case 2: cdSyncInternal_.store(2, std::memory_order_relaxed);  break;
+    case 3: cdSyncInternal_.store(2, std::memory_order_relaxed);  break; // mapped
+    case 4: cdReadyInternal_.store(4, std::memory_order_relaxed); break;
+    case 5:
+      cdSyncInternal_.store(5, std::memory_order_relaxed);
+      cdReadyInternal_.store(5, std::memory_order_relaxed);
+      break;
+    default: break;
     }
-    ctx_.r[28] = ctx_.mem->read32(buf + 44); // GP
-
-    // Cause register: Int bit 2 corresponds to hardware interrupts (as seen
-    // from typical HLE)
-    ctx_.cop0[13] = 0x400;
-
-    // Do the jump!
-    ctx_.pc = ctx_.r[31];
-    ctx_.r[V0] = 1; // setjmp returns 1 on longjmp
-
-    // Emulate ReturnFromException characteristics by clearing exception bits
-    uint32_t sr = ctx_.cop0[12];
-    ctx_.cop0[12] = (sr & ~0xF) | ((sr >> 2) & 0xF);
-
-    // Return early: We performed a direct jump, we don't want to fall through
-    // to the standard PsyQ event dispatcher because the game handles it!
-    return;
   }
+  cdInternalCv_.notify_all();
 
   // PsyQ interrupt handler mapping (as implemented by the game's own IRQ
   // chain):
@@ -946,6 +950,10 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   //
   // NOTE: For INT1, the ready byte is written AFTER the sector copy above
   // completes, so the game thread sees data before the signal.
+  //
+  // NOTE: These writes happen BEFORE the customExceptionExit_ dispatch so
+  // that the game's longjmp handler can read them to determine which
+  // interrupt arrived (games like Tomba use both mechanisms together).
   //
   switch (cdIntType) {
   case 1: // DataReady → readyByte only
@@ -983,6 +991,37 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
     ctx_.mem->write16(PSYQ_CD_STATUS_HW, 0x0002);
   }
 
+  // ── Dispatch CustomExceptionExit if registered ──
+  // Games like Tomba register a jmp_buf via B0:0x19 (SetCustomExitFromException)
+  // and expect the BIOS exception dispatcher to longjmp(buf, 1) on any CD IRQ.
+  // BSS state bytes are already written above so the handler can read them.
+  if (customExceptionExit_ != 0) {
+    uint32_t buf = customExceptionExit_;
+    uint32_t jmpRA = ctx_.mem->read32(buf + 0);
+    BIOS_LOG("[CDROM-HLE] Executing custom exception handler buf=0x{:08X} -> RA=0x{:08X}\n",
+             buf, jmpRA);
+
+    ctx_.r[31] = jmpRA; // RA
+    ctx_.r[29] = ctx_.mem->read32(buf + 4); // SP
+    ctx_.r[30] = ctx_.mem->read32(buf + 8); // FP
+    for (int i = 0; i < 8; i++) {
+      ctx_.r[16 + i] = ctx_.mem->read32(buf + 12 + (i * 4)); // S0-S7
+    }
+    ctx_.r[28] = ctx_.mem->read32(buf + 44); // GP
+
+    ctx_.cop0[13] = 0x400;
+
+    ctx_.pc = ctx_.r[31];
+    ctx_.r[V0] = 1; // setjmp returns 1 on longjmp
+
+    // Emulate ReturnFromException: clear exception bits in SR
+    uint32_t sr = ctx_.cop0[12];
+    ctx_.cop0[12] = (sr & ~0xF) | ((sr >> 2) & 0xF);
+
+    // Return early: game handles the event via its own longjmp handler
+    return;
+  }
+
   eventSystem_.triggerEvent(CDROM_EVENT_CLASS_1, spec);
   eventSystem_.triggerEvent(CDROM_EVENT_CLASS_2, spec);
 }
@@ -997,9 +1036,45 @@ void Bios::triggerVBlankEvent() {
   //
   // The address varies per game (PsyQ version / link layout).
   //
+  // ── Increment internal generic VBlank counter ──────────────────────────
+  {
+    std::lock_guard<std::mutex> lk(vblankMtx_);
+    vblankInternal_.fetch_add(1, std::memory_order_relaxed);
+  }
+  vblankCv_.notify_all();
+
+  // ── Increment per-game PsyQ VBlank BSS counter (if configured) ─────────
   if (psyq_.vblankCounter != 0) {
     uint32_t cnt = ctx_.mem->read32(psyq_.vblankCounter);
     ctx_.mem->write32(psyq_.vblankCounter, cnt + 1);
+  }
+
+  // ── Fire CustomExceptionExit on VBlank (matches real PS1 behavior) ────────
+  //
+  // On a real PS1, B0:0x19 (SetCustomExitFromException) installs a jmpbuf
+  // that is triggered by ANY hardware exception, including VBlank.
+  // Games like Tomba! use this to implement CD command polling: they
+  // setjmp, send a CD command, and wait — the VBlank (or CD INT) fires
+  // the longjmp which breaks them out of the wait loop.
+  //
+  if (customExceptionExit_ != 0) {
+    uint32_t buf = customExceptionExit_;
+    uint32_t jmpRA = ctx_.mem->read32(buf + 0);
+    BIOS_LOG("[VBLANK-HLE] CustomExitFromException buf=0x{:08X} -> RA=0x{:08X}\n",
+             buf, jmpRA);
+    ctx_.r[31] = jmpRA;                                       // RA
+    ctx_.r[29] = ctx_.mem->read32(buf + 4);                   // SP
+    ctx_.r[30] = ctx_.mem->read32(buf + 8);                   // FP
+    for (int i = 0; i < 8; i++) {
+      ctx_.r[16 + i] = ctx_.mem->read32(buf + 12 + (i * 4)); // S0-S7
+    }
+    ctx_.r[28] = ctx_.mem->read32(buf + 44);                  // GP
+    ctx_.cop0[13] = 0x400;
+    ctx_.pc = ctx_.r[31];
+    ctx_.r[V0] = 1; // setjmp returns 1 on longjmp
+    uint32_t sr = ctx_.cop0[12];
+    ctx_.cop0[12] = (sr & ~0xF) | ((sr >> 2) & 0xF);
+    return; // game handles it via its longjmp handler; skip standard events
   }
 
   // ── Deliver ALL standard PsyQ events that should fire each frame ──
@@ -1345,6 +1420,51 @@ void Bios::updatePadBuffers() {
 
   writePadBuffer(padBuf1Addr_, padBuf1Size_, 0);
   writePadBuffer(padBuf2Addr_, padBuf2Size_, 1);
+}
+
+// ── Generic internal-state blocking helpers ───────────────────────────────────
+
+uint32_t Bios::waitVSync(uint32_t frames) {
+  uint32_t start = vblankInternal_.load(std::memory_order_acquire);
+  uint32_t target = start + (frames == 0 ? 1 : frames);
+  std::unique_lock<std::mutex> lk(vblankMtx_);
+  vblankCv_.wait(lk, [&] {
+    return vblankInternal_.load(std::memory_order_relaxed) >= target;
+  });
+  return vblankInternal_.load(std::memory_order_relaxed);
+}
+
+uint8_t Bios::waitForCdSync(int timeoutMs) {
+  // Clear sync state so we wait for the NEXT completion event.
+  {
+    std::lock_guard<std::mutex> lk(cdInternalMtx_);
+    cdSyncInternal_.store(0, std::memory_order_relaxed);
+  }
+  std::unique_lock<std::mutex> lk(cdInternalMtx_);
+  bool signalled = cdInternalCv_.wait_for(
+      lk, std::chrono::milliseconds(timeoutMs), [&] {
+        uint8_t v = cdSyncInternal_.load(std::memory_order_relaxed);
+        return v != 0;
+      });
+  if (!signalled)
+    return 0; // timeout
+  return cdSyncInternal_.load(std::memory_order_relaxed);
+}
+
+uint8_t Bios::waitForCdReady(int timeoutMs) {
+  {
+    std::lock_guard<std::mutex> lk(cdInternalMtx_);
+    cdReadyInternal_.store(0, std::memory_order_relaxed);
+  }
+  std::unique_lock<std::mutex> lk(cdInternalMtx_);
+  bool signalled = cdInternalCv_.wait_for(
+      lk, std::chrono::milliseconds(timeoutMs), [&] {
+        uint8_t v = cdReadyInternal_.load(std::memory_order_relaxed);
+        return v != 0;
+      });
+  if (!signalled)
+    return 0;
+  return cdReadyInternal_.load(std::memory_order_relaxed);
 }
 
 } // namespace ps1::bios

@@ -36,31 +36,28 @@ static inline void drainOnce() {
 //
 void hle_VSync(recomp_context *ctx) {
   int32_t n = static_cast<int32_t>(ctx->r[A0]);
+  uint32_t frames = (n <= 0) ? 1u : static_cast<uint32_t>(n);
 
+  // Prefer the generic condition-variable path (game-agnostic, no BSS needed).
+  if (g_cfg.waitVSync) {
+    ctx->r[V0] = g_cfg.waitVSync(frames);
+    return;
+  }
+
+  // Fallback: poll the per-game BSS vblankCounter (legacy path).
   if (g_cfg.vblankCounter == 0) {
-    // No counter configured — just yield and return 0
     drainOnce();
     ctx->r[V0] = 0;
     return;
   }
 
   uint32_t start = readVBlankCount(ctx);
-
-  if (n <= 0) {
-    // Wait for at least one VBlank tick
-    uint32_t target = start + 1;
-    int safety = 0;
-    while (readVBlankCount(ctx) < target && safety < 10000) {
-      drainOnce();
-      ++safety;
-    }
-  } else {
-    uint32_t target = start + static_cast<uint32_t>(n);
-    int safety = 0;
-    while (readVBlankCount(ctx) < target && safety < 100000) {
-      drainOnce();
-      ++safety;
-    }
+  uint32_t target = start + frames;
+  int safety = 0;
+  int safetyLimit = (frames <= 1) ? 10000 : 100000;
+  while (readVBlankCount(ctx) < target && safety < safetyLimit) {
+    drainOnce();
+    ++safety;
   }
 
   ctx->r[V0] = readVBlankCount(ctx);

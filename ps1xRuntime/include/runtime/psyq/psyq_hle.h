@@ -31,6 +31,22 @@ struct HleConfig {
 
   /// GPU control port (GP1) write — used by PutDispEnv.
   std::function<void(uint32_t)> writeGP1;
+
+  // ── Generic internal-state callbacks (game-agnostic) ──
+  //
+  // These replace per-game BSS address polling.  Wire to Bios methods in
+  // main_host.cpp so HLE stubs can block without per-game configuration.
+
+  /// Block until `frames` more VBlanks have fired. Returns new VBlank count.
+  std::function<uint32_t(uint32_t frames)> waitVSync;
+
+  /// Block until a CD command completes (INT2/INT3). Returns 2 on success,
+  /// 5 on disk error, 0 on timeout.
+  std::function<uint8_t(int timeoutMs)> waitForCdSync;
+
+  /// Block until CD data is ready (INT1/INT4). Returns 1/4 on success,
+  /// 5 on error, 0 on timeout.
+  std::function<uint8_t(int timeoutMs)> waitForCdReady;
 };
 
 /// Configure the HLE layer for the current game.  Call from Bios or main_host

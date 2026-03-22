@@ -275,18 +275,16 @@ int main(int argc, char *argv[]) {
     readEnvHex("PSYQ_GPU_DRAWSYNC_COUNT", addrs.gpuDrawSyncCount);
     readEnvHex("PSYQ_GPU_DRAWSYNC_INDEX_ADDR", addrs.gpuDrawSyncIndexAddr);
 
-    // 3. Warn if critical addresses are not configured
+    // 3. Info if optional addresses are not configured (no longer fatal —
+    //    generic internal-state machinery handles VSync and CD sync).
     if (addrs.vblankCounter == 0)
-      fmt::print(
-          stderr,
-          "[WARN] vsync_counter not set — VSync polling will not work\n");
+      fmt::print("[INFO] vsync_counter not set — using generic VBlank cv\n");
     if (addrs.cdSyncByte == 0 || addrs.cdReadyByte == 0)
-      fmt::print(stderr, "[WARN] cd_sync_byte / cd_ready_byte not set — CD "
-                         "commands may hang\n");
+      fmt::print("[INFO] cd_sync_byte / cd_ready_byte not set — using "
+                 "generic CD state machine\n");
     if (addrs.gpuDrawSyncBase == 0)
-      fmt::print(
-          stderr,
-          "[WARN] gpu_drawsync_base not set — DrawSync polling will block\n");
+      fmt::print("[INFO] gpu_drawsync_base not set — DrawSync returns 0 "
+                 "(GPU is synchronous)\n");
 
     bios.setPsyqAddresses(addrs);
 
@@ -300,6 +298,10 @@ int main(int argc, char *argv[]) {
     hleCfg.drainCallbacks   = [&bios]() { bios.drainPendingCallbacks(); };
     hleCfg.writeGP0         = [&gpu](uint32_t w) { gpu.writeGP0(w); };
     hleCfg.writeGP1         = [&gpu](uint32_t w) { gpu.writeGP1(w); };
+    // Generic internal-state callbacks — game-agnostic, no BSS addresses needed
+    hleCfg.waitVSync        = [&bios](uint32_t frames) { return bios.waitVSync(frames); };
+    hleCfg.waitForCdSync    = [&bios](int ms) { return bios.waitForCdSync(ms); };
+    hleCfg.waitForCdReady   = [&bios](int ms) { return bios.waitForCdReady(ms); };
     ps1::psyq::configure(hleCfg);
 
     fmt::print("[CONFIG] PsyQ addresses configured\n");

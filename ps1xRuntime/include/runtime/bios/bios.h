@@ -7,9 +7,11 @@
 #include "runtime/cpu_context.h"
 #include "runtime/memory.h"
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <mutex>
 
 namespace ps1::gpu {
 class GPU;
@@ -79,6 +81,29 @@ public:
   // Trigger VBlank event in the event system.
   void triggerVBlankEvent();
 
+  // ── Generic internal-state accessors (game-agnostic) ──
+  //
+  // These let psyq_hle functions (VSync, CdSync) block on the runtime's
+  // internal counter/state instead of polling per-game BSS addresses.
+  //
+  // waitVSync: blocks until `frames` more VBlanks have been delivered.
+  //   Returns the new internal VBlank count.
+  uint32_t waitVSync(uint32_t frames = 1);
+
+  // waitForCdSync: blocks until a CD command completes (INT2/INT3) or
+  //   a disk error (INT5) occurs.  Returns the sync state byte (2 or 5).
+  //   Times out after `timeoutMs` ms and returns 0.
+  uint8_t waitForCdSync(int timeoutMs = 5000);
+
+  // waitForCdReady: blocks until CD data is ready (INT1/INT4) or error.
+  //   Returns the ready state byte (1, 4, or 5).  Times out → 0.
+  uint8_t waitForCdReady(int timeoutMs = 5000);
+
+  // Current internal VBlank counter (monotonically increasing).
+  uint32_t vblankCount() const {
+    return vblankInternal_.load(std::memory_order_acquire);
+  }
+
   // Drain pending event callbacks — called from game thread at yield points
   // (testEvent, waitEvent, VSync, etc.) to safely dispatch mode-0x1000
   // handlers.
@@ -106,6 +131,27 @@ private:
   // Simulates the SysEnqIntRP interrupt handler chain that never runs in our
   // recompiled environment.  Stores the INT type (1-5) or 0 if nothing pending.
   std::atomic<uint8_t> cdIntPending_{0};
+
+  // ── Internal generic state (game-agnostic) ─────────────────────────────
+  //
+  // These replace the need for per-game BSS address configuration.
+  // triggerCdromEvent() and triggerVBlankEvent() always update them so that
+  // HLE functions (waitForCdSync, waitVSync) can block without knowing
+  // game-specific memory addresses.
+
+  // CD sync state: mirrors the value the PsyQ interrupt handler would write
+  // to cdSyncByte.  0 = pending, 2 = complete (INT2/INT3), 5 = error (INT5).
+  std::atomic<uint8_t> cdSyncInternal_{0};
+  // CD ready state: mirrors the value written to cdReadyByte.
+  // 0 = pending, 1 = data ready (INT1), 4 = data end (INT4), 5 = error.
+  std::atomic<uint8_t> cdReadyInternal_{0};
+  std::mutex cdInternalMtx_;
+  std::condition_variable cdInternalCv_;
+
+  // VBlank counter — incremented by triggerVBlankEvent() every frame.
+  std::atomic<uint32_t> vblankInternal_{0};
+  std::mutex vblankMtx_;
+  std::condition_variable vblankCv_;
 
   // Per-game PsyQ BSS addresses
   PsyqAddresses psyq_;

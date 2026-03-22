@@ -91,6 +91,18 @@ public:
   // Exposed publicly so the BIOS watchpoint can fire it from the game thread.
   void fireSecondaryNow();
 
+  // Discard any pending primary+secondary interrupt without delivering it.
+  // Used when the BIOS HLE has already delivered the interrupt synchronously
+  // so the controller's own async response doesn't cause a duplicate event.
+  void cancelPendingInterrupt() {
+    interruptFlag_ = 0;
+    hasSecondaryResponse_ = false;
+    secondaryResponseDelay_ = 0;
+    commandPending_ = false;
+    pendingCommand_ = 0;
+    responseFifo_.clear();
+  }
+
 private:
   // ─── State ──────────────────────
   CdromState state_ = CdromState::Idle;
