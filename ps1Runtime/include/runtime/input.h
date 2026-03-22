@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — Input Stub
+// ps1Runtime — Input Stub
 // PS1 Controller/Memory Card (SIO port)
 // This is a stub for future incremental implementation.
 

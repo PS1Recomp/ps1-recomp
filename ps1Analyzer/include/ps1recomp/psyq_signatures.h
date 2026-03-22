@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xAnalyzer — PsyQ Signature Matcher
+// ps1Analyzer — PsyQ Signature Matcher
 // Identifies known PsyQ SDK functions for stub generation
 
 #include <cstdint>

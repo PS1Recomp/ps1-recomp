@@ -10,46 +10,58 @@ PS1Recomp converts PS1 game binaries into native PC executables through static r
 PS1 ISO/BIN
     │
     ▼
-ps1xAnalyzer  →  game_config.toml   (function boundaries, PsyQ addresses)
+ps1Analyzer  →  game_config.toml   (function boundaries, PsyQ addresses)
     │
     ▼
-ps1xRecomp    →  recompiled_out.cpp  (MIPS → C++, ~150k lines per game)
+ps1Recomp    →  recompiled_out.cpp  (MIPS → C++, ~150k lines per game)
     │
     ▼
 patch_rayman.py → recompiled_out.cpp (HLE patches for middleware functions)
     │
     ▼
-ps1xRuntime   →  Native PC executable (SDL2 + OpenGL)
+ps1Runtime   →  Native PC executable (SDL2 + OpenGL)
 ```
 
 ## Architecture
 
 | Component | Directory | Description |
 |-----------|-----------|-------------|
-| **ps1xAnalyzer** | `ps1xAnalyzer/` | Parses PS1 ELF/BIN, detects function boundaries, identifies PsyQ SDK signatures, generates TOML config |
-| **ps1xRecomp** | `ps1xRecomp/` | Decodes MIPS R3000A instructions and emits literal C++ translation (1:1 per instruction), handles GTE coprocessor and jump tables |
-| **ps1xRuntime** | `ps1xRuntime/` | Simulates PS1 hardware: BIOS HLE, GPU (OpenGL 3.3), SPU (SDL2 audio), CD-ROM, DMA, GTE, MDEC, Timers, Input |
-| **ps1xTest** | `ps1xTest/` | 365 unit + integration tests covering all runtime subsystems |
+| **ps1Analyzer** | `ps1Analyzer/` | Parses PS1 ELF/BIN, detects function boundaries, identifies PsyQ SDK signatures, generates TOML config |
+| **ps1Recomp** | `ps1Recomp/` | Decodes MIPS R3000A instructions and emits literal C++ translation (1:1 per instruction), handles GTE coprocessor and jump tables |
+| **ps1Runtime** | `ps1Runtime/` | Simulates PS1 hardware: BIOS HLE, GPU (OpenGL 3.3), SPU (SDL2 audio), CD-ROM, DMA, GTE, MDEC, Timers, Input |
+| **ps1Interface** | `ps1Interface/` | GUI studio for loading ELFs, exploring functions, editing configs, and previewing recompiled C++ (ImGui + SDL2) |
+| **ps1Test** | `ps1Test/` | 386 unit + integration tests covering all runtime subsystems |
 
 ## Project Structure
 
 ```
 ps1-recomp/
-├── ps1xAnalyzer/      ELF parser, function finder, PsyQ signature DB, disc reader
-├── ps1xRecomp/        MIPS decoder, C++ emitter, GTE emitter, overlay handler
-├── ps1xRuntime/       Full PS1 hardware simulation + SDL2/OpenGL host
+├── ps1Analyzer/       ELF parser, function finder, PsyQ signature DB, disc reader
+├── ps1Recomp/         MIPS decoder, C++ emitter, GTE emitter, overlay handler
+├── ps1Runtime/        Full PS1 hardware simulation + SDL2/OpenGL host
 │   └── src/
 │       ├── bios/      BIOS HLE (syscall tables A/B/C, heap, events, file I/O)
 │       ├── cdrom/     CD-ROM emulation (ISO 9660, CUE/BIN, virtual FS)
 │       ├── gpu/       GPU state machine + OpenGL renderer
 │       ├── spu/       Sound Processing Unit (24-voice ADPCM)
 │       ├── mdec/      Motion Picture Decoder (FMV video)
-│       ├── dma/       DMA controllers (Ch0–Ch3)
+│       ├── dma/       DMA controllers (Ch0–Ch6)
 │       ├── timers/    Hardware timers
 │       ├── psyq/      PsyQ middleware HLE (VSync, DrawSync, DrawOTag, etc.)
 │       └── main_host.cpp  SDL2 host: game loop, input, VBlank thread
-├── ps1xTest/          Unit tests (GTest): 365 tests across all subsystems
-├── third_party/       External dependencies: ELFIO, toml11, fmt, googletest (git submodules)
+├── ps1Interface/      GUI studio (ImGui docking): ELF explorer, function inspector,
+│   │                  C++ preview, config editor, Ghidra CSV import
+│   ├── include/
+│   │   ├── StudioState.hpp    Async state management (analysis, config, exports)
+│   │   ├── GUI.hpp            4 dockable panels + menu bar
+│   │   └── ui/StyleManager.hpp  Dark/Light/Custom themes and font scaling
+│   └── src/
+│       ├── main.cpp           SDL2 + OpenGL3 entry point with ImGui docking
+│       ├── StudioState.cpp    ps1Analyzer backend integration
+│       ├── GUI.cpp            Panel rendering and keyboard shortcuts
+│       └── ui/StyleManager.cpp
+├── ps1Test/           Unit tests (GTest): 386 tests across all subsystems
+├── third_party/       External dependencies: ELFIO, toml11, fmt, googletest
 ├── tools/
 │   ├── patch_rayman.py        Game-specific HLE patches (applied after recompilation)
 │   ├── ps1_mcp_server.py      MCP server for AI-assisted debugging (13 tools)
@@ -86,6 +98,14 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 ```
 
+### Build with GUI Studio (optional)
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DPS1RECOMP_BUILD_INTERFACE=ON
+cmake --build build -j$(nproc)
+./build/ps1Interface/ps1Interface
+```
+
 ### Run Tests
 
 ```bash
@@ -94,57 +114,76 @@ ctest --test-dir build --output-on-failure -j$(nproc)
 
 ## Running a Game (Rayman example)
 
-1. Place the game disc image in `test_roms/`:
+> **Note:** Game disc images (ROMs/ISOs) are not included in this repository for legal
+> reasons. You need your own legal copy of the game. The disc path is configured per-game
+> and can point to **any folder on your system** — there is no required directory name.
+
+1. Place your disc image anywhere and note the path:
    ```
-   test_roms/Rayman/Rayman (USA).cue
-   test_roms/Rayman/Rayman (USA) (Track 01).bin
+   # Example paths — use whatever works for you:
+   /home/user/games/Rayman (USA).cue
+   ~/roms/Rayman (USA).cue
+   ./my_games/Rayman (USA).cue
    ```
 
 2. Analyze the binary and generate config:
    ```bash
-   ./build/ps1xAnalyzer/ps1xAnalyzer test_roms/Rayman/Rayman\ \(USA\)\ \(Track\ 01\).bin.boot.exe rayman_config.toml
+   ./build/ps1Analyzer/ps1Analyzer "/path/to/Rayman (USA) (Track 01).bin.boot.exe" rayman_config.toml
    ```
 
-3. Recompile MIPS → C++:
+3. Edit `rayman_config.toml` to set your disc path:
+   ```toml
+   [disc]
+   cue_path = "/path/to/Rayman (USA).cue"
+   ```
+
+4. Recompile MIPS → C++:
    ```bash
-   ./build/ps1xRecomp/ps1xRecomp rayman_config.toml ps1xRuntime/src/recompiled_out.cpp
+   ./build/ps1Recomp/ps1Recomp rayman_config.toml ps1Runtime/src/recompiled_out.cpp
    ```
 
-4. Apply HLE patches:
+5. Apply HLE patches:
    ```bash
    python3 tools/patch_rayman.py
    ```
 
-5. Build and run:
+6. Build and run:
    ```bash
    cmake --build build -j$(nproc)
-   ./build/ps1xRuntime/ps1xRuntime --config configs/rayman.toml
+   ./build/ps1Runtime/ps1Runtime --config rayman_config.toml
    ```
 
 ## How It Works
 
-### Phase 1 — Analysis (`ps1xAnalyzer`)
+### Phase 1 — Analysis (`ps1Analyzer`)
 - Reads the disc image (ISO 9660 / CUE+BIN) and extracts the PS1 executable
 - Parses ELF sections: `.text` (MIPS code), `.data`, `.bss`
 - Detects function boundaries via prologue patterns and call graph analysis
 - Identifies PsyQ middleware calls via signature matching
 - Outputs a TOML config with all function addresses and BSS layout
 
-### Phase 2 — Recompilation (`ps1xRecomp`)
+### Phase 2 — Recompilation (`ps1Recomp`)
 - Decodes every MIPS R3000A instruction (32-bit fixed-width)
 - Emits equivalent C++ for each instruction using a `recomp_context` struct as register file
 - Detects jump tables (switch statements) via LUI+ADDIU+ADDU+LW+JR pattern
 - Handles GTE coprocessor instructions separately via `gte_emitter`
 - Produces a single `recompiled_out.cpp` with one C++ function per MIPS function
 
-### Phase 3 — Runtime (`ps1xRuntime`)
+### Phase 3 — Runtime (`ps1Runtime`)
 - **BIOS HLE**: implements PS1 syscall tables A/B/C without a BIOS ROM
 - **GPU**: interprets GP0/GP1 commands, rasterizes polygons/lines/rectangles into VRAM (1024×512), renders via OpenGL 3.3 shader
 - **CD-ROM**: emulates drive state machine, reads sectors from CUE/BIN files via ISO 9660
 - **SPU**: 24-voice ADPCM audio, mixed via SDL2 audio callback
 - **DMA**: transfers between RAM, GPU, SPU, MDEC, and CD-ROM
 - **GTE**: geometry transform engine for 3D vertex processing
-- **PsyQ HLE**: replaces PsyQ middleware functions (VSync, DrawSync, DrawOTag) with native implementations
+- **PsyQ HLE**: replaces PsyQ middleware functions (VSync, DrawSync, DrawOTag, SetDefDispEnv, PutDispEnv, PutDrawEnv) with native implementations
+
+### GUI Studio (`ps1Interface`)
+- **Explorer panel**: lists all functions with color-coded strategy (PsyQ=yellow, Stub=red, Skip=gray, ForceRecompile=green), filterable by name
+- **Inspector panel**: shows function details (address, size, disassembly summary) and lets you change the recompilation strategy per function
+- **Workspace panel**: tabbed view with C++ preview, hex dump, config.toml editor, and Ghidra CSV importer
+- **Logs panel**: real-time analysis progress bar and error markers
+- Keyboard shortcuts: `F5` = Analyze, `Ctrl+O` = Open ELF, `Ctrl+S` = Save config
 
 ## Key Design Decisions
 
@@ -157,6 +196,12 @@ ctest --test-dir build --output-on-failure -j$(nproc)
 **Double-buffered framebuffer**: Rayman uses vertical double-buffering in PS1 VRAM — Buffer A at (0,0) is rendered while Buffer B at (0,256) is displayed, swapping each VBlank at 60Hz.
 
 ## Tooling
+
+### GUI Studio
+```bash
+./build/ps1Interface/ps1Interface
+```
+Opens the visual studio for loading ELF files, exploring functions, editing game configs, and previewing the generated C++ output before running the full pipeline.
 
 ### Ghidra Integration
 The project includes Ghidra scripts for static analysis validation:
@@ -178,13 +223,16 @@ Runs the game for N seconds and outputs a JSON report with frame rate, VRAM pixe
 | [toml11](https://github.com/ToruNiina/toml11) | TOML config parser | Git submodule |
 | [fmt](https://github.com/fmtlib/fmt) | String formatting | Git submodule |
 | [GoogleTest](https://github.com/google/googletest) | Unit testing framework | Git submodule |
+| [Dear ImGui](https://github.com/ocornut/imgui) | GUI (docking branch) | FetchContent (ps1Interface only) |
+| [ImGuiColorTextEdit](https://github.com/BalazsJako/ImGuiColorTextEdit) | Syntax-highlighted code editor | FetchContent (ps1Interface only) |
+| [ImGuiFileDialog](https://github.com/aiekick/ImGuiFileDialog) | Native file open/save dialog | FetchContent (ps1Interface only) |
 | SDL2 | Audio (SPU) + window + input | System package |
 | OpenGL 3.3 | GPU rendering backend | System package |
 
 ## Inspired By
 
 - [N64Recomp](https://github.com/N64Recomp/N64Recomp) — pioneered the static recompilation approach for retro consoles
-- [PS2Recomp](https://github.com/ran-j/PS2Recomp) — direct architectural reference (ps2xAnalyzer/ps2xRecomp/ps2xRuntime structure)
+- [PS2Recomp](https://github.com/ran-j/PS2Recomp) — direct architectural reference (ps2Analyzer/ps2Recomp/ps2Runtime structure)
 - [psxrecomp](https://1379.tech/i-built-a-ps1-static-recompiler-with-no-prior-experience-and-claude-code/) — PS1 static recompiler reference implementation
 - [Nocash PSX Specs](https://problemkaputt.de/psx-spx.htm) — definitive PS1 hardware reference
 - [ps1-bare-metal](https://github.com/spicyjpeg/ps1-bare-metal) — PS1 hardware programming examples

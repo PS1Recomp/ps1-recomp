@@ -1,4 +1,4 @@
-// Tests for ps1xAnalyzer — PsyQ Signature Matcher
+// Tests for ps1Analyzer — PsyQ Signature Matcher
 // Validates database, name matching, prefix classification, and stub assignment
 
 #include <gtest/gtest.h>

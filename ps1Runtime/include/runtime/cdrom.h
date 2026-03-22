@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — CD-ROM Stub
+// ps1Runtime — CD-ROM Stub
 // PS1 CD-ROM controller (command/parameter/response FIFOs)
 // This is a stub for future incremental implementation.
 

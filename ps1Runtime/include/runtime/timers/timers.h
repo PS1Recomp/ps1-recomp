@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — Interrupt Controller
+// ps1Runtime — Interrupt Controller
 // PS1 I_STAT / I_MASK interrupt handling
 
 #include <cstdint>

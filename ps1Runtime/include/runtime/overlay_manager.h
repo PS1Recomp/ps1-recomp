@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — Overlay Manager
+// ps1Runtime — Overlay Manager
 // Manages dynamically-loaded code overlays at runtime.
 // When the game loads code from CD into RAM (via BIOS FileRead or DMA),
 // the overlay manager activates pre-recompiled overlay functions

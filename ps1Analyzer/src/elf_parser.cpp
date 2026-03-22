@@ -1,4 +1,4 @@
-// ps1xAnalyzer — ELF Parser Implementation
+// ps1Analyzer — ELF Parser Implementation
 // Loads PS1 ELF binaries using ELFIO and extracts sections/symbols
 
 #include "ps1recomp/elf_parser.h"

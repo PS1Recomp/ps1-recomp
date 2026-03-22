@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — DMA Controller
+// ps1Runtime — DMA Controller
 // PS1 DMA: 7 channels for high-speed data transfer between devices
 
 #include <cstdint>

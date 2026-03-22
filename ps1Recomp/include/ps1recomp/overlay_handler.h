@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRecomp — Overlay Handler
+// ps1Recomp — Overlay Handler
 // Manages PS1 overlay sections — code blocks dynamically loaded from CD
 // into fixed RAM addresses. Handles address conflicts when multiple
 // overlays share the same RAM region.

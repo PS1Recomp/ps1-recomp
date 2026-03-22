@@ -1,4 +1,4 @@
-// Tests for ps1xAnalyzer — Config Generator
+// Tests for ps1Analyzer — Config Generator
 // Validates TOML generation from analyzer results
 
 #include <gtest/gtest.h>

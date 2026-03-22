@@ -1,4 +1,4 @@
-// Tests for ps1xRecomp — Overlay Handler
+// Tests for ps1Recomp — Overlay Handler
 // Validates overlay section management, address lookup, and dispatch table
 
 #include <filesystem>

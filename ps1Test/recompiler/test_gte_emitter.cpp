@@ -1,4 +1,4 @@
-// Tests for ps1xRecomp — GTE Emitter
+// Tests for ps1Recomp — GTE Emitter
 // Validates COP2/GTE → C++ translation
 
 #include <gtest/gtest.h>

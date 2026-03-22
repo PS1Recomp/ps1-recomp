@@ -1,4 +1,4 @@
-// Tests for ps1xAnalyzer — ELF Parser
+// Tests for ps1Analyzer — ELF Parser
 // Tests ElfParser class: loading, validation, section/symbol extraction
 
 #include <gtest/gtest.h>

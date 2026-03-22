@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — SPU Stub
+// ps1Runtime — SPU Stub
 // PS1 SPU (24 voice channels, 512KB sound RAM, ADSR envelopes)
 // This is a stub for future incremental implementation.
 

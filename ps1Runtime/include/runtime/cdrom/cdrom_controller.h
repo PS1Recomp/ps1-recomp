@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — CD-ROM Controller
+// ps1Runtime — CD-ROM Controller
 // PS1 CD-ROM hardware: command FIFO, response FIFO, sector buffer, state
 // machine
 

@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xAnalyzer — Function Finder
+// ps1Analyzer — Function Finder
 // Detects function boundaries in PS1 MIPS binaries using heuristics and symbols
 
 #include <cstdint>

@@ -1,4 +1,4 @@
-// ps1xRecomp — Instruction Emitter Implementation
+// ps1Recomp — Instruction Emitter Implementation
 // Translates decoded MIPS I instructions to C++ code using runtime macros
 
 #include "ps1recomp/instruction_emitter.h"

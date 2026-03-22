@@ -1,5 +1,5 @@
-// ps1xAnalyzer — Config Generator Implementation
-// Generates TOML config file from analyzer results for ps1xRecomp
+// ps1Analyzer — Config Generator Implementation
+// Generates TOML config file from analyzer results for ps1Recomp
 
 #include "ps1recomp/config_generator.h"
 #include "ps1recomp/elf_parser.h"

@@ -5,7 +5,7 @@ cmake-build-*/
 .cache/
 
 # Generated file
-ps1xRuntime/src/recompiled_out.cpp
+ps1Runtime/src/recompiled_out.cpp
 configs/*.toml
 
 # IDE

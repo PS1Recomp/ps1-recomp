@@ -1,4 +1,4 @@
-// Smoke test for ps1xRuntime — Hardware Subsystems
+// Smoke test for ps1Runtime — Hardware Subsystems
 // Validates that all hardware subsystem classes compile and basic API works
 
 #include <gtest/gtest.h>

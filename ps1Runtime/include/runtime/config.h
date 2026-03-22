@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — Configuration Reader
+// ps1Runtime — Configuration Reader
 // Reads TOML config for key bindings, disc path, audio, video settings
 
 #include <cstdint>

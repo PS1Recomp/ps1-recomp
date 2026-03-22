@@ -1,4 +1,4 @@
-// ps1xRecomp — MIPS I Decoder Implementation
+// ps1Recomp — MIPS I Decoder Implementation
 // Decodes R3000A instructions: MIPS I + COP0 + COP2/GTE
 
 #include "ps1recomp/mips_decoder.h"

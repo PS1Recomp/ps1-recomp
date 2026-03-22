@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRecomp — Instruction Emitter
+// ps1Recomp — Instruction Emitter
 // Translates decoded MIPS I instructions to C++ code
 
 #include "mips_decoder.h"

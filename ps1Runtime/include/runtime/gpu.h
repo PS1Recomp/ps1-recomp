@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — GPU Stub
+// ps1Runtime — GPU Stub
 // PS1 GPU (VRAM 1MB, GP0/GP1 command FIFO, rendering primitives)
 // This is a stub for future incremental implementation.
 

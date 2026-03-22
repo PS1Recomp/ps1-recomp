@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRecomp — GTE Emitter
+// ps1Recomp — GTE Emitter
 // Generates C++ code for COP2/GTE (Geometry Transformation Engine) operations.
 // GTE has 64 registers (32 data + 32 control) and 22 commands.
 // The emitter generates calls to runtime GTE functions.

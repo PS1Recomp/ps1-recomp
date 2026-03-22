@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — DMA Stub
+// ps1Runtime — DMA Stub
 // PS1 DMA controller (7 channels: MDECin, MDECout, GPU, CDROM, SPU, PIO, OTC)
 // This is a stub for future incremental implementation.
 

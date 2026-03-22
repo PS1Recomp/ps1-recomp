@@ -21,22 +21,22 @@ echo ""
 
 # Step 2: Build all targets
 echo "[2/4] Building all targets..."
-make -C "$BUILD_DIR" -j$(nproc) ps1xAnalyzer ps1xRecomp ps1xRuntime 2>&1 | tail -10
+make -C "$BUILD_DIR" -j$(nproc) ps1Analyzer ps1Recomp ps1Runtime 2>&1 | tail -10
 echo ""
 
 # Step 3: Run tests
 echo "[3/4] Running tests..."
 echo "--- Analyzer Tests ---"
-"$BUILD_DIR/ps1xTest/ps1xAnalyzer_tests" --gtest_brief=1 2>&1 | tail -3
+"$BUILD_DIR/ps1Test/ps1Analyzer_tests" --gtest_brief=1 2>&1 | tail -3
 echo "--- Recompiler Tests ---"
-"$BUILD_DIR/ps1xTest/ps1xRecomp_tests" --gtest_brief=1 2>&1 | tail -3
+"$BUILD_DIR/ps1Test/ps1Recomp_tests" --gtest_brief=1 2>&1 | tail -3
 echo ""
 
 # Step 4: Show binaries
 echo "[4/4] Build artifacts:"
-ls -lh "$BUILD_DIR/ps1xAnalyzer/ps1xAnalyzer" 2>/dev/null || echo "  ps1xAnalyzer: not found"
-ls -lh "$BUILD_DIR/ps1xRecomp/ps1xRecomp" 2>/dev/null || echo "  ps1xRecomp: not found"
-ls -lh "$BUILD_DIR/ps1xRuntime/ps1xRuntime" 2>/dev/null || echo "  ps1xRuntime: not found"
+ls -lh "$BUILD_DIR/ps1Analyzer/ps1Analyzer" 2>/dev/null || echo "  ps1Analyzer: not found"
+ls -lh "$BUILD_DIR/ps1Recomp/ps1Recomp" 2>/dev/null || echo "  ps1Recomp: not found"
+ls -lh "$BUILD_DIR/ps1Runtime/ps1Runtime" 2>/dev/null || echo "  ps1Runtime: not found"
 echo ""
 
 echo "============================================"
@@ -45,13 +45,13 @@ echo "============================================"
 echo ""
 echo "Usage:"
 echo "  # Analyze a PS1 disc:"
-echo "  ./build/ps1xAnalyzer/ps1xAnalyzer game.bin output_config.toml"
+echo "  ./build/ps1Analyzer/ps1Analyzer game.bin output_config.toml"
 echo ""
 echo "  # Scan for overlays:"
-echo "  ./build/ps1xAnalyzer/ps1xAnalyzer --scan-overlays game.bin overlays.toml"
+echo "  ./build/ps1Analyzer/ps1Analyzer --scan-overlays game.bin overlays.toml"
 echo ""
 echo "  # Recompile:"
-echo "  ./build/ps1xRecomp/ps1xRecomp output_config.toml"
+echo "  ./build/ps1Recomp/ps1Recomp output_config.toml"
 echo ""
 echo "  # Run (after recompiling runtime with generated code):"
-echo "  ./build/ps1xRuntime/ps1xRuntime config.toml"
+echo "  ./build/ps1Runtime/ps1Runtime config.toml"

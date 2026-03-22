@@ -1,4 +1,4 @@
-// Tests for ps1xRecomp — MIPS I Decoder
+// Tests for ps1Recomp — MIPS I Decoder
 // Validates R3000A instruction decoding (MIPS I + COP0 + COP2/GTE)
 
 #include <gtest/gtest.h>

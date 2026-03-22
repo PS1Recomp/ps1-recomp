@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — Input Controller
+// ps1Runtime — Input Controller
 // PS1 Controller (Digital Pad, DualShock) and Memory Card via SIO
 
 #include <array>

@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — GTE (Geometry Transform Engine) Runtime
+// ps1Runtime — GTE (Geometry Transform Engine) Runtime
 // Implements all 22 GTE commands with PS1-accurate fixed-point math.
 //
 // Key concepts:

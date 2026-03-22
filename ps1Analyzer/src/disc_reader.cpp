@@ -1,4 +1,4 @@
-// ps1xAnalyzer — Disc Reader Implementation
+// ps1Analyzer — Disc Reader Implementation
 // Reads PS1 BIN/CUE disc images (Mode 2 / 2352-byte sectors)
 // Parses ISO9660 filesystem to extract files
 

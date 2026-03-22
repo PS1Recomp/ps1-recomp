@@ -1,4 +1,4 @@
-// ps1xRuntime — GTE Runtime Implementation
+// ps1Runtime — GTE Runtime Implementation
 // PS1-accurate fixed-point math for all 22 GTE commands
 
 #include <algorithm>

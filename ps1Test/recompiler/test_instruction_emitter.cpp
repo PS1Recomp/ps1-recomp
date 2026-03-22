@@ -1,4 +1,4 @@
-// Tests for ps1xRecomp — Instruction Emitter
+// Tests for ps1Recomp — Instruction Emitter
 // Validates MIPS I → C++ translation
 
 #include <gtest/gtest.h>

@@ -1,4 +1,4 @@
-// Tests for ps1xRuntime — CPU Context
+// Tests for ps1Runtime — CPU Context
 // Validates the PS1 CPU register context structure
 
 #include <gtest/gtest.h>

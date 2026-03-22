@@ -1,4 +1,4 @@
-// ps1xAnalyzer — PsyQ Signature Matcher Implementation
+// ps1Analyzer — PsyQ Signature Matcher Implementation
 // Identifies known PsyQ SDK functions by name, prefix matching, and
 // byte-level instruction-pattern scanning (for stripped binaries).
 

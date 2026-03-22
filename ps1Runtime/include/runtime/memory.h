@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — PS1 Memory Subsystem
+// ps1Runtime — PS1 Memory Subsystem
 // 2MB Main RAM + 1KB Scratchpad + BIOS ROM + I/O port routing to all hardware
 
 #include "runtime/cdrom/cdrom_controller.h"

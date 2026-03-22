@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — MDEC (Motion Decoder)
+// ps1Runtime — MDEC (Motion Decoder)
 // PS1 hardware FMV decoder: RLE → iDCT → YCbCr → RGB
 
 #include <array>

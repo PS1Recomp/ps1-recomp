@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — SPU (Sound Processing Unit)
+// ps1Runtime — SPU (Sound Processing Unit)
 // 24 voice channels, ADPCM decoding, ADSR envelopes, reverb, 512KB Sound RAM
 
 #include <array>

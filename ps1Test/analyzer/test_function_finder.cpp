@@ -1,4 +1,4 @@
-// Tests for ps1xAnalyzer — Function Finder
+// Tests for ps1Analyzer — Function Finder
 // Validates function detection using crafted MIPS binaries
 
 #include <gtest/gtest.h>

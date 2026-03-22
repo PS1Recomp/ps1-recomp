@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1xRuntime — CPU Context
+// ps1Runtime — CPU Context
 // PS1 R3000A CPU register state for recompiled code execution
 
 #include <cstdint>

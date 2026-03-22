@@ -1,4 +1,4 @@
-// ps1xRecomp — Overlay Handler Implementation
+// ps1Recomp — Overlay Handler Implementation
 // Manages PS1 overlay sections with address conflict detection
 
 #include "ps1recomp/overlay_handler.h"

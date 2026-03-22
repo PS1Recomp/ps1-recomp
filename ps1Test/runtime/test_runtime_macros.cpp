@@ -1,4 +1,4 @@
-// Tests for ps1xRuntime — Runtime Macros
+// Tests for ps1Runtime — Runtime Macros
 // Validates MEM_READ/WRITE macros, unaligned loads, and GTE register access
 
 #include <gtest/gtest.h>

@@ -1,4 +1,4 @@
-// Tests for ps1xRuntime — GTE (Geometry Transform Engine)
+// Tests for ps1Runtime — GTE (Geometry Transform Engine)
 // Validates the 22 GTE commands with PS1-accurate fixed-point math
 
 #include <cstring>

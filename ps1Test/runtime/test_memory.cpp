@@ -1,4 +1,4 @@
-// Tests for ps1xRuntime — Memory Subsystem
+// Tests for ps1Runtime — Memory Subsystem
 // Validates RAM, scratchpad, BIOS, address mirroring, and byte order
 
 #include <gtest/gtest.h>

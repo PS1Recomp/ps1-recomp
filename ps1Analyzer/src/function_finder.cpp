@@ -1,4 +1,4 @@
-// ps1xAnalyzer — Function Finder Implementation
+// ps1Analyzer — Function Finder Implementation
 // Multi-pass function detection for PS1 MIPS binaries
 
 #include "ps1recomp/function_finder.h"

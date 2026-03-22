@@ -1,4 +1,4 @@
-// ps1xRecomp — GTE Emitter Implementation
+// ps1Recomp — GTE Emitter Implementation
 // Generates C++ for COP2/GTE instructions.
 // Each GTE command maps to a runtime function call: gte_RTPS(ctx), etc.
 // Register moves access ctx->cop2d[] and ctx->cop2c[] arrays.
