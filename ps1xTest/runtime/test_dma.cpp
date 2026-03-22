@@ -25,6 +25,31 @@ TEST_F(DmaTest, DpcrReadWrite) {
   EXPECT_EQ(dma.readRegister(0x1F8010F0), 0x88888888u);
 }
 
+// Regression: a game writing 0 to DPCR must not disable GPU (Ch2) or OTC (Ch6).
+// The real BIOS pre-enables these during init; our HLE must preserve them
+// because games assume GPU DMA is available without explicitly enabling it.
+TEST_F(DmaTest, DpcrForceEnablesGpuAndOtc) {
+  // Write a value that explicitly clears both GPU (bit 11) and OTC (bit 27).
+  dma.writeRegister(0x1F8010F0, 0x00000000);
+  uint32_t result = dma.readRegister(0x1F8010F0);
+  EXPECT_TRUE(result & (1u << 11)) << "GPU DMA (Ch2, bit 11) must always be enabled";
+  EXPECT_TRUE(result & (1u << 27)) << "OTC DMA (Ch6, bit 27) must always be enabled";
+}
+
+TEST_F(DmaTest, DpcrForceEnablesGpuAndOtcPreservesOtherBits) {
+  // Other channel bits must not be force-set — only GPU and OTC.
+  // Write with Ch0 (MDECin, bit 3) and Ch4 (SPU, bit 19) enabled.
+  uint32_t written = (1u << 3) | (1u << 19);
+  dma.writeRegister(0x1F8010F0, written);
+  uint32_t result = dma.readRegister(0x1F8010F0);
+  // Must keep the bits the game wrote
+  EXPECT_TRUE(result & (1u << 3))  << "Ch0 bit must be preserved";
+  EXPECT_TRUE(result & (1u << 19)) << "Ch4 bit must be preserved";
+  // Must also keep GPU and OTC forced
+  EXPECT_TRUE(result & (1u << 11)) << "GPU DMA must be force-enabled";
+  EXPECT_TRUE(result & (1u << 27)) << "OTC DMA must be force-enabled";
+}
+
 TEST_F(DmaTest, ChannelRegisterReadWrite) {
   // Channel 2 (GPU) base addr
   dma.writeRegister(0x1F8010A0, 0x00100000);

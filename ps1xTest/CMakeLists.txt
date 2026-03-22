@@ -81,6 +81,7 @@ add_executable(ps1xRuntime_tests
     runtime/test_gpu_screenshot.cpp
     runtime/test_game_validation.cpp
     runtime/test_overlay_manager.cpp
+    runtime/test_psyq_hle.cpp
 )
 
 target_include_directories(ps1xRuntime_tests
