@@ -15,6 +15,12 @@ add_subdirectory(ps1xAnalyzer)
 add_subdirectory(ps1xRecomp)
 add_subdirectory(ps1xRuntime)
 
+# GUI Studio (optional, disabled by default — requires SDL2 + OpenGL)
+option(PS1RECOMP_BUILD_INTERFACE "Build ps1xInterface GUI studio" OFF)
+if(PS1RECOMP_BUILD_INTERFACE)
+    add_subdirectory(ps1xInterface)
+endif()
+
 # Tests (optional, enabled by default)
 option(PS1RECOMP_BUILD_TESTS "Build tests" ON)
 if(PS1RECOMP_BUILD_TESTS)
