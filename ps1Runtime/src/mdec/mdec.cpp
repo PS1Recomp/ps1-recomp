@@ -1,6 +1,7 @@
 #include "runtime/mdec/mdec.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <fmt/format.h>
 
@@ -331,6 +332,15 @@ void MDEC::yuvToRgb24(const int16_t *cr, const int16_t *cb, const int16_t *y1,
 void MDEC::decodeSlice() {
   uint8_t opcode = (currentCommand_ >> 29) & 0x7;
 
+  // ── MDEC diagnostics ─────────────────────────────────────────────────────
+  // Enabled by env var PS1_MDEC_DEBUG=1. Logs macroblock counts so failures
+  // in rleDecode() (invalid VLC IDs, misaligned RLE data) are visible.
+  // Expected output per FMV frame: "N macroblocks decoded" where
+  //   N = (frame_width/16) * (frame_height/16).  For 320×240: N = 300.
+  // If N=0 → first block fails (bad DC word or missing quant table).
+  // If N>0 but << 300 → AC RLE misaligned or early end-marker.
+  static const bool kMdecDebug = (std::getenv("PS1_MDEC_DEBUG") != nullptr);
+
   if (opcode == 2) {
     // Upload quantization table
     for (uint32_t i = 0; i < 64 && i < inputBuffer_.size() * 2; i++) {
@@ -369,6 +379,11 @@ void MDEC::decodeSlice() {
     const uint16_t *src = inputBuffer_.data();
     const uint16_t *end = src + inputBuffer_.size();
 
+    if (kMdecDebug)
+      fmt::print("[MDEC] decodeSlice: {} words of input\n", inputBuffer_.size());
+
+    int mbCount = 0;
+
     while (src < end) {
       // Each macroblock = 6 blocks: Cr, Cb, Y1, Y2, Y3, Y4
       int16_t crBlock[64], cbBlock[64], y1Block[64], y2Block[64], y3Block[64],
@@ -398,7 +413,14 @@ void MDEC::decodeSlice() {
       } else {
         yuvToRgb15(crBlock, cbBlock, y1Block, y2Block, y3Block, y4Block);
       }
+
+      mbCount++;
+      if (kMdecDebug && mbCount <= 4)
+        fmt::print("[MDEC]   macroblock {} ok\n", mbCount);
     }
+
+    if (kMdecDebug)
+      fmt::print("[MDEC] decodeSlice: {} macroblocks decoded\n", mbCount);
   }
 }
 
