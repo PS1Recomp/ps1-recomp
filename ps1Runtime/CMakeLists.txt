@@ -51,8 +51,14 @@ target_link_libraries(ps1Runtime_lib
 # )
 
 # ── Runtime Executable ──────────────────────────────────
-# Use the real recompiled game if available; fall back to stub for CI / tests.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/recompiled_out.cpp")
+# PS1RECOMP_USE_STUB: force stub mode even when recompiled_out.cpp exists.
+# Useful for CI pipelines and contributors who don't have a game ROM.
+option(PS1RECOMP_USE_STUB "Use stub recompiled_out instead of real game" OFF)
+
+if(PS1RECOMP_USE_STUB)
+    set(RECOMP_SRC src/recompiled_out_stub.cpp)
+    message(STATUS "PS1RECOMP_USE_STUB=ON — using stub (no ROM required)")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/recompiled_out.cpp")
     set(RECOMP_SRC src/recompiled_out.cpp)
 else()
     set(RECOMP_SRC src/recompiled_out_stub.cpp)
