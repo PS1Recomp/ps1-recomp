@@ -1,7 +1,16 @@
 #pragma once
-
-// ps1Runtime — CPU Context
-// PS1 R3000A CPU register state for recompiled code execution
+/**
+ * @file cpu_context.h
+ * @brief PS1 R3000A CPU register state used by all recompiled functions.
+ *
+ * Every recompiled MIPS function receives a `recomp_context*` as its second
+ * argument. This struct holds the full CPU state: 32 GPRs, HI/LO, COP0
+ * (system control) and COP2 (GTE) registers.
+ *
+ * The `Register` and `COP0Reg` enums provide named aliases so that BIOS and
+ * HLE code can reference registers by conventional MIPS ABI names (A0, V0, RA…)
+ * rather than raw indices.
+ */
 
 #include <cstdint>
 #include <cstring>

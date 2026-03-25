@@ -1,13 +1,17 @@
 #pragma once
-// PsyQ High-Level Emulation — Generic stub dispatch
-//
-// When the recompiler identifies PsyQ SDK functions by name (via [stubs] in
-// the game TOML), it emits calls to these functions instead of empty stubs.
-// That way VSync, DrawSync, etc. have proper HLE behaviour regardless of
-// which game binary we're running.
-//
-// Call psyq::configure() once after Bios::setPsyqAddresses() so that the
-// VBlank counter address and drain callback are known to the HLE layer.
+/**
+ * @file psyq_hle.h
+ * @brief PsyQ SDK High-Level Emulation (HLE) interface.
+ *
+ * When ps1Recomp identifies PsyQ SDK functions by name (via `[stubs]` in the
+ * game TOML), it emits calls into this module instead of translating the MIPS.
+ * This gives VSync, DrawSync, DrawOTag, and display-environment functions
+ * correct behaviour without requiring per-game address hacks.
+ *
+ * **Setup:** call `ps1::psyq::configure()` once from `main_host.cpp` after
+ * `Bios::setPsyqAddresses()` so the HLE layer knows the VBlank counter
+ * address, GPU callbacks, and drain function for the current game.
+ */
 
 #include "runtime/cpu_context.h"
 #include <cstdint>
@@ -16,6 +20,14 @@
 namespace ps1::psyq {
 
 // ── Global per-game configuration ─────────────────────────────────────────
+
+/**
+ * @brief Per-game configuration for the PsyQ HLE layer.
+ *
+ * Populated by `main_host.cpp` at startup and passed to `psyq::configure()`.
+ * All `uint32_t` address fields are **physical PS1 RAM addresses** — apply
+ * `addr & 0x1FFFFFFF` before indexing into `rdram`.
+ */
 struct HleConfig {
   uint32_t vblankCounter = 0; ///< PSX RAM address of the VBlank tick counter
   uint32_t drawSyncBase = 0;  ///< BSS addr holding pointer to OT status array

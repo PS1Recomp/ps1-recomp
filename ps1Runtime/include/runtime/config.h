@@ -1,7 +1,20 @@
 #pragma once
-
-// ps1Runtime — Configuration Reader
-// Reads TOML config for key bindings, disc path, audio, video settings
+/**
+ * @file config.h
+ * @brief Runtime configuration structures and TOML config reader.
+ *
+ * `ps1::ConfigReader` loads a TOML file and populates the `ps1::Config`
+ * aggregate (video, audio, input, paths). This is separate from the per-game
+ * `psyq_addresses` config which is parsed directly by `main_host.cpp`.
+ *
+ * Typical usage:
+ * @code
+ * ps1::ConfigReader reader;
+ * if (!reader.load("configs/settings.toml"))
+ *     fmt::print(stderr, "Config error: {}\n", reader.error());
+ * auto& cfg = reader.config();
+ * @endcode
+ */
 
 #include <cstdint>
 #include <string>

@@ -1,7 +1,25 @@
 #pragma once
-
-// ps1Runtime — PS1 Memory Subsystem
-// 2MB Main RAM + 1KB Scratchpad + BIOS ROM + I/O port routing to all hardware
+/**
+ * @file memory.h
+ * @brief PS1 memory subsystem — 2 MB RAM, scratchpad, BIOS ROM and I/O routing.
+ *
+ * `ps1::Memory` maps the full PS1 address space and routes reads/writes to the
+ * correct hardware device. All three KSEG mirrors (KUSEG/KSEG0/KSEG1) resolve
+ * to the same physical addresses via `toPhysical()`.
+ *
+ * ## Memory Map
+ * | Range | Size | Description |
+ * |-------|------|-------------|
+ * | 0x00000000 – 0x001FFFFF | 2 MB | Main RAM (KUSEG) |
+ * | 0x1F800000 – 0x1F8003FF | 1 KB | Scratchpad (data cache) |
+ * | 0x1F801000 – 0x1F802FFF | 8 KB | I/O ports (hardware registers) |
+ * | 0x1FC00000 – 0x1FC7FFFF | 512 KB | BIOS ROM |
+ * | 0x80000000 – 0x801FFFFF | 2 MB | Main RAM mirror — KSEG0 (cached) |
+ * | 0xA0000000 – 0xA01FFFFF | 2 MB | Main RAM mirror — KSEG1 (uncached) |
+ *
+ * **Thread safety:** RAM reads/writes use `atomic_thread_fence` acquire/release
+ * so the VBlank counter is visible across the game thread and VBlank thread.
+ */
 
 #include "runtime/cdrom/cdrom_controller.h"
 #include "runtime/dma/dma.h"
@@ -298,7 +316,6 @@ public:
       return;
     }
     if (phys == 0x1F801814) {
-      { static int cnt=0; if(cnt++<30) fprintf(stderr,"[MEM-GP1] write32 GP1=0x%08X (addr=0x%08X)\n",val,addr); }
       if (gpu_)
         gpu_->writeGP1(val);
       return;

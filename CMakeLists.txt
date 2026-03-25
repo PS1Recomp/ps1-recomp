@@ -31,3 +31,29 @@ if(PS1RECOMP_BUILD_TESTS)
     enable_testing()
     add_subdirectory(ps1Test)
 endif()
+
+# Documentation (optional — requires Doxygen)
+# Build with: cmake --build build --target docs
+# Output:     docs/api/html/index.html
+find_package(Doxygen OPTIONAL_COMPONENTS dot)
+if(DOXYGEN_FOUND)
+    set(DOXYGEN_PROJECT_NAME        "ps1-recomp")
+    set(DOXYGEN_PROJECT_BRIEF       "PlayStation 1 static recompiler — MIPS R3000A to native C++")
+    set(DOXYGEN_EXTRACT_ALL         NO)
+    set(DOXYGEN_EXTRACT_STATIC      YES)
+    set(DOXYGEN_GENERATE_HTML       YES)
+    set(DOXYGEN_GENERATE_LATEX      NO)
+    set(DOXYGEN_OUTPUT_DIRECTORY    ${CMAKE_SOURCE_DIR}/docs/api)
+    set(DOXYGEN_USE_MDFILE_AS_MAINPAGE README.md)
+    set(DOXYGEN_WARN_IF_UNDOCUMENTED NO)
+    set(DOXYGEN_QUIET               YES)
+    set(DOXYGEN_STRIP_FROM_PATH     ${CMAKE_SOURCE_DIR})
+    doxygen_add_docs(docs
+        ${CMAKE_SOURCE_DIR}/ps1Runtime/include/runtime
+        ${CMAKE_SOURCE_DIR}/ps1Recomp/include
+        ${CMAKE_SOURCE_DIR}/ps1Analyzer/include
+        COMMENT "Generating API documentation -> docs/api/html/index.html"
+    )
+else()
+    message(STATUS "Doxygen not found — 'docs' target unavailable (install doxygen to enable)")
+endif()

@@ -286,7 +286,7 @@ int main(int argc, char *argv[]) {
       fmt::print("[INFO] gpu_drawsync_base not set — DrawSync returns 0 "
                  "(GPU is synchronous)\n");
 
-    bios.setPsyqAddresses(addrs);
+    bios.setPsyqAddresses(addrs); // also activates cdSyncByte watchpoint internally
 
     // Also configure the psyq_hle layer so that named PsyQ stubs
     // (VSync, DrawSync, etc.) have the correct per-game addresses.
