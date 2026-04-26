@@ -38,3 +38,19 @@ docs/
 # cache
 __pycache__/
 *.pyc
+
+# PsyQ SDK files (proprietary, never committed — kept outside repo)
+*.LIB
+*.OBJ
+
+# Local artifacts
+.venv/
+*.AppImage
+ItaloDellAreti.pdf
+
+# AI session state (not for upstream)
+.claude/
+.mcp.json
+
+# psyq-obj-parser binary — rebuild from pcsx-redux clone, do not version
+tools/psyq-obj-parser-bin/psyq-obj-parser

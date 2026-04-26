@@ -325,6 +325,9 @@ void CdromController::executeCommand(uint8_t cmd) {
   CDROM_LOG("[CDROM] Command 0x{:02X}\n", cmd);
 
   switch (cmd) {
+  case 0x00:
+    cmdSync();
+    break;
   case 0x01:
     cmdGetStat();
     break;
@@ -397,6 +400,15 @@ void CdromController::executeCommand(uint8_t cmd) {
 }
 
 // ─── Command Implementations ────────────────────────────
+
+void CdromController::cmdSync() {
+  // CdlSync (0x00): abort any pending async command and return status.
+  // On real PS1 this resets the command processor.  Games (e.g. Crash
+  // Bandicoot) use it during CdInit to verify the controller is responsive.
+  // Response: INT3 with status byte.
+  commandPending_ = false;
+  pushResponse(INT_ACKNOWLEDGE, {buildStatusByte()});
+}
 
 void CdromController::cmdGetStat() {
   motorOn_ = true;

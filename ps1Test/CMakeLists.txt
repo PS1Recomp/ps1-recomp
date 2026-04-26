@@ -8,6 +8,7 @@ add_executable(ps1Analyzer_tests
     analyzer/test_elf_parser.cpp
     analyzer/test_function_finder.cpp
     analyzer/test_psyq_signatures.cpp
+    analyzer/test_psyq_hash_matching.cpp
     analyzer/test_config_generator.cpp
     analyzer/test_overlay_scanner.cpp
 )
@@ -16,6 +17,12 @@ target_link_libraries(ps1Analyzer_tests
     PRIVATE
         GTest::gtest_main
         ps1Analyzer_lib
+)
+
+# Tests need the data dir (TOML signature DB) at runtime.
+target_compile_definitions(ps1Analyzer_tests
+    PRIVATE
+        PS1RECOMP_DATA_DIR_DEFAULT="${CMAKE_SOURCE_DIR}/ps1Analyzer/data"
 )
 
 gtest_discover_tests(ps1Analyzer_tests)
@@ -28,6 +35,7 @@ add_executable(ps1Recomp_tests
     recompiler/test_instruction_emitter.cpp
     recompiler/test_gte_emitter.cpp
     recompiler/test_overlay_handler.cpp
+    recompiler/test_hle_emission.cpp
 )
 
 target_link_libraries(ps1Recomp_tests
@@ -82,6 +90,8 @@ add_executable(ps1Runtime_tests
     runtime/test_game_validation.cpp
     runtime/test_overlay_manager.cpp
     runtime/test_psyq_hle.cpp
+    runtime/test_psyq_registry.cpp
+    runtime/test_psyq_libapi.cpp
 )
 
 target_include_directories(ps1Runtime_tests

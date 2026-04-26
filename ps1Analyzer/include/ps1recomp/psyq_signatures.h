@@ -1,12 +1,13 @@
 #pragma once
 
 // ps1Analyzer — PsyQ Signature Matcher
-// Identifies known PsyQ SDK functions for stub generation
+// Identifies PsyQ SDK functions by SHA-256 hash of their MIPS opcodes,
+// loaded from ps1Analyzer/data/psyq_signatures.toml.
 
 #include <cstdint>
 #include <string>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
 namespace ps1recomp {
 
@@ -43,19 +44,20 @@ enum class StubType {
 
 struct PsyQFunction {
     std::string    name;
-    PsyQSubsystem subsystem;
+    PsyQSubsystem  subsystem;
     StubType       stubType;
-    std::string    description;  // Brief description for config output
+    std::string    description;
 };
 
 // ─── PsyQ Match Result ──────────────────────────────────
 
 struct PsyQMatch {
     uint32_t       address;     // Function address in binary
-    std::string    name;        // Function name
-    PsyQSubsystem subsystem;
+    std::string    name;        // Base function name (no @vN suffix)
+    std::string    library;     // libgpu / libcd / libgte / libapi / libetc
+    PsyQSubsystem  subsystem;
     StubType       stubType;
-    bool           exactMatch;  // true = name from DB, false = prefix heuristic
+    bool           exactMatch;  // true = symbol/hash, false = prefix heuristic
 };
 
 // ─── PsyQ Matcher ───────────────────────────────────────
@@ -64,70 +66,93 @@ class PsyQMatcher {
 public:
     PsyQMatcher();
 
+    /// Load a signature DB and metadata file.
+    /// Empty `sigsPath` skips signature loading; empty `metadataPath` skips
+    /// the subsystem/stub_type join. Returns true if at least one of the two
+    /// was loaded successfully.
+    bool loadFromToml(const std::string& sigsPath,
+                      const std::string& metadataPath);
+
     /// Run matching against parsed ELF symbols and detected functions.
     void matchFunctions(const ElfParser& elf, const FunctionFinder& finder);
 
-    /// Get all matched PsyQ functions.
     const std::vector<PsyQMatch>& getMatches() const { return m_matches; }
-
-    /// Get functions that need runtime stubs.
     std::vector<const PsyQMatch*> getStubs() const;
-
-    /// Get functions that can be skipped.
     std::vector<const PsyQMatch*> getSkips() const;
-
-    /// Get functions that use host passthrough.
     std::vector<const PsyQMatch*> getPassthroughs() const;
 
-    /// Get match count.
     size_t getMatchCount() const { return m_matches.size(); }
-
-    /// Get the built-in database size.
     size_t getDatabaseSize() const { return m_database.size(); }
+    size_t getSignatureCount() const { return m_byMasked.size() + m_byFull.size(); }
 
-    /// Check if a function name is in the PsyQ database.
     bool isKnown(const std::string& name) const;
 
-    /// Classify subsystem from function name (static, for external use).
+    /// Number of detected matches per library (for diagnostics).
+    struct LibraryCounts {
+        size_t libgpu = 0;
+        size_t libetc = 0;
+        size_t libapi = 0;
+        size_t libcd  = 0;
+        size_t libgte = 0;
+        size_t other  = 0;
+        size_t fullMode = 0;
+        size_t maskedMode = 0;
+    };
+    LibraryCounts getLibraryCounts() const;
+
+    /// Classify subsystem from function name (for prefix-fallback only).
     static PsyQSubsystem classifySubsystem(const std::string& name);
 
-    /// Get human-readable subsystem name.
     static const char* subsystemName(PsyQSubsystem sub);
-
-    /// Get human-readable stub type name.
     static const char* stubTypeName(StubType type);
 
-// ── Byte-level instruction signature (for Pass 3) ─────────────────────────
-struct InstrPattern {
-    uint32_t pattern; ///< Instruction bits that must match
-    uint32_t mask;    ///< 1-bits must match exactly; 0-bits are wildcards
-};
+    // ─── Hash primitives (public for testing) ────────────────────────
 
-/// A named MIPS instruction-level signature for a PsyQ function.
-/// Each entry in `instrs` must match a CONSECUTIVE instruction in the binary.
-/// The scan window starts within the first `scanWindow` instructions of the
-/// function (default 32).
-struct ByteSig {
-    std::string name;
-    std::vector<InstrPattern> instrs;   ///< Consecutive instruction patterns
-    uint32_t    scanWindow = 32;        ///< How far from func start to scan
-};
+    /// Zero immediate fields in a 32-bit MIPS instruction. Mirrors the
+    /// Python reference implementation in tools/extract_psyq_signatures.py.
+    /// COP0/1/2/3 instructions are kept exact (GTE encoding is critical).
+    static uint32_t maskImmediates(uint32_t word);
+
+    /// SHA-256 of `data[0..size)`, truncated to the first 16 hex chars
+    /// (the high 64 bits of the digest), returned as a uint64_t.
+    static uint64_t hashFull(const uint8_t* data, size_t size);
+
+    /// Like `hashFull`, but each 32-bit word is passed through
+    /// `maskImmediates` before hashing. `size` must be a multiple of 4.
+    static uint64_t hashMasked(const uint8_t* data, size_t size);
+
+    /// Parse the first 16 hex chars of a SHA-256 string into a uint64_t.
+    /// Returns 0 on malformed input.
+    static uint64_t parseHashHex(const std::string& hex);
 
 private:
+    // Loaded signature row. `subsystem`/`stubType` are joined from the
+    // metadata file when available; otherwise filled with Other/Recompile.
+    struct LoadedSig {
+        std::string    name;     // Base name, no @vN
+        std::string    library;  // libgpu / libcd / ...
+        uint32_t       size;
+        PsyQSubsystem  subsystem;
+        StubType       stubType;
+        bool           fullMode; // true = matched via hash_full
+    };
+
     std::vector<PsyQMatch> m_matches;
     std::unordered_map<std::string, PsyQFunction> m_database;
 
-    void initDatabase();
+    // Hash → signature. Keys are the high 64 bits of SHA-256.
+    std::unordered_map<uint64_t, LoadedSig> m_byMasked;
+    std::unordered_map<uint64_t, LoadedSig> m_byFull;
+
+    // Loader steps
+    void loadDefaults();
+    bool loadMetadata(const std::string& path);
+    bool loadSignatures(const std::string& path);
+
+    // Match passes
     void matchByName(const ElfParser& elf);
     void matchByPrefix(const ElfParser& elf, const FunctionFinder& finder);
-    void matchByByteSignature(const ElfParser& elf, const FunctionFinder& finder);
-
-    // Static signature table (built once, shared across all instances)
-    static const std::vector<ByteSig>& getSignatures();
-
-    // Database registration helper
-    void reg(const std::string& name, PsyQSubsystem sub, StubType type,
-             const std::string& desc = "");
+    void matchByHash(const ElfParser& elf, const FunctionFinder& finder);
 };
 
 } // namespace ps1recomp

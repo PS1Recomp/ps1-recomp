@@ -19,6 +19,18 @@ Applies minimal HLE fixes:
       (original loop completes in ~30µs, far too fast for 16.67ms VBlank period)
   13. Add func_801B1AE4: dead-code mid-function entry point in func_801B18C4
      (entity dispatch handler — calls func_801B1F7C with sign_extend(a0), sign_extend(a1), a2)
+  14. Add func_8019F848: animation counter increment + frame tick
+     (dead-code entry at 0x8019F848 inside func_8019F3A0's data block)
+  15. Add func_801BEAD0 + func_801BEB08: GPU indexed-buffer ops (defined only,
+     NOT dispatched — func_801B8DFC init is missing so ptr at 0x801CF31C is 0)
+  16. HLE PutDispEnv: func_801BD69C calls HLE directly, bypassing broken
+     PsyQ GPU function-pointer chain (func_801B8DFC initializer is missing,
+     so ptr at 0x801CF300+16 is garbage → GP1 commands never sent → display
+     area never updated from initial (0,0) → wrong framebuffer shown)
+  17. Synthesize func_801B8DFC: GPU HAL struct initializer (was dead code).
+     Creates GP0/GP1 write stubs (func_801B8E00/08), builds 64-byte HAL
+     struct at 0x801D3000, writes pointer to [0x801CF300]. Called from
+     func_801C104C (display pipeline) with guard at [0x801CF2D4].
 """
 
 import sys
@@ -509,40 +521,54 @@ if OLD_LOOP_FA1C in text:
 else:
     print("  [7] WARNING: L_8019FA1C pattern not found")
 
-# ─── 11. Skip FMV intro: func_80132898 returns immediately ───────────────────
-# func_80132898 is the FMV orchestrator. It validates the movie index (r4-1),
-# sets video dimensions, and calls func_80132A44 (the actual player loop).
-# The game is stuck here because MDEC_vlec hits "invalid VLC ID" from CD data.
-# Returning r2=0 immediately skips all FMV playback so the game can proceed.
-OLD_FMV_SKIP = (
-    'void func_80132898(uint8_t* rdram, recomp_context* ctx) {\n'
-    '    ctx->r29 = (int32_t)((int32_t)(ctx->r29) + -24);\n'
-    '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 20, ctx->r31);\n'
-    '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 16, ctx->r16);\n'
-    '    ctx->r16 = (int32_t)((int32_t)(ctx->r4) + (int32_t)((int32_t)0));\n'
-    '    ctx->r4 = (int32_t)((int32_t)(ctx->r4) + -1);\n'
-)
-NEW_FMV_SKIP = (
-    'void func_80132898(uint8_t* rdram, recomp_context* ctx) {\n'
-    '    // [PATCH 11] Skip FMV intro — MDEC_vlec hits invalid VLC IDs from CD data.\n'
-    '    // Return r2=0 immediately so the intro sequence proceeds past the FMV call.\n'
-    '    ctx->r2 = 0;\n'
-    '    return;\n'
-    '    // Original code (unreachable):\n'
-    '    ctx->r29 = (int32_t)((int32_t)(ctx->r29) + -24);\n'
-    '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 20, ctx->r31);\n'
-    '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 16, ctx->r16);\n'
-    '    ctx->r16 = (int32_t)((int32_t)(ctx->r4) + (int32_t)((int32_t)0));\n'
-    '    ctx->r4 = (int32_t)((int32_t)(ctx->r4) + -1);\n'
-)
-if '// [PATCH 11] Skip FMV intro' not in text:
-    if OLD_FMV_SKIP in text:
-        text = text.replace(OLD_FMV_SKIP, NEW_FMV_SKIP, 1)
-        print("  [11] FMV skip: func_80132898 patched to return immediately")
+# ─── 11. Skip FMV intro: func_80132898 ──────────────────────────────────────
+# INVESTIGATION MODE: patch #11 is now disabled so MDEC diagnostics in
+# decodeSlice() can identify exactly what fails during FMV playback.
+#
+# To re-enable the skip (safe fallback), set SKIP_FMV = True below.
+# To investigate MDEC failure, leave SKIP_FMV = False and check logs for:
+#   [MDEC] decodeSlice: N words of input
+#   [MDEC] macroblock K ok
+#   [MDEC] decodeSlice: K macroblocks decoded  ← K=0 means first block fails
+#
+# Known failure modes:
+#   - K=0: rleDecode() fails on first word — likely bad DC word or end-marker
+#   - K>0 but < expected: AC RLE misaligned — zigzag/quant mismatch
+#   - Hang/no output: infinite loop in rleDecode() — end marker 0xFE00 not hit
+SKIP_FMV = True
+
+if SKIP_FMV:
+    OLD_FMV_SKIP = (
+        'void func_80132898(uint8_t* rdram, recomp_context* ctx) {\n'
+        '    ctx->r29 = (int32_t)((int32_t)(ctx->r29) + -24);\n'
+        '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 20, ctx->r31);\n'
+        '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 16, ctx->r16);\n'
+        '    ctx->r16 = (int32_t)((int32_t)(ctx->r4) + (int32_t)((int32_t)0));\n'
+        '    ctx->r4 = (int32_t)((int32_t)(ctx->r4) + -1);\n'
+    )
+    NEW_FMV_SKIP = (
+        'void func_80132898(uint8_t* rdram, recomp_context* ctx) {\n'
+        '    // [PATCH 11] Skip FMV intro — MDEC_vlec hits invalid VLC IDs from CD data.\n'
+        '    // Return r2=0 immediately so the intro sequence proceeds past the FMV call.\n'
+        '    ctx->r2 = 0;\n'
+        '    return;\n'
+        '    // Original code (unreachable):\n'
+        '    ctx->r29 = (int32_t)((int32_t)(ctx->r29) + -24);\n'
+        '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 20, ctx->r31);\n'
+        '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 16, ctx->r16);\n'
+        '    ctx->r16 = (int32_t)((int32_t)(ctx->r4) + (int32_t)((int32_t)0));\n'
+        '    ctx->r4 = (int32_t)((int32_t)(ctx->r4) + -1);\n'
+    )
+    if '// [PATCH 11] Skip FMV intro' not in text:
+        if OLD_FMV_SKIP in text:
+            text = text.replace(OLD_FMV_SKIP, NEW_FMV_SKIP, 1)
+            print("  [11] FMV skip: func_80132898 patched to return immediately")
+        else:
+            print("  [11] WARNING: func_80132898 pattern not found — FMV not skipped!")
     else:
-        print("  [11] WARNING: func_80132898 pattern not found — FMV not skipped!")
+        print("  [11] FMV skip already applied")
 else:
-    print("  [11] FMV skip already applied")
+    print("  [11] FMV skip DISABLED — MDEC investigation mode (set SKIP_FMV=True to re-enable)")
 
 # ─── 12. HLE VSync wait: func_801B954C ───────────────────────────────────────
 # The original PsyQ VSync waits by counting down 0x8000 iterations.
@@ -673,6 +699,297 @@ if '0x801B1AE4] = func_801B1AE4' not in text:
         print("  [13c] WARNING: 0x801B18C4 table entry not found")
 else:
     print("  [13c] 0x801B1AE4 already in dispatch table")
+
+# ─── 14. Add func_8019F848 — animation counter increment ─────────────────────
+# 0x8019F848 is the start of a dead-code block inside func_8019F3A0.
+# Decoded from .word data at 0x8019F848–0x8019F880:
+#   LUI/LBU r2 ← MEM_READ8(0x801CF438);  ADDIU sp,-24;  SW r31,16(sp)
+#   r2++;  SB r2,(0x801CF438);  JAL 801809FC;  NOP
+#   LUI/LBU r2 ← reload;  NOP;  SLTIU r2,r2,61;  LW r31,16(sp)
+#   XORI r2,r2,1;  JR r31;  ADDIU sp,24 [delay slot]
+# Returns 1 if counter reached 61 (animation sequence done), 0 otherwise.
+OLD_FWD_8019F8D0 = 'void func_8019F8D0(uint8_t* rdram, recomp_context* ctx);\n'
+NEW_FWD_8019F8D0 = (
+    'void func_8019F848(uint8_t* rdram, recomp_context* ctx);\n'
+    'void func_8019F8D0(uint8_t* rdram, recomp_context* ctx);\n'
+)
+if 'void func_8019F848' not in text:
+    if OLD_FWD_8019F8D0 in text:
+        text = text.replace(OLD_FWD_8019F8D0, NEW_FWD_8019F8D0, 1)
+        print("  [14a] Forward decl func_8019F848 added")
+    else:
+        print("  [14a] WARNING: func_8019F8D0 forward decl not found")
+else:
+    print("  [14a] func_8019F848 already declared")
+
+OLD_DEF_8019F8D0 = 'void func_8019F8D0(uint8_t* rdram, recomp_context* ctx) {\n'
+NEW_IMPL_8019F848 = (
+    '// func_8019F848: animation counter increment + frame tick.\n'
+    '// Dead-code entry point (0x8019F848) inside func_8019F3A0\'s data block.\n'
+    '// Increments counter at 0x801CF438, calls func_801809FC (frame tick),\n'
+    '// then returns 1 when counter reaches/exceeds 61 (animation complete).\n'
+    'void func_8019F848(uint8_t* rdram, recomp_context* ctx) {\n'
+    '    ctx->r2 = (uint8_t)MEM_READ8(ctx, 0x801D0000 + -3016);\n'
+    '    ctx->r29 = (int32_t)((int32_t)(ctx->r29) + -24);\n'
+    '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 16, ctx->r31);\n'
+    '    ctx->r2 = (int32_t)((int32_t)(ctx->r2) + 1);\n'
+    '    MEM_WRITE8(ctx, 0x801D0000 + -3016, ctx->r2);\n'
+    '    func_801809FC(rdram, ctx);\n'
+    '    ctx->r2 = (uint8_t)MEM_READ8(ctx, 0x801D0000 + -3016);\n'
+    '    ctx->r2 = ((uint32_t)(ctx->r2) < (uint32_t)(0x3D)) ? 1 : 0;\n'
+    '    ctx->r31 = MEM_READ32(ctx, (int32_t)(ctx->r29) + 16);\n'
+    '    ctx->r2 = ctx->r2 ^ 0x1;\n'
+    '    ctx->r29 = (int32_t)((int32_t)(ctx->r29) + 24);\n'
+    '}\n'
+    '\n'
+)
+if '// func_8019F848: animation counter' not in text:
+    if OLD_DEF_8019F8D0 in text:
+        text = text.replace(OLD_DEF_8019F8D0, NEW_IMPL_8019F848 + OLD_DEF_8019F8D0, 1)
+        print("  [14b] func_8019F848 implementation added")
+    else:
+        print("  [14b] WARNING: func_8019F8D0 definition not found")
+else:
+    print("  [14b] func_8019F848 already defined")
+
+# Register func_8019F848 in dispatch table
+OLD_TABLE_8019F8D0_NEW = '    recomp_func_table[0x8019F8D0] = func_8019F8D0;\n'
+NEW_TABLE_8019F848 = (
+    '    recomp_func_table[0x8019F848] = func_8019F848;\n'
+    '    recomp_func_table[0x8019F8D0] = func_8019F8D0;\n'
+)
+if '0x8019F848] = func_8019F848' not in text:
+    if OLD_TABLE_8019F8D0_NEW in text:
+        text = text.replace(OLD_TABLE_8019F8D0_NEW, NEW_TABLE_8019F848, 1)
+        print("  [14c] func_8019F848 registered in dispatch table")
+    else:
+        print("  [14c] WARNING: 0x8019F8D0 table entry not found")
+else:
+    print("  [14c] func_8019F848 already in dispatch table")
+
+# ─── 15. Add func_801BEAD0 + func_801BEB08 — GPU indexed buffer ops ──────────
+# Decoded from .word data block at 0x801BEAD0–0x801BEB21 inside func_801BE804.
+#
+# func_801BEAD0 (14 words, 0x801BEAD0–0x801BEB07):
+#   ptr = MEM_READ32(0x801CF31C);  SW r4, 0(ptr);
+#   r2 = (r4>>24)<<4;  r4 &= 0x00FFFFFF;
+#   MEM_WRITE32(0x801D2060 + r2, r4);  return
+#
+# func_801BEB08 (8 words, 0x801BEB08–0x801BEB23):
+#   r2 = r4<<4;  r2 = MEM_READ32(0x801D2060 + r2);
+#   r4 = r4<<24;  return r2 | r4 [delay slot]
+OLD_FWD_801BEB74 = 'void func_801BEB74(uint8_t* rdram, recomp_context* ctx);\n'
+NEW_FWD_801BEB74 = (
+    'void func_801BEAD0(uint8_t* rdram, recomp_context* ctx);\n'
+    'void func_801BEB08(uint8_t* rdram, recomp_context* ctx);\n'
+    'void func_801BEB74(uint8_t* rdram, recomp_context* ctx);\n'
+)
+if 'void func_801BEAD0' not in text:
+    if OLD_FWD_801BEB74 in text:
+        text = text.replace(OLD_FWD_801BEB74, NEW_FWD_801BEB74, 1)
+        print("  [15a] Forward decls func_801BEAD0 + func_801BEB08 added")
+    else:
+        print("  [15a] WARNING: func_801BEB74 forward decl not found")
+else:
+    print("  [15a] func_801BEAD0/BEB08 already declared")
+
+OLD_DEF_801BEB74 = 'void func_801BEB74(uint8_t* rdram, recomp_context* ctx) {\n'
+NEW_IMPL_801BEAD0 = (
+    '// func_801BEAD0: GPU indexed-buffer write.\n'
+    '// Writes GP0 command word r4 to *MEM_READ32(0x801CF31C) and also\n'
+    '// stores lower 24 bits to the opcode-indexed table at 0x801D2060.\n'
+    'void func_801BEAD0(uint8_t* rdram, recomp_context* ctx) {\n'
+    '    uint32_t ptr = (uint32_t)MEM_READ32(ctx, 0x801D0000 + -3300);\n'
+    '    if (ptr == 0) return;  // guard: buffer not initialized yet\n'
+    '    MEM_WRITE32(ctx, (int32_t)ptr, ctx->r4);\n'
+    '    ctx->r2 = (uint32_t)(ctx->r4) >> 24;\n'
+    '    ctx->r2 = (int32_t)((uint32_t)(ctx->r2) << 4);\n'
+    '    ctx->r4 = ctx->r4 & 0x00FFFFFF;\n'
+    '    MEM_WRITE32(ctx, (int32_t)(0x801D0000 + 0x2060) + ctx->r2, ctx->r4);\n'
+    '}\n'
+    '\n'
+    '// func_801BEB08: GPU indexed-buffer read.\n'
+    '// Returns (r4<<24) | MEM_READ32(0x801D2060 + (r4<<4)).\n'
+    'void func_801BEB08(uint8_t* rdram, recomp_context* ctx) {\n'
+    '    ctx->r2 = (int32_t)((uint32_t)(ctx->r4) << 4);\n'
+    '    ctx->r2 = MEM_READ32(ctx, (int32_t)(0x801D0000 + 0x2060) + ctx->r2);\n'
+    '    ctx->r4 = (int32_t)((uint32_t)(ctx->r4) << 24);\n'
+    '    ctx->r2 = ctx->r4 | ctx->r2;\n'
+    '}\n'
+    '\n'
+)
+if '// func_801BEAD0: GPU indexed-buffer write' not in text:
+    if OLD_DEF_801BEB74 in text:
+        text = text.replace(OLD_DEF_801BEB74, NEW_IMPL_801BEAD0 + OLD_DEF_801BEB74, 1)
+        print("  [15b] func_801BEAD0 + func_801BEB08 implementations added")
+    else:
+        print("  [15b] WARNING: func_801BEB74 definition not found")
+else:
+    print("  [15b] func_801BEAD0/BEB08 already defined")
+
+# NOTE: func_801BEAD0 and func_801BEB08 are intentionally NOT registered in the
+# dispatch table. When dispatched, they corrupt memory (ptr at 0x801CF31C is
+# uninitialized because func_801B8DFC never runs) causing SIGSEGV. The functions
+# are defined above for documentation purposes only.
+print("  [15c] func_801BEAD0/BEB08 NOT registered (known to cause SIGSEGV — func_801B8DFC init missing)")
+
+SKIP_P16_PUTDISPENV = False  # patch #16 enabled (safe when patch #17 is disabled)
+SKIP_P17_GPU_HAL = True   # Game initializes [0x801CF300]=0x801CE174 itself — our init overwrites it
+
+# ─── 16. HLE PutDispEnv: replace func_801BD69C body ─────────────────────────
+# func_801BD69C is PutDispEnv (PsyQ SDK).  It builds GP1(0x05/06/07/08) commands
+# and dispatches via a function pointer stored at *(0x801CF300 + 16).  That
+# pointer is only written by func_801B8DFC, which is missing from the recompiled
+# binary (dead-code block, not decoded as a function).  As a result, the pointer
+# chain is broken, no GP1 commands are ever sent, and the GPU display area stays
+# locked at (0, 0) — showing the wrong framebuffer — for the entire session.
+#
+# Fix: replace the function body with a direct call to hle_PutDispEnv(), which
+# reads the DISPENV struct from a0 and sends GP1(0x05/06/07/08) immediately.
+OLD_PUT_DISP_ENV = (
+    'void func_801BD69C(uint8_t* rdram, recomp_context* ctx) {\n'
+    '    ctx->r29 = (int32_t)((int32_t)(ctx->r29) + -40);\n'
+    '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 32, ctx->r31);\n'
+    '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 28, ctx->r19);\n'
+)
+NEW_PUT_DISP_ENV = (
+    'void func_801BD69C(uint8_t* rdram, recomp_context* ctx) {\n'
+    '    // HLE PutDispEnv: bypasses broken PsyQ GPU pointer chain\n'
+    '    // (func_801B8DFC initializer missing → 0x801CF300+16 is garbage)\n'
+    '    ps1::psyq::hle_PutDispEnv(ctx);\n'
+    '    return;\n'
+    '    // Original code unreachable — kept for reference\n'
+    '    ctx->r29 = (int32_t)((int32_t)(ctx->r29) + -40);\n'
+    '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 32, ctx->r31);\n'
+    '    MEM_WRITE32(ctx, (int32_t)(ctx->r29) + 28, ctx->r19);\n'
+)
+if SKIP_P16_PUTDISPENV:
+    print("  [16] SKIPPED (SKIP_P16_PUTDISPENV=True) — testing without HLE PutDispEnv")
+elif OLD_PUT_DISP_ENV in text:
+    text = text.replace(OLD_PUT_DISP_ENV, NEW_PUT_DISP_ENV, 1)
+    print("  [16] HLE PutDispEnv: func_801BD69C patched")
+else:
+    print("  [16] WARNING: func_801BD69C pattern not found — PutDispEnv not patched!")
+
+# ─── 17. Synthesize func_801B8DFC: GPU HAL struct initializer ─────────────────
+# func_801B8DFC was dead code (inside func_801B8DEC's data block, never decoded).
+# It initializes the GPU HAL struct at 0x801D3000 (confirmed free area) with
+# low-level GP0/GP1 write stubs, and writes the struct pointer to 0x801CF300.
+# Without this, all CALL_INDIRECT through the GPU function pointer chain
+# dispatches to address 0 (silently dropped), and GP1 commands are never sent.
+#
+# We also inject a call to func_801B8DFC at the top of func_801C104C (the
+# display pipeline, called every frame). The guard at [0x801CF2D4] ensures
+# it only runs once.
+
+# 17a0. Add forward declarations for the new functions
+OLD_FWDDECL_801B8DEC = 'void func_801B8DEC(uint8_t* rdram, recomp_context* ctx);\n'
+NEW_FWDDECL_GPU_HAL = (
+    'void func_801B8DEC(uint8_t* rdram, recomp_context* ctx);\n'
+    'void func_801B8DFC(uint8_t* rdram, recomp_context* ctx);\n'
+    'void func_801B8E00(uint8_t* rdram, recomp_context* ctx);\n'
+    'void func_801B8E08(uint8_t* rdram, recomp_context* ctx);\n'
+)
+if SKIP_P17_GPU_HAL:
+    print("  [17a0] SKIPPED (SKIP_P17_GPU_HAL=True)")
+elif OLD_FWDDECL_801B8DEC in text and 'void func_801B8DFC(uint8_t* rdram, recomp_context* ctx);' not in text:
+    text = text.replace(OLD_FWDDECL_801B8DEC, NEW_FWDDECL_GPU_HAL, 1)
+    print("  [17a0] Forward declarations added for GPU HAL functions")
+elif 'void func_801B8DFC(uint8_t* rdram, recomp_context* ctx);' in text:
+    print("  [17a0] Forward declarations already present")
+else:
+    print("  [17a0] WARNING: func_801B8DEC forward decl not found!")
+
+# 17a. Add the three new functions right before func_801B8DEC's definition
+OLD_801B8DEC_DEF = 'void func_801B8DEC(uint8_t* rdram, recomp_context* ctx) {\n'
+
+NEW_GPU_HAL_FUNCS = (
+    '// ── Patch #17: GPU HAL initializer (func_801B8DFC was dead code) ─────────────\n'
+    '// stub_gp1_write (PS1 addr 0x801B8E00): writes r4 directly to GP1 port\n'
+    'void func_801B8E00(uint8_t* rdram, recomp_context* ctx) {\n'
+    '    MEM_WRITE32(ctx, 0x1F801814, ctx->r[4]);\n'
+    '}\n'
+    '// stub_gp0_write (PS1 addr 0x801B8E08): writes r4 directly to GP0 port\n'
+    'void func_801B8E08(uint8_t* rdram, recomp_context* ctx) {\n'
+    '    MEM_WRITE32(ctx, 0x1F801810, ctx->r[4]);\n'
+    '}\n'
+    '// func_801B8DFC: GPU HAL struct initializer (synthesized — was dead code)\n'
+    'void func_801B8DFC(uint8_t* rdram, recomp_context* ctx) {\n'
+    '    // Guard: if already initialized, return immediately\n'
+    '    uint32_t guard = MEM_READ32(ctx, (int32_t)(0x801D0000) + (-3372)); // [0x801CF2D4]\n'
+    '    if (guard != 0) return;\n'
+    '    // Zero-fill the 64-byte GPU HAL struct at 0x801D3000 (confirmed free area)\n'
+    '    for (int i = 0; i < 64; i += 4)\n'
+    '        MEM_WRITE32(ctx, 0x801D3000 + i, 0);\n'
+    '    // struct+16 = GP1 write stub (receives ready GP1 word in r4)\n'
+    '    MEM_WRITE32(ctx, 0x801D3000 + 16, 0x801B8E00);\n'
+    '    // struct+4  = GP0 write stub (receives ready GP0 word in r4)\n'
+    '    MEM_WRITE32(ctx, 0x801D3000 + 4,  0x801B8E08);\n'
+    '    // Write struct pointer ONLY to [0x801CF300] (-3328).\n'
+    '    // DO NOT write to [0x801CF2D0] (-3376): func_801B8DEC\'s compiled body\n'
+    '    // (label L_801B8FA4) reads [0x801CF2D0] and writes struct+4 = 1,\n'
+    '    // which would corrupt our GP0 stub pointer (0x801B8E08).\n'
+    '    // 0x801CF300 is read by PutDispEnv and func_801BCF38 (display pipeline).\n'
+    '    MEM_WRITE32(ctx, (int32_t)(0x801D0000) + (-3328), 0x801D3000); // [0x801CF300]\n'
+    '    // Set guard\n'
+    '    MEM_WRITE32(ctx, (int32_t)(0x801D0000) + (-3372), 1);          // [0x801CF2D4]\n'
+    '}\n\n'
+    'void func_801B8DEC(uint8_t* rdram, recomp_context* ctx) {\n'
+)
+
+if SKIP_P17_GPU_HAL:
+    print("  [17a] SKIPPED (SKIP_P17_GPU_HAL=True)")
+elif OLD_801B8DEC_DEF in text and 'void func_801B8DFC(uint8_t* rdram, recomp_context* ctx) {' not in text:
+    text = text.replace(OLD_801B8DEC_DEF, NEW_GPU_HAL_FUNCS, 1)
+    print("  [17a] GPU HAL functions added (func_801B8DFC, func_801B8E00, func_801B8E08)")
+elif 'void func_801B8DFC(uint8_t* rdram, recomp_context* ctx) {' in text:
+    print("  [17a] func_801B8DFC already exists — skipping")
+else:
+    print("  [17a] WARNING: func_801B8DEC definition not found — GPU HAL not added!")
+
+# 17b. Register the three new functions in dispatch table
+OLD_TABLE_801B8DEC = '    recomp_func_table[0x801B8DEC] = func_801B8DEC;\n'
+NEW_TABLE_801B8DEC = (
+    '    recomp_func_table[0x801B8DEC] = func_801B8DEC;\n'
+    '    recomp_func_table[0x801B8DFC] = func_801B8DFC;\n'
+    '    recomp_func_table[0x801B8E00] = func_801B8E00;\n'
+    '    recomp_func_table[0x801B8E08] = func_801B8E08;\n'
+)
+if SKIP_P17_GPU_HAL:
+    print("  [17b] SKIPPED (SKIP_P17_GPU_HAL=True)")
+elif OLD_TABLE_801B8DEC in text and 'recomp_func_table[0x801B8DFC]' not in text:
+    text = text.replace(OLD_TABLE_801B8DEC, NEW_TABLE_801B8DEC, 1)
+    print("  [17b] GPU HAL functions registered in dispatch table")
+elif 'recomp_func_table[0x801B8DFC]' in text:
+    print("  [17b] GPU HAL functions already in dispatch table")
+else:
+    print("  [17b] WARNING: dispatch table entry for 0x801B8DEC not found!")
+
+# 17c. Inject call to func_801B8DFC at the top of func_801C104C (display pipeline)
+# TEST FLAG: set to True to skip init injection and see if original VRAM path works
+SKIP_P17C_INIT = True  # skipped because SKIP_P17_GPU_HAL=True
+
+OLD_801C104C = (
+    'void func_801C104C(uint8_t* rdram, recomp_context* ctx) {\n'
+    '    ctx->r2 = 0x801F0000;\n'
+    '    ctx->r2 = MEM_READ32(ctx, (int32_t)(ctx->r2) + 19992);\n'
+)
+NEW_801C104C = (
+    'void func_801C104C(uint8_t* rdram, recomp_context* ctx) {\n'
+    '    // Patch #17c: ensure GPU HAL struct is initialized (guard inside prevents re-init)\n'
+    '    func_801B8DFC(rdram, ctx);\n'
+    '    ctx->r2 = 0x801F0000;\n'
+    '    ctx->r2 = MEM_READ32(ctx, (int32_t)(ctx->r2) + 19992);\n'
+)
+if SKIP_P17_GPU_HAL or SKIP_P17C_INIT:
+    print("  [17c] SKIPPED")
+elif OLD_801C104C in text and 'func_801B8DFC(rdram, ctx)' not in text:
+    text = text.replace(OLD_801C104C, NEW_801C104C, 1)
+    print("  [17c] func_801B8DFC call injected into func_801C104C")
+elif 'func_801B8DFC(rdram, ctx)' in text:
+    print("  [17c] func_801B8DFC call already in func_801C104C")
+else:
+    print("  [17c] WARNING: func_801C104C pattern not found — init call not injected!")
 
 # ─── Write output ────────────────────────────────────────────────────────────
 print(f"\nWriting {DST}...")

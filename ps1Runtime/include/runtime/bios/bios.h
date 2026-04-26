@@ -132,6 +132,16 @@ private:
   // recompiled environment.  Stores the INT type (1-5) or 0 if nothing pending.
   std::atomic<uint8_t> cdIntPending_{0};
 
+  // Deferred CD exception — set by triggerCdromEvent when customExceptionExit_
+  // is active.  Consumed by drainPendingCallbacks to fire the longjmp at a
+  // safe point (after the game enters its polling loop).
+  std::atomic<uint8_t> cdExceptionPending_{0};
+
+  // Deferred VBlank exception — set by triggerVBlankEvent when
+  // customExceptionExit_ is active.  Fired from drainPendingCallbacks
+  // to avoid cross-thread register clobbering.
+  std::atomic<uint8_t> vblankExceptionPending_{0};
+
   // ── Internal generic state (game-agnostic) ─────────────────────────────
   //
   // These replace the need for per-game BSS address configuration.

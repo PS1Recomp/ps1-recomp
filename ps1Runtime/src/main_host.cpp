@@ -14,6 +14,7 @@
 #include <ps1recomp/elf_parser.h>
 #include <runtime/bios/bios.h>
 #include <runtime/psyq/psyq_hle.h>
+#include <runtime/psyq/psyq_registry.h>
 #include <runtime/cdrom/cdrom_controller.h>
 #include <runtime/cdrom/virtual_fs.h>
 #include <runtime/cpu_context.h>
@@ -303,6 +304,8 @@ int main(int argc, char *argv[]) {
     hleCfg.waitForCdSync    = [&bios](int ms) { return bios.waitForCdSync(ms); };
     hleCfg.waitForCdReady   = [&bios](int ms) { return bios.waitForCdReady(ms); };
     ps1::psyq::configure(hleCfg);
+    psyq_registry_init_defaults();
+    psyq_register_rayman_boot();
 
     fmt::print("[CONFIG] PsyQ addresses configured\n");
   }
@@ -415,12 +418,60 @@ int main(int argc, char *argv[]) {
   }
   fmt::print("Loaded {} sections into PS1 memory.\n", loaded_sections);
 
+  // ─── Apply [memory_init] pre-initialization ───────
+  // Some games need specific PS1 RAM locations pre-initialized before the
+  // game code runs (e.g., PsyQ BSS pointer tables that CdInit would normally
+  // set up but can't due to bootstrap timing in the recompiled environment).
+  if (!config_path.empty()) {
+    try {
+      auto cfg = toml::parse(config_path);
+      if (cfg.contains("memory_init")) {
+        auto &mi = toml::find(cfg, "memory_init");
+        if (mi.is_table()) {
+          for (const auto &[key, val] : mi.as_table()) {
+            uint32_t addr = std::strtoul(key.c_str(), nullptr, 0);
+            uint32_t data = 0;
+            if (val.is_integer()) {
+              data = static_cast<uint32_t>(val.as_integer());
+            } else if (val.is_string()) {
+              data = std::strtoul(val.as_string().c_str(), nullptr, 0);
+            }
+            uint32_t phys = ps1::Memory::toPhysical(addr);
+            if (phys + 4 <= ps1::Memory::RAM_SIZE) {
+              memory.write32(addr, data);
+              fmt::print("[memory_init] 0x{:08X} = 0x{:08X}\n", addr, data);
+            } else {
+              fmt::print(stderr,
+                         "[memory_init] WARN: address 0x{:08X} out of RAM range\n",
+                         addr);
+            }
+          }
+        }
+      }
+    } catch (const std::exception &e) {
+      fmt::print(stderr, "[WARN] Failed to read memory_init from config: {}\n",
+                 e.what());
+    }
+  }
+
   // ─── Main Emulation Loop ──────────────────────────
   // Game code runs in a separate thread (it never returns).
   // Main thread handles SDL events + hardware ticking + rendering.
 
   uint32_t entryPoint = parser.getEntryPoint();
   fmt::print("Starting emulation... Entry Point: 0x{:08X}\n", entryPoint);
+
+  // DEBUG: verify binary data integrity at known vtable addresses
+  {
+    uint32_t dbgAddrs[] = {0x800549BC, 0x8005499C, 0x800549A4, 0x800549A8};
+    for (auto a : dbgAddrs) {
+      uint32_t phys = ps1::Memory::toPhysical(a);
+      if (phys + 4 <= ps1::Memory::RAM_SIZE) {
+        uint32_t val = memory.read32(a);
+        fmt::print("[DBG] 0x{:08X} = 0x{:08X}\n", a, val);
+      }
+    }
+  }
   std::atomic<bool> gameRunning{true};
   std::atomic<bool> gameFinished{false};
   uint64_t frameCount = 0;
@@ -428,6 +479,7 @@ int main(int argc, char *argv[]) {
   // Initialize dispatch table before starting the game
   recomp_init_dispatch_table();
   fmt::print("[Dispatch] Table initialized.\n");
+
 
   // ─── VBlank ticker thread ─────────────────────────────
   // The game spins polling the vblank counter (0x801CF2CC).  The main SDL

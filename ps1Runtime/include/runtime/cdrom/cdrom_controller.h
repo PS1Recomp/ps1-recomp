@@ -168,6 +168,7 @@ private:
   std::vector<uint8_t> secondaryData_;
 
   void executeCommand(uint8_t cmd);
+  void cmdSync();
   void cmdGetStat();
   void cmdSetLoc();
   void cmdReadN();

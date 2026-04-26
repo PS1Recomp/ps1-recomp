@@ -22,6 +22,14 @@ target_link_libraries(ps1Analyzer_lib
         toml11::toml11
 )
 
+# Default search root for psyq_signatures.toml / psyq_metadata.toml. The
+# matcher first honors PS1RECOMP_DATA_DIR from the environment, then this
+# baked-in path (set to the in-tree data dir at build time).
+target_compile_definitions(ps1Analyzer_lib
+    PRIVATE
+        PS1RECOMP_DATA_DIR_DEFAULT="${CMAKE_SOURCE_DIR}/ps1Analyzer/data"
+)
+
 # Executable target
 add_executable(ps1Analyzer
     src/main.cpp

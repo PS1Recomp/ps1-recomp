@@ -25,6 +25,11 @@ add_library(ps1Runtime_lib STATIC
     src/config.cpp
     src/overlay_manager.cpp
     src/psyq/psyq_hle.cpp
+    src/psyq/psyq_registry.cpp
+    src/psyq/psyq_libapi.cpp
+    src/psyq/psyq_libcd.cpp
+    src/psyq/psyq_libgte.cpp
+    src/psyq/psyq_libgpu.cpp
 )
 
 target_include_directories(ps1Runtime_lib

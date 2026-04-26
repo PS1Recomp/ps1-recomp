@@ -945,8 +945,9 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // CdCommand function gates on syncByte==2 before issuing new commands.
   // If we wrote 3, subsequent commands would hang waiting for 2.
   //
-  // NOTE: We use write32 instead of write8 because some games read these as
-  // 32-bit words. Writing the full word ensures upper bytes are zero.
+  // NOTE: Use write8 because in some games (Crash Bandicoot) the sync and
+  // ready bytes are adjacent (0x8005588C / 0x8005588D) — write32 to sync
+  // would clobber the ready byte.  The PsyQ handler writes these as bytes.
   //
   // NOTE: For INT1, the ready byte is written AFTER the sector copy above
   // completes, so the game thread sees data before the signal.
@@ -958,32 +959,34 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   switch (cdIntType) {
   case 1: // DataReady → readyByte only
     if (PSYQ_CD_READY_BYTE)
-      ctx_.mem->write32(PSYQ_CD_READY_BYTE, 1);
+      ctx_.mem->write8(PSYQ_CD_READY_BYTE, 1);
     break;
   case 2: // Complete → syncByte only
     if (PSYQ_CD_SYNC_BYTE)
-      ctx_.mem->write32(PSYQ_CD_SYNC_BYTE, 2);
+      ctx_.mem->write8(PSYQ_CD_SYNC_BYTE, 2);
     break;
   case 3: // Acknowledge → syncByte = 2 (mapped to Complete)
     if (PSYQ_CD_SYNC_BYTE)
-      ctx_.mem->write32(PSYQ_CD_SYNC_BYTE, 2);
+      ctx_.mem->write8(PSYQ_CD_SYNC_BYTE, 2);
     break;
   case 4: // DataEnd → readyByte only
     if (PSYQ_CD_READY_BYTE)
-      ctx_.mem->write32(PSYQ_CD_READY_BYTE, 4);
+      ctx_.mem->write8(PSYQ_CD_READY_BYTE, 4);
     break;
   case 5: // DiskError → both
     if (PSYQ_CD_SYNC_BYTE)
-      ctx_.mem->write32(PSYQ_CD_SYNC_BYTE, 5);
+      ctx_.mem->write8(PSYQ_CD_SYNC_BYTE, 5);
     if (PSYQ_CD_READY_BYTE)
-      ctx_.mem->write32(PSYQ_CD_READY_BYTE, 5);
+      ctx_.mem->write8(PSYQ_CD_READY_BYTE, 5);
     break;
   default:
     break;
   }
   BIOS_LOG("[CDROM-HLE] INT{} → sync@0x{:08X}={} ready@0x{:08X}={}\n",
-           cdIntType, PSYQ_CD_SYNC_BYTE, ctx_.mem->read32(PSYQ_CD_SYNC_BYTE),
-           PSYQ_CD_READY_BYTE, ctx_.mem->read32(PSYQ_CD_READY_BYTE));
+           cdIntType, PSYQ_CD_SYNC_BYTE,
+           PSYQ_CD_SYNC_BYTE ? ctx_.mem->read8(PSYQ_CD_SYNC_BYTE) : 0,
+           PSYQ_CD_READY_BYTE,
+           PSYQ_CD_READY_BYTE ? ctx_.mem->read8(PSYQ_CD_READY_BYTE) : 0);
 
   // Write a non-zero status halfword so the PsyQ polling code proceeds
   // past the gate check.  0x0002 = "motor on" status bit.
@@ -992,35 +995,33 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   }
 
   // ── Dispatch CustomExceptionExit if registered ──
-  // Games like Tomba register a jmp_buf via B0:0x19 (SetCustomExitFromException)
-  // and expect the BIOS exception dispatcher to longjmp(buf, 1) on any CD IRQ.
-  // BSS state bytes are already written above so the handler can read them.
-  if (customExceptionExit_ != 0) {
-    uint32_t buf = customExceptionExit_;
-    uint32_t jmpRA = ctx_.mem->read32(buf + 0);
-    BIOS_LOG("[CDROM-HLE] Executing custom exception handler buf=0x{:08X} -> RA=0x{:08X}\n",
-             buf, jmpRA);
-
-    ctx_.r[31] = jmpRA; // RA
-    ctx_.r[29] = ctx_.mem->read32(buf + 4); // SP
-    ctx_.r[30] = ctx_.mem->read32(buf + 8); // FP
-    for (int i = 0; i < 8; i++) {
-      ctx_.r[16 + i] = ctx_.mem->read32(buf + 12 + (i * 4)); // S0-S7
-    }
-    ctx_.r[28] = ctx_.mem->read32(buf + 44); // GP
-
-    ctx_.cop0[13] = 0x400;
-
-    ctx_.pc = ctx_.r[31];
-    ctx_.r[V0] = 1; // setjmp returns 1 on longjmp
-
-    // Emulate ReturnFromException: clear exception bits in SR
-    uint32_t sr = ctx_.cop0[12];
-    ctx_.cop0[12] = (sr & ~0xF) | ((sr >> 2) & 0xF);
-
-    // Return early: game handles the event via its own longjmp handler
-    return;
-  }
+  //
+  // CD interrupts fire SYNCHRONOUSLY from the game thread during CDROM
+  // register writes.  If we longjmp here, we abort the game's call stack
+  // before it enters its polling loop.
+  //
+  // On a real PS1, CD interrupts are ASYNCHRONOUS: the game sends a command,
+  // enters a polling loop, and the interrupt arrives later.  The BIOS handler
+  // processes it and then longjmps (if SetCustomExitFromException was used).
+  //
+  // We emulate this by DEFERRING the customExceptionExit dispatch: queue the
+  // CD interrupt type, and fire the longjmp from drainPendingCallbacks() —
+  // which the recompiler inserts into polling loops.  This gives the game time
+  // to set up its polling state before the longjmp fires.
+  //
+  // Do NOT defer customExceptionExit for CD interrupts.
+  //
+  // CD commands in our implementation execute synchronously on the game
+  // thread (writeRegister → executeCommand → pushResponse → callback).
+  // Secondary responses (INT2) also fire synchronously via fireSecondaryNow()
+  // when the game acks the primary interrupt.  The game's PsyQ polling code
+  // reads the hardware interrupt flag register directly and processes the
+  // response through register I/O — it does not need (and is disrupted by)
+  // a deferred longjmp.
+  //
+  // The BSS state (cd_sync_byte, cd_ready_byte, cd_status_hw) is already
+  // updated above, which is sufficient for the polling code to detect
+  // command completion.
 
   eventSystem_.triggerEvent(CDROM_EVENT_CLASS_1, spec);
   eventSystem_.triggerEvent(CDROM_EVENT_CLASS_2, spec);
@@ -1049,7 +1050,7 @@ void Bios::triggerVBlankEvent() {
     ctx_.mem->write32(psyq_.vblankCounter, cnt + 1);
   }
 
-  // ── Fire CustomExceptionExit on VBlank (matches real PS1 behavior) ────────
+  // ── Defer CustomExceptionExit on VBlank ──────────────────────────────────
   //
   // On a real PS1, B0:0x19 (SetCustomExitFromException) installs a jmpbuf
   // that is triggered by ANY hardware exception, including VBlank.
@@ -1057,24 +1058,20 @@ void Bios::triggerVBlankEvent() {
   // setjmp, send a CD command, and wait — the VBlank (or CD INT) fires
   // the longjmp which breaks them out of the wait loop.
   //
-  if (customExceptionExit_ != 0) {
-    uint32_t buf = customExceptionExit_;
-    uint32_t jmpRA = ctx_.mem->read32(buf + 0);
-    BIOS_LOG("[VBLANK-HLE] CustomExitFromException buf=0x{:08X} -> RA=0x{:08X}\n",
-             buf, jmpRA);
-    ctx_.r[31] = jmpRA;                                       // RA
-    ctx_.r[29] = ctx_.mem->read32(buf + 4);                   // SP
-    ctx_.r[30] = ctx_.mem->read32(buf + 8);                   // FP
-    for (int i = 0; i < 8; i++) {
-      ctx_.r[16 + i] = ctx_.mem->read32(buf + 12 + (i * 4)); // S0-S7
-    }
-    ctx_.r[28] = ctx_.mem->read32(buf + 44);                  // GP
-    ctx_.cop0[13] = 0x400;
-    ctx_.pc = ctx_.r[31];
-    ctx_.r[V0] = 1; // setjmp returns 1 on longjmp
-    uint32_t sr = ctx_.cop0[12];
-    ctx_.cop0[12] = (sr & ~0xF) | ((sr >> 2) & 0xF);
-    return; // game handles it via its longjmp handler; skip standard events
+  // IMPORTANT: triggerVBlankEvent runs on the VBlank THREAD, not the game
+  // thread.  Writing ctx_ registers here is a data race that corrupts game
+  // state.  Instead, set a flag and let drainPendingCallbacks() (which runs
+  // on the game thread) perform the actual longjmp.
+  //
+  // Only defer when PsyQ VBlank counter is configured — this indicates the
+  // game relies on BSS-based polling and needs the exception handler to
+  // break its wait loop.  Games that poll hardware directly (like Crash)
+  // don't need VBlank longjmp and it disrupts their execution.
+  //
+  if (customExceptionExit_ != 0 && psyq_.vblankCounter != 0) {
+    vblankExceptionPending_.store(1, std::memory_order_release);
+    BIOS_LOG("[VBLANK-HLE] CustomExitFromException deferred (buf=0x{:08X})\n",
+             customExceptionExit_);
   }
 
   // ── Deliver ALL standard PsyQ events that should fire each frame ──
@@ -1178,6 +1175,42 @@ void Bios::triggerVBlankEvent() {
 
 void Bios::drainPendingCallbacks() {
   eventSystem_.drainPendingCallbacks();
+
+  // ── Deferred CD customExceptionExit dispatch ──────────────────────
+  //
+  // When a CD interrupt fires synchronously (during a CDROM register write),
+  // triggerCdromEvent queues it here instead of longjmping immediately.
+  // Now that the game is at a safe yield point (polling loop), we fire the
+  // longjmp so the game's exception handler can process the CD result.
+  //
+  // Check for deferred exceptions (CD or VBlank) — fire at most one per
+  // drainPendingCallbacks call.  CD takes priority over VBlank.
+  uint8_t cdExc = cdExceptionPending_.exchange(0, std::memory_order_acquire);
+  uint8_t vbExc = vblankExceptionPending_.exchange(0, std::memory_order_acquire);
+  if ((cdExc != 0 || vbExc != 0) && customExceptionExit_ != 0) {
+    uint32_t buf = customExceptionExit_;
+    uint32_t jmpRA = ctx_.mem->read32(buf + 0);
+    if (cdExc != 0) {
+      BIOS_LOG("[CDROM-HLE] Deferred customExceptionExit for INT{} -> RA=0x{:08X}\n",
+               cdExc, jmpRA);
+    } else {
+      BIOS_LOG("[VBLANK-HLE] Deferred customExceptionExit -> RA=0x{:08X}\n",
+               jmpRA);
+    }
+    ctx_.r[31] = jmpRA;
+    ctx_.r[29] = ctx_.mem->read32(buf + 4);
+    ctx_.r[30] = ctx_.mem->read32(buf + 8);
+    for (int i = 0; i < 8; i++) {
+      ctx_.r[16 + i] = ctx_.mem->read32(buf + 12 + (i * 4));
+    }
+    ctx_.r[28] = ctx_.mem->read32(buf + 44);
+    ctx_.cop0[13] = 0x400;
+    ctx_.pc = ctx_.r[31];
+    ctx_.r[V0] = 1;
+    uint32_t sr = ctx_.cop0[12];
+    ctx_.cop0[12] = (sr & ~0xF) | ((sr >> 2) & 0xF);
+    return; // longjmp fired — game handles it
+  }
 
   // ── Simulate SysEnqIntRP CDROM interrupt handler chain ──────────
   //

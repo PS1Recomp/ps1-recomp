@@ -357,67 +357,11 @@ static std::string createSyntheticELF(
     return path;
 }
 
-TEST(PsyQMatcher, Pass3DetectsSpuInitBySPURegWrite) {
-    // SpuInit signature: lui at, 0x1F80 + sh zero, 0x1D80(at)
-    constexpr uint32_t FUNC_ADDR = 0x80050000;
-
-    createSyntheticELF("/tmp/ps1recomp_test_psyq_p3_spu.elf",
-        {{"func_80050000", FUNC_ADDR}},
-        {
-            {FUNC_ADDR + 0, 0x3C011F80u}, // lui at, 0x1F80
-            {FUNC_ADDR + 4, 0xA4201D80u}, // sh zero, 0x1D80(at)
-            {FUNC_ADDR + 8, 0x03E00008u},  // jr ra
-        });
-
-    ElfParser elf;
-    ASSERT_TRUE(elf.load("/tmp/ps1recomp_test_psyq_p3_spu.elf"));
-
-    FunctionFinder finder;
-    finder.findFunctions(elf);
-
-    PsyQMatcher matcher;
-    matcher.matchFunctions(elf, finder);
-
-    bool found = false;
-    for (const auto& m : matcher.getMatches())
-        if (m.name == "SpuInit" && m.address == FUNC_ADDR) found = true;
-    EXPECT_TRUE(found) << "Pass3 should detect SpuInit by SPU register write pattern";
-
-    std::remove("/tmp/ps1recomp_test_psyq_p3_spu.elf");
-}
-
-TEST(PsyQMatcher, Pass3DetectsCdInitByBIOSCallIndex) {
-    // CdInit signature: addiu t1,zero,0xAD + lui at,0 + addiu at,at,0xA0 + jr at
-    constexpr uint32_t FUNC_ADDR = 0x80060000;
-
-    createSyntheticELF("/tmp/ps1recomp_test_psyq_p3_cd.elf",
-        {{"func_80060000", FUNC_ADDR}},
-        {
-            {FUNC_ADDR +  0, 0x27BDFFF0u}, // addiu sp, sp, -0x10 (prologue)
-            {FUNC_ADDR +  4, 0xAFBF000Cu}, // sw ra, 0xC(sp)
-            {FUNC_ADDR +  8, 0x240900ADu}, // addiu t1, zero, 0xAD
-            {FUNC_ADDR + 12, 0x3C010000u}, // lui at, 0
-            {FUNC_ADDR + 16, 0x242100A0u}, // addiu at, at, 0xA0
-            {FUNC_ADDR + 20, 0x00200008u}, // jr at
-            {FUNC_ADDR + 24, 0x00000000u}, // nop (delay slot)
-        });
-
-    ElfParser elf;
-    ASSERT_TRUE(elf.load("/tmp/ps1recomp_test_psyq_p3_cd.elf"));
-
-    FunctionFinder finder;
-    finder.findFunctions(elf);
-
-    PsyQMatcher matcher;
-    matcher.matchFunctions(elf, finder);
-
-    bool found = false;
-    for (const auto& m : matcher.getMatches())
-        if (m.name == "CdInit" && m.address == FUNC_ADDR) found = true;
-    EXPECT_TRUE(found) << "Pass3 should detect CdInit by A0:0xAD BIOS call pattern";
-
-    std::remove("/tmp/ps1recomp_test_psyq_p3_cd.elf");
-}
+// Note: the prior Pass3 byte-pattern detection tests
+// (Pass3DetectsSpuInitBySPURegWrite, Pass3DetectsCdInitByBIOSCallIndex)
+// were removed in Sessao 0.4 — the InstrPattern/ByteSig matcher is gone.
+// Equivalent coverage now lives in test_psyq_hash_matching.cpp, which uses
+// real SHA-256 hashes from psyq_signatures.toml.
 
 TEST(PsyQMatcher, Pass3DoesNotMatchUnrelatedFunction) {
     // A function with only NOPs — should NOT match any signature

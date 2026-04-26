@@ -6,6 +6,7 @@ add_library(ps1Recomp_lib
     src/instruction_emitter.cpp
     src/gte_emitter.cpp
     src/overlay_handler.cpp
+    src/hle_emitter.cpp
 )
 
 target_include_directories(ps1Recomp_lib

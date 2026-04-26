@@ -105,6 +105,7 @@ static toml::value buildConfig(const ElfParser& elf,
             s["name"]      = m->name;
             s["address"]   = hexAddr(m->address);
             s["subsystem"] = PsyQMatcher::subsystemName(m->subsystem);
+            if (!m->library.empty()) s["library"] = m->library;
             stubs.push_back(std::move(s));
         }
         root["stubs"] = std::move(stubs);
@@ -117,6 +118,7 @@ static toml::value buildConfig(const ElfParser& elf,
             toml::table s;
             s["name"]    = m->name;
             s["address"] = hexAddr(m->address);
+            if (!m->library.empty()) s["library"] = m->library;
             skips.push_back(std::move(s));
         }
         root["skips"] = std::move(skips);
@@ -129,9 +131,31 @@ static toml::value buildConfig(const ElfParser& elf,
             toml::table p;
             p["name"]    = m->name;
             p["address"] = hexAddr(m->address);
+            if (!m->library.empty()) p["library"] = m->library;
             pass.push_back(std::move(p));
         }
         root["passthroughs"] = std::move(pass);
+    }
+
+    // ── [[hle_functions]] — forward-compat schema for ps1Recomp Sessao 0.5 ──
+    // Every match (any stub_type) shows up here with the canonical
+    // `<library>_<basename>` identifier the recompiler will use to look up
+    // the C++ HLE stub. Only emitted when the `library` field is filled
+    // (i.e., the match came from the hash-based pass).
+    {
+        toml::array hle;
+        for (const auto& m : matcher.getMatches()) {
+            if (m.library.empty()) continue;
+            toml::table f;
+            f["address"]   = hexAddr(m.address);
+            f["hle"]       = true;
+            f["name"]      = fmt::format("{}_{}", m.library, m.name);
+            f["library"]   = m.library;
+            f["subsystem"] = PsyQMatcher::subsystemName(m.subsystem);
+            f["stub_type"] = PsyQMatcher::stubTypeName(m.stubType);
+            hle.push_back(std::move(f));
+        }
+        root["hle_functions"] = std::move(hle);
     }
 
     return root;

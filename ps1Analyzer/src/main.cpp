@@ -226,8 +226,16 @@ int main(int argc, char *argv[]) {
   matcher.matchFunctions(parser, finder);
 
   fmt::print("\nFunction stats:\n");
-  fmt::print("  Total functions: {}\n", finder.getFunctionCount());
-  fmt::print("  PsyQ matches:    {}\n", matcher.getMatchCount());
+  fmt::print("  Total functions:   {}\n", finder.getFunctionCount());
+  fmt::print("  PsyQ matches:      {}\n", matcher.getMatchCount());
+  fmt::print("  Loaded signatures: {}\n", matcher.getSignatureCount());
+
+  const auto lc = matcher.getLibraryCounts();
+  fmt::print(stderr,
+             "[PSYQ] Detected {} PsyQ functions in {} "
+             "(libgpu={}, libetc={}, libapi={}, libcd={}, libgte={}, other={})\n",
+             matcher.getMatchCount(), input_path,
+             lc.libgpu, lc.libetc, lc.libapi, lc.libcd, lc.libgte, lc.other);
 
   // 3. Generate config
   if (output_path) {
