@@ -94,6 +94,7 @@ public:
         size_t libapi = 0;
         size_t libcd  = 0;
         size_t libgte = 0;
+        size_t libgs  = 0;
         size_t other  = 0;
         size_t fullMode = 0;
         size_t maskedMode = 0;

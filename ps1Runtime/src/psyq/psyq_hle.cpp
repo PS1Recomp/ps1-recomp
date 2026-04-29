@@ -9,6 +9,8 @@ static HleConfig g_cfg;
 
 void configure(const HleConfig &cfg) { g_cfg = cfg; }
 
+const HleConfig &getConfig() { return g_cfg; }
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 static inline uint32_t readVBlankCount(recomp_context *ctx) {

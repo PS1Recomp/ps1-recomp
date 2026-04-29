@@ -35,6 +35,15 @@ public:
   void setInputController(input::InputController *input) { input_ = input; }
   void setCdromController(cdrom::CdromController *cdrom) { cdrom_ = cdrom; }
 
+  // Read-only accessor used by libcd HLE (psyq_libcd.cpp) to drive the
+  // backend controller directly. Returns nullptr when not attached (typical
+  // for unit tests that don't exercise the disc subsystem).
+  cdrom::CdromController *cdromController() const { return cdrom_; }
+
+  // Same idea for the libetc Pad HLE (psyq_pad.cpp). Returns nullptr in tests
+  // or headless runs that don't wire SDL input.
+  input::InputController *inputController() const { return input_; }
+
   // ── Per-game PsyQ BSS address configuration ──
   // These addresses vary by game (PsyQ version / link layout).
   // All default to 0 — MUST be configured per-game via env vars or TOML.

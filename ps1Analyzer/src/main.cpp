@@ -233,9 +233,9 @@ int main(int argc, char *argv[]) {
   const auto lc = matcher.getLibraryCounts();
   fmt::print(stderr,
              "[PSYQ] Detected {} PsyQ functions in {} "
-             "(libgpu={}, libetc={}, libapi={}, libcd={}, libgte={}, other={})\n",
+             "(libgpu={}, libetc={}, libapi={}, libcd={}, libgte={}, libgs={}, other={})\n",
              matcher.getMatchCount(), input_path,
-             lc.libgpu, lc.libetc, lc.libapi, lc.libcd, lc.libgte, lc.other);
+             lc.libgpu, lc.libetc, lc.libapi, lc.libcd, lc.libgte, lc.libgs, lc.other);
 
   // 3. Generate config
   if (output_path) {

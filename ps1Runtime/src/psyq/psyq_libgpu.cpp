@@ -1,8 +1,11 @@
 #include "runtime/psyq/psyq_libgpu.h"
 #include "runtime/memory.h"
+#include "runtime/psyq/psyq_hle.h"
 #include "runtime/psyq/psyq_registry.h"
 
 #include <cstdint>
+#include <fmt/format.h>
+#include <unordered_set>
 
 namespace ps1::psyq {
 
@@ -15,6 +18,46 @@ inline void writeLen(recomp_context *ctx, uint32_t p, uint8_t len) {
 }
 inline void writeCode(recomp_context *ctx, uint32_t p, uint8_t code) {
   ctx->mem->write8(p + 7, code);
+}
+
+// Reads the int16 RECT { x, y, w, h } at the given PS1 RAM pointer.
+struct PsyqRect {
+  int16_t x, y, w, h;
+};
+
+inline PsyqRect readRect(recomp_context *ctx, uint32_t p) {
+  PsyqRect r;
+  r.x = static_cast<int16_t>(ctx->mem->read16(p + 0));
+  r.y = static_cast<int16_t>(ctx->mem->read16(p + 2));
+  r.w = static_cast<int16_t>(ctx->mem->read16(p + 4));
+  r.h = static_cast<int16_t>(ctx->mem->read16(p + 6));
+  return r;
+}
+
+inline void writeGP0(uint32_t w) {
+  const auto &cfg = getConfig();
+  if (cfg.writeGP0) cfg.writeGP0(w);
+}
+
+inline void writeGP1(uint32_t w) {
+  const auto &cfg = getConfig();
+  if (cfg.writeGP1) cfg.writeGP1(w);
+}
+
+// Module-level state shared across libgpu HLE calls.
+// videoMode: 0 = NTSC (default), 1 = PAL.
+int g_videoMode = 0;
+
+// VSync/DrawSync callback PS1-side function pointers. Recorded so we can
+// return the previous one; not actually invoked (runtime owns VBlank/GPU).
+uint32_t g_vsyncCallback = 0;
+uint32_t g_drawSyncCallback = 0;
+
+// "Once-per-name" warning helper for stubbed libgs entries.
+void warnOnceFor(const char *name) {
+  static std::unordered_set<std::string> seen;
+  if (seen.insert(name).second)
+    fmt::print(stderr, "[PSYQ] {} stubbed (NOP) — no-op for current HLE coverage\n", name);
 }
 
 } // namespace
@@ -75,6 +118,132 @@ void hle_libgpu_SetSprt16(recomp_context *ctx) {
   writeCode(ctx, p, 0x7C);
 }
 
+// ── Group 1.A — display-area / VRAM-transfer / video-mode HLEs ─────────────
+//
+// All take args in the standard PsyQ a0..a3 + stack-spill convention; values
+// are converted to GP0/GP1 commands and pushed via `writeGP0`/`writeGP1`.
+
+// SetDispMask(mask): GP1(0x03, mask).  mask=1 enable, mask=0 disable.
+void hle_libgpu_SetDispMask(recomp_context *ctx) {
+  uint32_t mask = ctx->r[A0] & 0x1u;
+  // GP1(0x03): bit 0 = display disable (1 = OFF, 0 = ON).
+  // PsyQ SetDispMask(1) = enable, so we invert here.
+  writeGP1(0x03000000u | (mask ? 0u : 1u));
+}
+
+// LoadImage(rect*, src*) — GP0(0xA0) + (w*h+1)/2 data words.
+void hle_libgpu_LoadImage(recomp_context *ctx) {
+  PsyqRect r = readRect(ctx, ctx->r[A0]);
+  uint32_t src = ctx->r[A1];
+  if (r.w <= 0 || r.h <= 0) return;
+
+  writeGP0(0xA0000000u);
+  writeGP0(static_cast<uint32_t>(r.y & 0xFFFF) << 16 |
+           static_cast<uint32_t>(r.x & 0xFFFF));
+  writeGP0(static_cast<uint32_t>(r.h & 0xFFFF) << 16 |
+           static_cast<uint32_t>(r.w & 0xFFFF));
+
+  // Data: w * h pixels at 16bpp = (w*h + 1) / 2 32-bit words.
+  uint32_t pixels = static_cast<uint32_t>(r.w) * static_cast<uint32_t>(r.h);
+  uint32_t words  = (pixels + 1u) / 2u;
+  for (uint32_t i = 0; i < words; ++i)
+    writeGP0(ctx->mem->read32(src + i * 4));
+}
+
+// StoreImage(rect*, dst*) — GP0(0xC0); drains GPUREAD into PS1 RAM.
+// The runtime GPU implements VRAM→CPU via GPUREAD register polling. We can't
+// reach `gpuRead_` directly from here, but the GPU's CPU→VRAM/VRAM→CPU state
+// machine processes the rect on GP0(0xC0) submission. Until a `readGPUREAD`
+// drain hook is exposed, this stub just pumps the command and leaves the
+// destination buffer untouched. Logged so misuse is visible.
+void hle_libgpu_StoreImage(recomp_context *ctx) {
+  PsyqRect r = readRect(ctx, ctx->r[A0]);
+  if (r.w <= 0 || r.h <= 0) return;
+  writeGP0(0xC0000000u);
+  writeGP0(static_cast<uint32_t>(r.y & 0xFFFF) << 16 |
+           static_cast<uint32_t>(r.x & 0xFFFF));
+  writeGP0(static_cast<uint32_t>(r.h & 0xFFFF) << 16 |
+           static_cast<uint32_t>(r.w & 0xFFFF));
+  warnOnceFor("libgpu_StoreImage");
+}
+
+// MoveImage(rect*, x, y) — GP0(0x80) VRAM→VRAM blit.
+void hle_libgpu_MoveImage(recomp_context *ctx) {
+  PsyqRect r  = readRect(ctx, ctx->r[A0]);
+  uint16_t dx = static_cast<uint16_t>(ctx->r[A1]);
+  uint16_t dy = static_cast<uint16_t>(ctx->r[A2]);
+  if (r.w <= 0 || r.h <= 0) return;
+  writeGP0(0x80000000u);
+  writeGP0(static_cast<uint32_t>(r.y & 0xFFFF) << 16 |
+           static_cast<uint32_t>(r.x & 0xFFFF));
+  writeGP0(static_cast<uint32_t>(dy) << 16 | static_cast<uint32_t>(dx));
+  writeGP0(static_cast<uint32_t>(r.h & 0xFFFF) << 16 |
+           static_cast<uint32_t>(r.w & 0xFFFF));
+}
+
+// ClearImage(rect*, r, g, b) — GP0(0x02) FillRect.
+void hle_libgpu_ClearImage(recomp_context *ctx) {
+  PsyqRect r = readRect(ctx, ctx->r[A0]);
+  uint8_t cr = static_cast<uint8_t>(ctx->r[A1]);
+  uint8_t cg = static_cast<uint8_t>(ctx->r[A2]);
+  uint8_t cb = static_cast<uint8_t>(ctx->r[A3]);
+  if (r.w <= 0 || r.h <= 0) return;
+  writeGP0(0x02000000u | (static_cast<uint32_t>(cb) << 16) |
+           (static_cast<uint32_t>(cg) << 8) | cr);
+  writeGP0(static_cast<uint32_t>(r.y & 0xFFFF) << 16 |
+           static_cast<uint32_t>(r.x & 0xFFFF));
+  writeGP0(static_cast<uint32_t>(r.h & 0xFFFF) << 16 |
+           static_cast<uint32_t>(r.w & 0xFFFF));
+}
+
+// DrawSyncCallback(fn): record + return previous. Not invoked by the runtime
+// because the GPU is fully synchronous (DrawSync always returns 0 immediately).
+void hle_libgpu_DrawSyncCallback(recomp_context *ctx) {
+  uint32_t prev = g_drawSyncCallback;
+  g_drawSyncCallback = ctx->r[A0];
+  ctx->r[V0] = prev;
+}
+
+// VSyncCallback(fn): record + return previous. The host VBlank thread doesn't
+// dispatch back into PS1 code — Rayman/Crash don't depend on it for boot.
+void hle_libgpu_VSyncCallback(recomp_context *ctx) {
+  uint32_t prev = g_vsyncCallback;
+  g_vsyncCallback = ctx->r[A0];
+  ctx->r[V0] = prev;
+}
+
+// SetVideoMode(mode): 0=NTSC, 1=PAL. Stores in module state, returns prev.
+// Real impl would also reissue GP1(0x08) with the new VRES bits; deferred
+// until a game actually exercises mid-run mode switching.
+void hle_libgpu_SetVideoMode(recomp_context *ctx) {
+  int prev = g_videoMode;
+  g_videoMode = static_cast<int>(ctx->r[A0]) & 0x1;
+  ctx->r[V0] = static_cast<uint32_t>(prev);
+}
+
+void hle_libgpu_GetVideoMode(recomp_context *ctx) {
+  ctx->r[V0] = static_cast<uint32_t>(g_videoMode);
+}
+
+// ── Group 1.A — libgs scene-graph stubs ────────────────────────────────────
+//
+// libgs is a higher-level wrapper around libgpu; neither Rayman nor Crash
+// links it. These NOP stubs keep the registry dispatch happy and warn once
+// per name so missing real implementations are visible.
+
+void hle_libgs_GsInitGraph(recomp_context *ctx) {
+  (void)ctx; warnOnceFor("libgs_GsInitGraph");
+}
+void hle_libgs_GsDefDispBuff(recomp_context *ctx) {
+  (void)ctx; warnOnceFor("libgs_GsDefDispBuff");
+}
+void hle_libgs_GsSetWorkBase(recomp_context *ctx) {
+  (void)ctx; warnOnceFor("libgs_GsSetWorkBase");
+}
+void hle_libgs_GsSortClear(recomp_context *ctx) {
+  (void)ctx; warnOnceFor("libgs_GsSortClear");
+}
+
 void psyq_register_libgpu_extras() {
   psyq_register("libgpu_GetClut",     &hle_libgpu_GetClut);
   psyq_register("libgpu_SetShadeTex", &hle_libgpu_SetShadeTex);
@@ -83,6 +252,24 @@ void psyq_register_libgpu_extras() {
   psyq_register("libgpu_SetSprt",     &hle_libgpu_SetSprt);
   psyq_register("libgpu_SetSprt8",    &hle_libgpu_SetSprt8);
   psyq_register("libgpu_SetSprt16",   &hle_libgpu_SetSprt16);
+
+  // Group 1.A
+  psyq_register("libgpu_SetDispMask",       &hle_libgpu_SetDispMask);
+  psyq_register("libgpu_LoadImage",         &hle_libgpu_LoadImage);
+  psyq_register("libgpu_StoreImage",        &hle_libgpu_StoreImage);
+  psyq_register("libgpu_MoveImage",         &hle_libgpu_MoveImage);
+  psyq_register("libgpu_ClearImage",        &hle_libgpu_ClearImage);
+  psyq_register("libgpu_DrawSyncCallback",  &hle_libgpu_DrawSyncCallback);
+  // VSyncCallback / SetVideoMode / GetVideoMode live in libetc per
+  // psyq_signatures.toml (verified for v3.5/v4.0 LIBETC).
+  psyq_register("libetc_VSyncCallback",     &hle_libgpu_VSyncCallback);
+  psyq_register("libetc_SetVideoMode",      &hle_libgpu_SetVideoMode);
+  psyq_register("libetc_GetVideoMode",      &hle_libgpu_GetVideoMode);
+
+  psyq_register("libgs_GsInitGraph",        &hle_libgs_GsInitGraph);
+  psyq_register("libgs_GsDefDispBuff",      &hle_libgs_GsDefDispBuff);
+  psyq_register("libgs_GsSetWorkBase",      &hle_libgs_GsSetWorkBase);
+  psyq_register("libgs_GsSortClear",        &hle_libgs_GsSortClear);
 }
 
 } // namespace ps1::psyq

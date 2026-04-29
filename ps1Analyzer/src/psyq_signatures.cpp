@@ -444,6 +444,11 @@ void PsyQMatcher::matchByHash(const ElfParser& elf, const FunctionFinder& finder
         if (funcSize > avail) funcSize = avail;
         if (funcSize < 4 || (funcSize % 4) != 0) continue;
 
+        // Hashes for 2-instruction (8-byte) PsyQ stubs collide pervasively
+        // with unrelated game code (e.g. libgs trampolines `j tgt; nop` match
+        // every short prologue). Skip them — they're not reliable fingerprints.
+        if (funcSize <= 8) continue;
+
         const uint8_t* bytes = sec->data + funcOffset;
 
         // Always try hash_full first — for tiny BIOS wrappers the masked
@@ -517,6 +522,7 @@ PsyQMatcher::LibraryCounts PsyQMatcher::getLibraryCounts() const {
         else if (m.library == "libapi") ++c.libapi;
         else if (m.library == "libcd")  ++c.libcd;
         else if (m.library == "libgte") ++c.libgte;
+        else if (m.library == "libgs")  ++c.libgs;
         else                            ++c.other;
     }
     return c;

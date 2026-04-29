@@ -92,6 +92,12 @@ add_executable(ps1Runtime_tests
     runtime/test_psyq_hle.cpp
     runtime/test_psyq_registry.cpp
     runtime/test_psyq_libapi.cpp
+    runtime/test_psyq_gpu.cpp
+    runtime/test_psyq_cd.cpp
+    runtime/test_psyq_gte.cpp
+    runtime/test_psyq_font.cpp
+    runtime/test_psyq_pad.cpp
+    runtime/test_psyq_libc.cpp
 )
 
 target_include_directories(ps1Runtime_tests

@@ -1,14 +1,19 @@
 #include "runtime/psyq/psyq_registry.h"
+#include "runtime/psyq/psyq_font.h"
 #include "runtime/psyq/psyq_hle.h"
 #include "runtime/psyq/psyq_libapi.h"
 #include "runtime/psyq/psyq_libcd.h"
+#include "runtime/psyq/psyq_libc.h"
 #include "runtime/psyq/psyq_libgpu.h"
 #include "runtime/psyq/psyq_libgte.h"
+#include "runtime/psyq/psyq_pad.h"
 
 #include <cstdlib>
+#include <cstring>
 #include <fmt/format.h>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace {
 
@@ -25,10 +30,33 @@ void psyq_register(const char *name, PsyqHleFn fn) {
   registry()[name] = fn;
 }
 
+// Permissive mode: when env var PS1_HLE_PERMISSIVE=1 is set, missing HLE
+// implementations log once-per-name and return a NOP instead of aborting.
+// Useful for incremental group-by-group integration (e.g. measuring 1.A
+// progress without the full 1.B/1.C/1.D coverage in place yet).
+namespace {
+bool isPermissive() {
+  static const bool v = []() {
+    const char *e = std::getenv("PS1_HLE_PERMISSIVE");
+    return e && std::strcmp(e, "0") != 0 && e[0] != '\0';
+  }();
+  return v;
+}
+} // namespace
+
 void psyq_dispatch(const char *name, recomp_context *ctx) {
   auto &reg = registry();
   auto it = reg.find(name);
   if (it == reg.end()) {
+    if (isPermissive()) {
+      static std::unordered_set<std::string> warned;
+      if (warned.insert(name).second)
+        fmt::print(stderr,
+                   "[PSYQ] WARN: function '{}' missing HLE — NOP "
+                   "(PS1_HLE_PERMISSIVE) RA=0x{:08X}\n",
+                   name, ctx->r[31]);
+      return;
+    }
     fmt::print(stderr,
                "[PSYQ] FATAL: function '{}' marked HLE but no "
                "implementation registered (RA=0x{:08X})\n",
@@ -60,4 +88,7 @@ void psyq_register_rayman_boot() {
   ps1::psyq::psyq_register_libcd();
   ps1::psyq::psyq_register_libgte();
   ps1::psyq::psyq_register_libgpu_extras();
+  ps1::psyq::psyq_register_libgpu_font();
+  ps1::psyq::psyq_register_libetc_pad();
+  ps1::psyq::psyq_register_libc();
 }

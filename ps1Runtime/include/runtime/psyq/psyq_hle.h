@@ -65,6 +65,10 @@ struct HleConfig {
 /// after setPsyqAddresses().
 void configure(const HleConfig &cfg);
 
+/// Read-only access to the current HleConfig — used by sibling libgpu/libcd
+/// stubs that need writeGP0/writeGP1 callbacks without re-binding them.
+const HleConfig &getConfig();
+
 // ── PsyQ SDK HLE implementations ─────────────────────────────────────────
 
 /// VSync(n) — wait for n vertical blanks then return the total VBlank count.
