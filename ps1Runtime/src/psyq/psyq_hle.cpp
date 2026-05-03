@@ -1,6 +1,9 @@
 #include "runtime/psyq/psyq_hle.h"
 #include "runtime/memory.h"
+#include "runtime/psyq/psyq_state.h"
+#include <chrono>
 #include <fmt/format.h>
+#include <thread>
 
 namespace ps1::psyq {
 
@@ -12,12 +15,6 @@ void configure(const HleConfig &cfg) { g_cfg = cfg; }
 const HleConfig &getConfig() { return g_cfg; }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-
-static inline uint32_t readVBlankCount(recomp_context *ctx) {
-  if (g_cfg.vblankCounter == 0)
-    return 0;
-  return ctx->mem->read32(g_cfg.vblankCounter);
-}
 
 static inline void drainOnce() {
   if (g_cfg.drainCallbacks)
@@ -31,38 +28,28 @@ static inline void drainOnce() {
 //   n  > 0 → wait until n more VBlanks have elapsed
 //   Returns the total VBlank counter value.
 //
-// Implementation strategy: we spin-yield by draining pending callbacks.
-// The main thread increments vblankCounter each VBlank via triggerVBlankEvent.
-// Each drainOnce() call pumps the callback queue; the loop exits quickly once
-// the main thread delivers the next VBlank tick.
+// Reads psyq_state().vsyncCounter, the C++-side singleton incremented by
+// the host VBlank thread (~60 Hz, ~16.6 ms period).  Each iteration:
+// drainOnce() pumps the BIOS callback queue (no-op fast path when empty),
+// then sleep 100 µs to yield CPU before the next atomic poll.  A 1 s
+// wall-clock deadline (~60 frames at 60 Hz) guards against deadlock when
+// the VBlank thread is not running.
 //
 void hle_VSync(recomp_context *ctx) {
   int32_t n = static_cast<int32_t>(ctx->r[A0]);
   uint32_t frames = (n <= 0) ? 1u : static_cast<uint32_t>(n);
 
-  // Prefer the generic condition-variable path (game-agnostic, no BSS needed).
-  if (g_cfg.waitVSync) {
-    ctx->r[V0] = g_cfg.waitVSync(frames);
-    return;
-  }
-
-  // Fallback: poll the per-game BSS vblankCounter (legacy path).
-  if (g_cfg.vblankCounter == 0) {
-    drainOnce();
-    ctx->r[V0] = 0;
-    return;
-  }
-
-  uint32_t start = readVBlankCount(ctx);
+  auto &counter = psyq_state().vsyncCounter;
+  uint32_t start = counter.load(std::memory_order_acquire);
   uint32_t target = start + frames;
-  int safety = 0;
-  int safetyLimit = (frames <= 1) ? 10000 : 100000;
-  while (readVBlankCount(ctx) < target && safety < safetyLimit) {
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+  while (counter.load(std::memory_order_acquire) < target &&
+         std::chrono::steady_clock::now() < deadline) {
     drainOnce();
-    ++safety;
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
 
-  ctx->r[V0] = readVBlankCount(ctx);
+  ctx->r[V0] = counter.load(std::memory_order_acquire);
 }
 
 // ── DrawSync ──────────────────────────────────────────────────────────────

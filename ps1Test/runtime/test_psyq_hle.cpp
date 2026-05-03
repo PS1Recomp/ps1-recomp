@@ -5,6 +5,7 @@
 #include "runtime/psyq/psyq_hle.h"
 #include "runtime/cpu_context.h"
 #include "runtime/memory.h"
+#include "runtime/psyq/psyq_state.h"
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -22,8 +23,8 @@ protected:
     std::vector<uint32_t> gp0Words;
     std::vector<uint32_t> gp1Words;
 
-    // VSync state
-    uint32_t vblankCallCount = 0;
+    // Each drainCallbacks call simulates one VBlank tick.
+    int drainCalls = 0;
 
     void SetUp() override {
         mem.reset();
@@ -32,17 +33,21 @@ protected:
         ctx.r[SP] = 0x801FF000; // stack pointer
         gp0Words.clear();
         gp1Words.clear();
-        vblankCallCount = 0;
+        drainCalls = 0;
+        psyq_state().reset();
 
         HleConfig cfg;
         cfg.writeGP0 = [this](uint32_t w) { gp0Words.push_back(w); };
         cfg.writeGP1 = [this](uint32_t w) { gp1Words.push_back(w); };
-        cfg.waitVSync = [this](uint32_t frames) -> uint32_t {
-            vblankCallCount += frames;
-            return vblankCallCount;
+        cfg.drainCallbacks = [this]() {
+            ++drainCalls;
+            psyq_state().vsyncCounter.fetch_add(1, std::memory_order_release);
         };
-        cfg.drainCallbacks = []() {};
         configure(cfg);
+    }
+
+    void TearDown() override {
+        psyq_state().reset();
     }
 };
 
@@ -75,20 +80,30 @@ TEST_F(PsyqHleTest, ResetGraphIsNop) {
 TEST_F(PsyqHleTest, VSyncWaitsOneFrame) {
     ctx.r[A0] = 1;
     hle_VSync(&ctx);
-    EXPECT_EQ(vblankCallCount, 1u);
-    EXPECT_EQ(ctx.r[V0], 1u);
+    EXPECT_GE(drainCalls, 1);
+    EXPECT_EQ(ctx.r[V0], psyq_state().vsyncCounter.load());
+    EXPECT_GE(psyq_state().vsyncCounter.load(), 1u);
 }
 
 TEST_F(PsyqHleTest, VSyncWaitsMultipleFrames) {
     ctx.r[A0] = 3;
     hle_VSync(&ctx);
-    EXPECT_EQ(vblankCallCount, 3u);
+    EXPECT_GE(psyq_state().vsyncCounter.load(), 3u);
+    EXPECT_EQ(ctx.r[V0], psyq_state().vsyncCounter.load());
 }
 
 TEST_F(PsyqHleTest, VSyncZeroWaitsOneFrame) {
     ctx.r[A0] = 0; // n=0 means "wait for next VBlank"
     hle_VSync(&ctx);
-    EXPECT_GE(vblankCallCount, 1u);
+    EXPECT_GE(psyq_state().vsyncCounter.load(), 1u);
+}
+
+TEST_F(PsyqHleTest, VSyncReturnsCounterPostAdvance) {
+    psyq_state().vsyncCounter.store(100, std::memory_order_release);
+    ctx.r[A0] = 2;
+    hle_VSync(&ctx);
+    EXPECT_GE(psyq_state().vsyncCounter.load(), 102u);
+    EXPECT_EQ(ctx.r[V0], psyq_state().vsyncCounter.load());
 }
 
 // ── ClearOTag ─────────────────────────────────────────────────────────────────

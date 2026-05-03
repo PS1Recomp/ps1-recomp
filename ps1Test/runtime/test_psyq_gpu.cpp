@@ -12,6 +12,7 @@
 #include "runtime/psyq/psyq_hle.h"
 #include "runtime/psyq/psyq_libgpu.h"
 #include "runtime/psyq/psyq_registry.h"
+#include "runtime/psyq/psyq_state.h"
 
 #include <cstdint>
 #include <gtest/gtest.h>
@@ -38,7 +39,10 @@ protected:
     cfg.writeGP0 = [this](uint32_t w) { gp0.push_back(w); };
     cfg.writeGP1 = [this](uint32_t w) { gp1.push_back(w); };
     configure(cfg);
+    psyq_state().reset();
   }
+
+  void TearDown() override { psyq_state().reset(); }
 
   // Write a 4-int16 PsyqRect at `p`.
   void writeRect(uint32_t p, int16_t x, int16_t y, int16_t w, int16_t h) {
@@ -177,12 +181,17 @@ TEST_F(PsyqGpuTest, DrawSyncCallbackStoresAndReturnsPrev) {
 TEST_F(PsyqGpuTest, VSyncCallbackStoresAndReturnsPrev) {
   ctx.r[A0] = 0x80044000u;
   hle_libgpu_VSyncCallback(&ctx);
-  uint32_t roundTrip = ctx.r[V0];
+  // First install returns previous (0 — singleton was reset in SetUp).
+  EXPECT_EQ(ctx.r[V0], 0u);
+  // The HLE writes through to psyq_state().gpuSwapCb so bios.cpp's VBlank
+  // dispatch can find the swap callback without per-game BSS configuration.
+  EXPECT_EQ(psyq_state().gpuSwapCb, 0x80044000u);
+
   // Subsequent install returns whatever we just wrote.
   ctx.r[A0] = 0;
   hle_libgpu_VSyncCallback(&ctx);
   EXPECT_EQ(ctx.r[V0], 0x80044000u);
-  (void)roundTrip;
+  EXPECT_EQ(psyq_state().gpuSwapCb, 0u);
 }
 
 // ───────────────── Video mode ───────────────────────────────

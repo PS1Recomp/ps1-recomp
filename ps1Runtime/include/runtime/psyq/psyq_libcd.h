@@ -8,10 +8,10 @@
  * setters (CdReadCallback / CdReadyCallback / CdDataCallback).
  *
  * All entry points delegate to `cdrom::CdromController` (already wired to the
- * VirtualFs disc image) for hardware behaviour, and update the per-game PsyQ
- * BSS slots that bios.cpp's interrupt HLE reads (cdRemaining / cdDestPtr /
- * cdWordCount / cdDataCb / cdNotifyCb).  Those BSS writes will be removed in
- * Phase 2 when PsyqState centralises the state in C++ structs.
+ * VirtualFs disc image) for hardware behaviour, and update the read-state /
+ * callback fields on `psyq_state()` that bios.cpp's interrupt HLE reads
+ * (cdRemaining / cdDestPtr / cdWordCount / cdDataCb / cdNotifyCb).  Phase 2.4
+ * eliminated the corresponding BSS slots in favour of the C++ singleton.
  */
 
 #include "runtime/cpu_context.h"
@@ -20,13 +20,13 @@ namespace ps1::psyq {
 
 /// CdInit() — replace the native PsyQ CdInit entirely.  Sends CdlInit to the
 /// hardware controller, fires INT3+INT2 synchronously through the BIOS event
-/// system (so cdSyncByte ends up at 2), and clears the read-state BSS slots.
-/// Returns 1 (success) — never the "Init failed" path.
+/// system (so cdSyncByte ends up at 2), and clears the read-state slots in
+/// `psyq_state()`.  Returns 1 (success) — never the "Init failed" path.
 void hle_libcd_CdInit(recomp_context *ctx);
 
 /// CdRead(sectors, *buf, mode) — start an asynchronous read of `sectors`
-/// 2048-byte sectors into `buf`.  Sets PsyQ BSS read state and issues
-/// CdlSetmode + CdlReadN to the controller.  Returns 1.
+/// 2048-byte sectors into `buf`.  Updates the `psyq_state()` read state and
+/// issues CdlSetmode + CdlReadN to the controller.  Returns 1.
 void hle_libcd_CdRead(recomp_context *ctx);
 
 /// CdSync(mode, *result) — wait (mode=0) or poll (mode=1) for command
@@ -51,13 +51,14 @@ void hle_libcd_CdControlF(recomp_context *ctx);
 void hle_libcd_CdGetSector(recomp_context *ctx);
 
 /// CdReadCallback(func) — set the "read complete" (INT4 DataEnd) callback.
-/// Stored in the cdDataCb BSS slot; bios.cpp dispatches it for INT1/INT4.
+/// Stored in `psyq_state().cdDataCb`; bios.cpp dispatches it for INT1/INT4.
 /// Returns the previous callback function pointer.
 void hle_libcd_CdReadCallback(recomp_context *ctx);
 
 /// CdReadyCallback(func) — set the "data ready" (INT1) callback.  Aliased to
-/// the same BSS slot as CdReadCallback in our HLE because bios.cpp dispatches
-/// a single dataCb for both INT1 and INT4.  Returns the previous pointer.
+/// the same `psyq_state().cdDataCb` slot as CdReadCallback because bios.cpp
+/// dispatches a single dataCb for both INT1 and INT4.  Returns the previous
+/// pointer.
 void hle_libcd_CdReadyCallback(recomp_context *ctx);
 
 /// CdDataCallback(func) — older alias of CdReadyCallback.  Same behaviour.
@@ -68,7 +69,7 @@ void hle_libcd_CdDataCallback(recomp_context *ctx);
 void hle_libcd_CdMix(recomp_context *ctx);
 
 /// CdReadBreak() — abort an in-progress CdRead.  Stops the controller and
-/// zeroes the BSS read state.  Returns 1.
+/// zeroes the `psyq_state()` read-state fields.  Returns 1.
 void hle_libcd_CdReadBreak(recomp_context *ctx);
 
 /// StSetMask(table, n): set the XA streaming sector filter.  XA streaming is

@@ -15,6 +15,7 @@
 #include <runtime/bios/bios.h>
 #include <runtime/psyq/psyq_hle.h>
 #include <runtime/psyq/psyq_registry.h>
+#include <runtime/psyq/psyq_state.h>
 #include <runtime/cdrom/cdrom_controller.h>
 #include <runtime/cdrom/virtual_fs.h>
 #include <runtime/cpu_context.h>
@@ -213,101 +214,18 @@ int main(int argc, char *argv[]) {
   // reset() leaves bit 23 = 1 (display off) per hardware spec.
   gpu.writeGP1(0x03000000);
 
-  // ── Per-game PsyQ BSS address configuration ──
-  // Priority: TOML config file > environment variables > defaults (0)
+  // ── PsyQ HLE layer wiring ──
+  // Phase 2 (2.1 .. 2.4) moved every per-game BSS address into the
+  // process-wide `psyq_state()` singleton.  All HleConfig now carries are
+  // the GP0/GP1 writers and a callback drain hook — no addresses.
   {
-    ps1::bios::Bios::PsyqAddresses addrs; // all default to 0
-
-    // 1. Load from TOML config if provided
-    if (!config_path.empty()) {
-      try {
-        auto cfg = toml::parse(config_path);
-        if (cfg.contains("psyq_addresses")) {
-          auto &pa = toml::find(cfg, "psyq_addresses");
-          auto readToml = [&](const char *key, uint32_t &out) {
-            if (pa.contains(key)) {
-              auto val = toml::find(pa, key);
-              if (val.is_integer()) {
-                out = static_cast<uint32_t>(val.as_integer());
-              }
-              fmt::print("[CONFIG] {} = 0x{:08X} (from TOML)\n", key, out);
-            }
-          };
-          readToml("vsync_counter", addrs.vblankCounter);
-          readToml("cd_sync_byte", addrs.cdSyncByte);
-          readToml("cd_ready_byte", addrs.cdReadyByte);
-          readToml("cd_remaining", addrs.cdRemaining);
-          readToml("cd_dest_ptr", addrs.cdDestPtr);
-          readToml("cd_word_count", addrs.cdWordCount);
-          readToml("cd_data_cb", addrs.cdDataCb);
-          readToml("cd_notify_cb", addrs.cdNotifyCb);
-          readToml("cd_status_hw", addrs.cdStatusHw);
-          readToml("gpu_swap_cb", addrs.gpuSwapCb);
-          readToml("gpu_drawsync_base", addrs.gpuDrawSyncBase);
-          readToml("gpu_drawsync_count", addrs.gpuDrawSyncCount);
-          readToml("gpu_drawsync_index_addr", addrs.gpuDrawSyncIndexAddr);
-        }
-      } catch (const std::exception &e) {
-        fmt::print(stderr,
-                   "[WARN] Failed to read psyq_addresses from config: {}\n",
-                   e.what());
-      }
-    }
-
-    // 2. Environment variables can override TOML values
-    auto readEnvHex = [](const char *name, uint32_t &out) {
-      const char *val = std::getenv(name);
-      if (val) {
-        out = std::strtoul(val, nullptr, 0);
-        fmt::print("[CONFIG] {} = 0x{:08X} (from env)\n", name, out);
-      }
-    };
-    readEnvHex("PSYQ_VSYNC_COUNTER", addrs.vblankCounter);
-    readEnvHex("PSYQ_CD_SYNC_BYTE", addrs.cdSyncByte);
-    readEnvHex("PSYQ_CD_READY_BYTE", addrs.cdReadyByte);
-    readEnvHex("PSYQ_CD_REMAINING", addrs.cdRemaining);
-    readEnvHex("PSYQ_CD_DEST_PTR", addrs.cdDestPtr);
-    readEnvHex("PSYQ_CD_WORD_COUNT", addrs.cdWordCount);
-    readEnvHex("PSYQ_CD_DATA_CB", addrs.cdDataCb);
-    readEnvHex("PSYQ_CD_NOTIFY_CB", addrs.cdNotifyCb);
-    readEnvHex("PSYQ_CD_STATUS_HW", addrs.cdStatusHw);
-    readEnvHex("PSYQ_GPU_SWAP_CB", addrs.gpuSwapCb);
-    readEnvHex("PSYQ_GPU_DRAWSYNC_BASE", addrs.gpuDrawSyncBase);
-    readEnvHex("PSYQ_GPU_DRAWSYNC_COUNT", addrs.gpuDrawSyncCount);
-    readEnvHex("PSYQ_GPU_DRAWSYNC_INDEX_ADDR", addrs.gpuDrawSyncIndexAddr);
-
-    // 3. Info if optional addresses are not configured (no longer fatal —
-    //    generic internal-state machinery handles VSync and CD sync).
-    if (addrs.vblankCounter == 0)
-      fmt::print("[INFO] vsync_counter not set — using generic VBlank cv\n");
-    if (addrs.cdSyncByte == 0 || addrs.cdReadyByte == 0)
-      fmt::print("[INFO] cd_sync_byte / cd_ready_byte not set — using "
-                 "generic CD state machine\n");
-    if (addrs.gpuDrawSyncBase == 0)
-      fmt::print("[INFO] gpu_drawsync_base not set — DrawSync returns 0 "
-                 "(GPU is synchronous)\n");
-
-    bios.setPsyqAddresses(addrs); // also activates cdSyncByte watchpoint internally
-
-    // Also configure the psyq_hle layer so that named PsyQ stubs
-    // (VSync, DrawSync, etc.) have the correct per-game addresses.
     ps1::psyq::HleConfig hleCfg;
-    hleCfg.vblankCounter    = addrs.vblankCounter;
-    hleCfg.drawSyncBase     = addrs.gpuDrawSyncBase;
-    hleCfg.drawSyncIndexAddr = addrs.gpuDrawSyncIndexAddr;
-    hleCfg.drawSyncCount    = addrs.gpuDrawSyncCount;
-    hleCfg.drainCallbacks   = [&bios]() { bios.drainPendingCallbacks(); };
-    hleCfg.writeGP0         = [&gpu](uint32_t w) { gpu.writeGP0(w); };
-    hleCfg.writeGP1         = [&gpu](uint32_t w) { gpu.writeGP1(w); };
-    // Generic internal-state callbacks — game-agnostic, no BSS addresses needed
-    hleCfg.waitVSync        = [&bios](uint32_t frames) { return bios.waitVSync(frames); };
-    hleCfg.waitForCdSync    = [&bios](int ms) { return bios.waitForCdSync(ms); };
-    hleCfg.waitForCdReady   = [&bios](int ms) { return bios.waitForCdReady(ms); };
+    hleCfg.drainCallbacks = [&bios]() { bios.drainPendingCallbacks(); };
+    hleCfg.writeGP0       = [&gpu](uint32_t w) { gpu.writeGP0(w); };
+    hleCfg.writeGP1       = [&gpu](uint32_t w) { gpu.writeGP1(w); };
     ps1::psyq::configure(hleCfg);
     psyq_registry_init_defaults();
     psyq_register_rayman_boot();
-
-    fmt::print("[CONFIG] PsyQ addresses configured\n");
   }
 
   // Wire CDROM interrupt callback → BIOS event system
@@ -482,12 +400,10 @@ int main(int argc, char *argv[]) {
 
 
   // ─── VBlank ticker thread ─────────────────────────────
-  // The game spins polling the vblank counter (0x801CF2CC).  The main SDL
-  // loop only fires at ~60fps but the game thread runs at full CPU speed, so
-  // thousands of VSync calls time out before the SDL loop fires even once.
-  // A dedicated 60Hz ticker thread writes to the vblank counter independently
-  // of SDL rendering, ensuring the counter advances at the right rate and the
-  // game's VSync loop exits quickly.
+  // The game spins polling psyq_state().vsyncCounter (and PsyQ HLE wraps
+  // VSync to read the same singleton).  This dedicated 60 Hz thread is
+  // independent of SDL rendering, so the tick advances at the right rate
+  // and the game's VSync wait exits quickly.
   std::thread vblankThread([&]() {
     using namespace std::chrono;
     const auto period = microseconds(16667); // ~60 Hz
@@ -495,6 +411,8 @@ int main(int argc, char *argv[]) {
     while (!gameFinished.load(std::memory_order_acquire)) {
       std::this_thread::sleep_until(next);
       next += period;
+      ps1::psyq::psyq_state().vsyncCounter.fetch_add(
+          1, std::memory_order_release);
       bios.triggerVBlankEvent();
       gpu.snapshotDisplayBuffer();
       bios.updatePadBuffers();

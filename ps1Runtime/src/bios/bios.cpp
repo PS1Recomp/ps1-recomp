@@ -2,6 +2,8 @@
 #include "runtime/cdrom/cdrom_controller.h"
 #include "runtime/gpu/gpu.h"
 #include "runtime/input/input.h"
+#include "runtime/psyq/psyq_state.h"
+#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
@@ -864,16 +866,12 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // these variables instead of reading CDROM hardware registers directly.
   //
   // In our recompiled environment the exception handler never runs, so we
-  // HLE the relevant writes here.
+  // HLE the relevant writes here.  Phase 2.3 moved cdSyncByte/cdReadyByte
+  // out of per-game BSS into `psyq_state()` (atomic uint8_t), so VSync-style
+  // cooperative polling works without configuring a memory address.  The
+  // legacy cdStatusHw write was a one-way mirror with no reader after HLE
+  // coverage landed — dropped entirely.
   //
-  // PsyQ CD state addresses (configured per-game):
-  //   cdSyncByte  — "sync" byte (command completion: INT2/INT3/INT5)
-  //   cdReadyByte — "ready" byte (data readiness: INT1/INT4/INT5)
-  //   cdStatusHw  — CD status halfword (gate for PsyQ polling code)
-  //
-  const uint32_t PSYQ_CD_SYNC_BYTE = psyq_.cdSyncByte;
-  const uint32_t PSYQ_CD_READY_BYTE = psyq_.cdReadyByte;
-  const uint32_t PSYQ_CD_STATUS_HW = psyq_.cdStatusHw;
 
   // ── HLE sector copy for INT1 (DataReady) ──────────────────────
   //
@@ -912,26 +910,8 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
     // in waitingForAck state so tick() won't generate more INT1s.
   }
 
-  // ── Update internal generic CD state ──────────────────────────────────
+  // ── Update PsyQ CD state in psyq_state() singleton ────────────────────
   //
-  // Always update BEFORE dispatching the longjmp or event, so that any
-  // handler (custom exit or standard event) sees the updated state.
-  {
-    std::lock_guard<std::mutex> lk(cdInternalMtx_);
-    switch (cdIntType) {
-    case 1: cdReadyInternal_.store(1, std::memory_order_relaxed); break;
-    case 2: cdSyncInternal_.store(2, std::memory_order_relaxed);  break;
-    case 3: cdSyncInternal_.store(2, std::memory_order_relaxed);  break; // mapped
-    case 4: cdReadyInternal_.store(4, std::memory_order_relaxed); break;
-    case 5:
-      cdSyncInternal_.store(5, std::memory_order_relaxed);
-      cdReadyInternal_.store(5, std::memory_order_relaxed);
-      break;
-    default: break;
-    }
-  }
-  cdInternalCv_.notify_all();
-
   // PsyQ interrupt handler mapping (as implemented by the game's own IRQ
   // chain):
   //
@@ -945,54 +925,22 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // CdCommand function gates on syncByte==2 before issuing new commands.
   // If we wrote 3, subsequent commands would hang waiting for 2.
   //
-  // NOTE: Use write8 because in some games (Crash Bandicoot) the sync and
-  // ready bytes are adjacent (0x8005588C / 0x8005588D) — write32 to sync
-  // would clobber the ready byte.  The PsyQ handler writes these as bytes.
-  //
-  // NOTE: For INT1, the ready byte is written AFTER the sector copy above
-  // completes, so the game thread sees data before the signal.
-  //
-  // NOTE: These writes happen BEFORE the customExceptionExit_ dispatch so
-  // that the game's longjmp handler can read them to determine which
-  // interrupt arrived (games like Tomba use both mechanisms together).
-  //
+  auto &psyqSync  = ps1::psyq::psyq_state().cdSyncByte;
+  auto &psyqReady = ps1::psyq::psyq_state().cdReadyByte;
   switch (cdIntType) {
-  case 1: // DataReady → readyByte only
-    if (PSYQ_CD_READY_BYTE)
-      ctx_.mem->write8(PSYQ_CD_READY_BYTE, 1);
+  case 1: psyqReady.store(1, std::memory_order_release); break;
+  case 2: psyqSync.store(2, std::memory_order_release); break;
+  case 3: psyqSync.store(2, std::memory_order_release); break; // mapped to Complete
+  case 4: psyqReady.store(4, std::memory_order_release); break;
+  case 5:
+    psyqSync.store(5, std::memory_order_release);
+    psyqReady.store(5, std::memory_order_release);
     break;
-  case 2: // Complete → syncByte only
-    if (PSYQ_CD_SYNC_BYTE)
-      ctx_.mem->write8(PSYQ_CD_SYNC_BYTE, 2);
-    break;
-  case 3: // Acknowledge → syncByte = 2 (mapped to Complete)
-    if (PSYQ_CD_SYNC_BYTE)
-      ctx_.mem->write8(PSYQ_CD_SYNC_BYTE, 2);
-    break;
-  case 4: // DataEnd → readyByte only
-    if (PSYQ_CD_READY_BYTE)
-      ctx_.mem->write8(PSYQ_CD_READY_BYTE, 4);
-    break;
-  case 5: // DiskError → both
-    if (PSYQ_CD_SYNC_BYTE)
-      ctx_.mem->write8(PSYQ_CD_SYNC_BYTE, 5);
-    if (PSYQ_CD_READY_BYTE)
-      ctx_.mem->write8(PSYQ_CD_READY_BYTE, 5);
-    break;
-  default:
-    break;
+  default: break;
   }
-  BIOS_LOG("[CDROM-HLE] INT{} → sync@0x{:08X}={} ready@0x{:08X}={}\n",
-           cdIntType, PSYQ_CD_SYNC_BYTE,
-           PSYQ_CD_SYNC_BYTE ? ctx_.mem->read8(PSYQ_CD_SYNC_BYTE) : 0,
-           PSYQ_CD_READY_BYTE,
-           PSYQ_CD_READY_BYTE ? ctx_.mem->read8(PSYQ_CD_READY_BYTE) : 0);
-
-  // Write a non-zero status halfword so the PsyQ polling code proceeds
-  // past the gate check.  0x0002 = "motor on" status bit.
-  if (PSYQ_CD_STATUS_HW != 0) {
-    ctx_.mem->write16(PSYQ_CD_STATUS_HW, 0x0002);
-  }
+  BIOS_LOG("[CDROM-HLE] INT{} → psyq_state.sync={} ready={}\n", cdIntType,
+           psyqSync.load(std::memory_order_relaxed),
+           psyqReady.load(std::memory_order_relaxed));
 
   // ── Dispatch CustomExceptionExit if registered ──
   //
@@ -1028,27 +976,10 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
 }
 
 void Bios::triggerVBlankEvent() {
-  // ── Increment PsyQ VBlank counter (Root Counter 3) ────
-  //
-  // PsyQ stores a VBlank counter that VSync() polls in a tight loop.
-  // On a real PS1 this is incremented by the BIOS IRQ handler at interrupt
-  // vector 0x80000080.  In our recompiled environment the handler never runs,
-  // so we HLE the counter increment here.
-  //
-  // The address varies per game (PsyQ version / link layout).
-  //
-  // ── Increment internal generic VBlank counter ──────────────────────────
-  {
-    std::lock_guard<std::mutex> lk(vblankMtx_);
-    vblankInternal_.fetch_add(1, std::memory_order_relaxed);
-  }
-  vblankCv_.notify_all();
-
-  // ── Increment per-game PsyQ VBlank BSS counter (if configured) ─────────
-  if (psyq_.vblankCounter != 0) {
-    uint32_t cnt = ctx_.mem->read32(psyq_.vblankCounter);
-    ctx_.mem->write32(psyq_.vblankCounter, cnt + 1);
-  }
+  // The Phase-2 PsyQ VBlank counter lives in `psyq_state().vsyncCounter`
+  // and is incremented by the host VBlank thread in `main_host.cpp`.
+  // This entry-point now exists only to deliver event callbacks (below)
+  // and defer CustomExceptionExit longjmps onto the game thread.
 
   // ── Defer CustomExceptionExit on VBlank ──────────────────────────────────
   //
@@ -1063,12 +994,7 @@ void Bios::triggerVBlankEvent() {
   // state.  Instead, set a flag and let drainPendingCallbacks() (which runs
   // on the game thread) perform the actual longjmp.
   //
-  // Only defer when PsyQ VBlank counter is configured — this indicates the
-  // game relies on BSS-based polling and needs the exception handler to
-  // break its wait loop.  Games that poll hardware directly (like Crash)
-  // don't need VBlank longjmp and it disrupts their execution.
-  //
-  if (customExceptionExit_ != 0 && psyq_.vblankCounter != 0) {
+  if (customExceptionExit_ != 0) {
     vblankExceptionPending_.store(1, std::memory_order_release);
     BIOS_LOG("[VBLANK-HLE] CustomExitFromException deferred (buf=0x{:08X})\n",
              customExceptionExit_);
@@ -1126,50 +1052,28 @@ void Bios::triggerVBlankEvent() {
   // from the main thread would be a data race on the shared recomp_context.
   // The game thread's drainPendingCallbacks() will dispatch it safely.
   //
-  if (psyq_.gpuSwapCb != 0) {
-    eventSystem_.queueCallbackWithArg(psyq_.gpuSwapCb,
+  uint32_t swapCb = ps1::psyq::psyq_state().gpuSwapCb;
+  if (swapCb != 0) {
+    eventSystem_.queueCallbackWithArg(swapCb,
                                       4); // a0 = 4 → "swap done"
   }
 
   // ── HLE PsyQ DrawSync status (GPU ordering table completion) ──
   //
-  // PsyQ DrawSync (func_801AA484 in Rayman) works as follows:
-  //   1. Reads an OT index from a BSS variable (gpuDrawSyncIndex)
-  //   2. Reads a base pointer from another BSS variable (gpuDrawSyncBase)
-  //   3. Computes status_addr = base_ptr + (index << 5)  [stride = 0x20 = 32]
-  //   4. Reads a halfword at status_addr+0
-  //   5. If value == 2, drawing is complete
-  //
-  // On a real PS1, the GPU VBlank interrupt handler sets this to 2 after
-  // the GPU finishes processing the ordering table.  Since our GPU processes
-  // GP0 commands synchronously, we can mark it as complete every VBlank.
-  //
-  // gpuDrawSyncBase: BSS address containing the POINTER to the OT array
-  // gpuDrawSyncIndex: BSS address containing the current OT index
-  //
-  // ── HLE PsyQ DrawSync status ──────────────────────────────────────────
-  // PsyQ DrawSync polls: status_hw = MEM16[base_ptr + index * 0x20]
-  // status == 2 means "drawing complete". Since our GPU processes GP0 commands
-  // synchronously, we can mark all entries as complete every VBlank.
-  //
-  // If gpuDrawSyncIndexAddr is set, we only write the current index's entry
-  // (more precise). Otherwise we write all gpuDrawSyncCount entries.
-  if (psyq_.gpuDrawSyncBase != 0) {
-    uint32_t basePtr = ctx_.mem->read32(psyq_.gpuDrawSyncBase);
-    if (basePtr != 0) {
-      if (psyq_.gpuDrawSyncIndexAddr != 0) {
-        // Precise: write only the current OT index entry
-        uint32_t idx = ctx_.mem->read32(psyq_.gpuDrawSyncIndexAddr);
-        uint32_t statusAddr = basePtr + (idx << 5); // stride = 0x20
-        ctx_.mem->write16(statusAddr, 2);            // 2 = complete
-      } else {
-        // Broad: write all double-buffered entries
-        for (uint32_t i = 0; i < psyq_.gpuDrawSyncCount; i++) {
-          uint32_t statusAddr = basePtr + (i << 5); // stride = 0x20
-          ctx_.mem->write16(statusAddr, 2);          // 2 = complete
-        }
-      }
-    }
+  // Since the runtime GPU is fully synchronous (all GP0 commands process
+  // inline), every OT slot is "complete" by the time the next VBlank fires.
+  // Stamp psyq_state().drawSync.status[] with 2 (= CdlComplete sentinel
+  // used by PsyQ DrawSync polling) so any future consumer reading the
+  // singleton sees consistent state.  Native PsyQ DrawSync polling against
+  // PS1 RAM is short-circuited by the libgpu HLE (`hle_DrawSync` returns 0
+  // unconditionally), so no BSS write is needed anymore — the matcher
+  // catches DrawSync in both Rayman and Crash.
+  {
+    auto &draw = ps1::psyq::psyq_state().drawSync;
+    const uint32_t cnt = std::min<uint32_t>(
+        draw.count, ps1::psyq::GpuDrawSync::kMaxSlots);
+    for (uint32_t i = 0; i < cnt; ++i)
+      draw.status[i] = 2;
   }
 }
 
@@ -1227,6 +1131,8 @@ void Bios::drainPendingCallbacks() {
   // something goes wrong, and limits time spent in one drain call.
   constexpr int MAX_SECTORS_PER_DRAIN = 32;
 
+  auto &state = ps1::psyq::psyq_state();
+
   for (int pump = 0; pump < MAX_SECTORS_PER_DRAIN; ++pump) {
     uint8_t intType = cdIntPending_.exchange(0, std::memory_order_acquire);
     if (intType == 0)
@@ -1235,13 +1141,10 @@ void Bios::drainPendingCallbacks() {
     // Save registers — callbacks clobber temps.
     auto saved = static_cast<ps1::CPUContext>(ctx_);
 
-    const uint32_t PSYQ_CD_DATA_CB = psyq_.cdDataCb;
-    const uint32_t PSYQ_CD_NOTIFY_CB = psyq_.cdNotifyCb;
-
     if (intType == 1 || intType == 4) {
       // INT1 (DataReady) or INT4 (DataEnd) → call dataCb
-      uint32_t dataCb = ctx_.mem->read32(PSYQ_CD_DATA_CB);
-      int32_t remaining = (int32_t)ctx_.mem->read32(psyq_.cdRemaining);
+      uint32_t dataCb = state.cdDataCb;
+      int32_t remaining = static_cast<int32_t>(state.cdRemaining);
       static int hleDispatch = 0;
       hleDispatch++;
       if (s_biosVerbose && hleDispatch <= 20) {
@@ -1255,7 +1158,7 @@ void Bios::drainPendingCallbacks() {
       }
     } else if (intType == 2) {
       // INT2 (Complete) → call notifyCb
-      uint32_t notifyCb = ctx_.mem->read32(PSYQ_CD_NOTIFY_CB);
+      uint32_t notifyCb = state.cdNotifyCb;
       if (notifyCb != 0) {
         ctx_.r4 = intType;
         ctx_.r5 = 0;
@@ -1280,8 +1183,8 @@ void Bios::drainPendingCallbacks() {
     // When remaining <= 0, the read is complete — stop feeding cycles
     // so the CDROM transitions out of ReadingData state naturally.
     //
-    if (cdrom_ && (intType == 1) && psyq_.cdRemaining != 0) {
-      int32_t remainAfterCb = (int32_t)ctx_.mem->read32(psyq_.cdRemaining);
+    if (cdrom_ && (intType == 1) && state.cdRemaining != 0) {
+      int32_t remainAfterCb = static_cast<int32_t>(state.cdRemaining);
       if (remainAfterCb > 0) {
         // Give enough cycles for the next sector to be "ready".
         cdrom_->tick(0);
@@ -1297,35 +1200,6 @@ void Bios::drainPendingCallbacks() {
       }
     }
   }
-}
-
-void Bios::setupCdSyncWatchpoint() {
-  if (psyq_.cdSyncByte == 0 || !ctx_.mem)
-    return;
-  // Register a write watchpoint on cdSyncByte.
-  //
-  // The PsyQ CdInit retry loop does:
-  //   1. Write CdlInit → INT3 fires synchronously → cdSyncByte = 2
-  //   2. First wait: sees cdSyncByte = 2 → passes immediately
-  //   3. CLEAR cdSyncByte = 0  ←── watchpoint fires HERE
-  //   4. Second wait: needs cdSyncByte ≠ 0 (INT2)
-  //
-  // By firing INT2 (fireSecondaryNow) in the watchpoint callback, cdSyncByte
-  // is set back to 2 BEFORE the second wait loop runs.  This makes the second
-  // wait exit in its first iteration, allowing CdInit to succeed.
-  //
-  // This fires entirely on the game thread (the same thread that is executing
-  // the retry loop), so there are no cross-thread data races.
-  ctx_.mem->setWriteWatchpoint(psyq_.cdSyncByte, [this](uint32_t val) {
-    if (val != 0)
-      return; // only trigger when the game clears cdSyncByte to 0
-    if (cdrom_ && cdrom_->hasSecondaryResponse()) {
-      BIOS_LOG("[BIOS] cdSyncByte cleared → firing pending INT2 (CdInit fix)\n");
-      cdrom_->fireSecondaryNow();
-    }
-  });
-  BIOS_LOG("[BIOS] setupCdSyncWatchpoint: watching 0x{:08X}\n",
-           psyq_.cdSyncByte);
 }
 
 void Bios::stub_printf() {
@@ -1453,51 +1327,6 @@ void Bios::updatePadBuffers() {
 
   writePadBuffer(padBuf1Addr_, padBuf1Size_, 0);
   writePadBuffer(padBuf2Addr_, padBuf2Size_, 1);
-}
-
-// ── Generic internal-state blocking helpers ───────────────────────────────────
-
-uint32_t Bios::waitVSync(uint32_t frames) {
-  uint32_t start = vblankInternal_.load(std::memory_order_acquire);
-  uint32_t target = start + (frames == 0 ? 1 : frames);
-  std::unique_lock<std::mutex> lk(vblankMtx_);
-  vblankCv_.wait(lk, [&] {
-    return vblankInternal_.load(std::memory_order_relaxed) >= target;
-  });
-  return vblankInternal_.load(std::memory_order_relaxed);
-}
-
-uint8_t Bios::waitForCdSync(int timeoutMs) {
-  // Clear sync state so we wait for the NEXT completion event.
-  {
-    std::lock_guard<std::mutex> lk(cdInternalMtx_);
-    cdSyncInternal_.store(0, std::memory_order_relaxed);
-  }
-  std::unique_lock<std::mutex> lk(cdInternalMtx_);
-  bool signalled = cdInternalCv_.wait_for(
-      lk, std::chrono::milliseconds(timeoutMs), [&] {
-        uint8_t v = cdSyncInternal_.load(std::memory_order_relaxed);
-        return v != 0;
-      });
-  if (!signalled)
-    return 0; // timeout
-  return cdSyncInternal_.load(std::memory_order_relaxed);
-}
-
-uint8_t Bios::waitForCdReady(int timeoutMs) {
-  {
-    std::lock_guard<std::mutex> lk(cdInternalMtx_);
-    cdReadyInternal_.store(0, std::memory_order_relaxed);
-  }
-  std::unique_lock<std::mutex> lk(cdInternalMtx_);
-  bool signalled = cdInternalCv_.wait_for(
-      lk, std::chrono::milliseconds(timeoutMs), [&] {
-        uint8_t v = cdReadyInternal_.load(std::memory_order_relaxed);
-        return v != 0;
-      });
-  if (!signalled)
-    return 0;
-  return cdReadyInternal_.load(std::memory_order_relaxed);
 }
 
 } // namespace ps1::bios

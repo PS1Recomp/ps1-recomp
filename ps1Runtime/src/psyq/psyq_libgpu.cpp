@@ -2,6 +2,7 @@
 #include "runtime/memory.h"
 #include "runtime/psyq/psyq_hle.h"
 #include "runtime/psyq/psyq_registry.h"
+#include "runtime/psyq/psyq_state.h"
 
 #include <cstdint>
 #include <fmt/format.h>
@@ -48,9 +49,10 @@ inline void writeGP1(uint32_t w) {
 // videoMode: 0 = NTSC (default), 1 = PAL.
 int g_videoMode = 0;
 
-// VSync/DrawSync callback PS1-side function pointers. Recorded so we can
-// return the previous one; not actually invoked (runtime owns VBlank/GPU).
-uint32_t g_vsyncCallback = 0;
+// DrawSyncCallback PS1-side function pointer. Recorded so we can return the
+// previous one; not actually invoked (runtime GPU is synchronous).
+// VSyncCallback's swap routine lives in psyq_state().gpuSwapCb so the BIOS
+// VBlank thread can dispatch it without round-tripping through this module.
 uint32_t g_drawSyncCallback = 0;
 
 // "Once-per-name" warning helper for stubbed libgs entries.
@@ -204,11 +206,13 @@ void hle_libgpu_DrawSyncCallback(recomp_context *ctx) {
   ctx->r[V0] = prev;
 }
 
-// VSyncCallback(fn): record + return previous. The host VBlank thread doesn't
-// dispatch back into PS1 code — Rayman/Crash don't depend on it for boot.
+// VSyncCallback(fn): record into psyq_state().gpuSwapCb + return previous.
+// bios.cpp::triggerVBlankEvent queues this via queueCallbackWithArg(a0=4)
+// so the game thread can dispatch it from drainPendingCallbacks safely.
 void hle_libgpu_VSyncCallback(recomp_context *ctx) {
-  uint32_t prev = g_vsyncCallback;
-  g_vsyncCallback = ctx->r[A0];
+  auto &slot = psyq_state().gpuSwapCb;
+  uint32_t prev = slot;
+  slot = ctx->r[A0];
   ctx->r[V0] = prev;
 }
 

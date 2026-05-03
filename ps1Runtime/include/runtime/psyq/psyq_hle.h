@@ -8,9 +8,9 @@
  * This gives VSync, DrawSync, DrawOTag, and display-environment functions
  * correct behaviour without requiring per-game address hacks.
  *
- * **Setup:** call `ps1::psyq::configure()` once from `main_host.cpp` after
- * `Bios::setPsyqAddresses()` so the HLE layer knows the VBlank counter
- * address, GPU callbacks, and drain function for the current game.
+ * **Setup:** call `ps1::psyq::configure()` once from `main_host.cpp` so the
+ * HLE layer can reach back into the BIOS callback drain and the host GPU's
+ * GP0/GP1 ports.  All per-game state lives in `psyq_state()`.
  */
 
 #include "runtime/cpu_context.h"
@@ -25,15 +25,11 @@ namespace ps1::psyq {
  * @brief Per-game configuration for the PsyQ HLE layer.
  *
  * Populated by `main_host.cpp` at startup and passed to `psyq::configure()`.
- * All `uint32_t` address fields are **physical PS1 RAM addresses** — apply
- * `addr & 0x1FFFFFFF` before indexing into `rdram`.
+ * Phase 2 (2.1..2.4) moved every per-game BSS address into the
+ * `psyq_state()` singleton, so the HLE config now only carries GP0/GP1
+ * writers and a hook to drain pending BIOS callbacks.
  */
 struct HleConfig {
-  uint32_t vblankCounter = 0; ///< PSX RAM address of the VBlank tick counter
-  uint32_t drawSyncBase = 0;  ///< BSS addr holding pointer to OT status array
-  uint32_t drawSyncIndexAddr = 0; ///< BSS addr holding current OT index
-  uint32_t drawSyncCount = 2;     ///< Number of double-buffered OT entries
-
   /// Drain pending BIOS callbacks (must run on game thread at yield points).
   /// Set to Bios::drainPendingCallbacks via a lambda in main_host.cpp.
   std::function<void()> drainCallbacks;
@@ -43,26 +39,10 @@ struct HleConfig {
 
   /// GPU control port (GP1) write — used by PutDispEnv.
   std::function<void(uint32_t)> writeGP1;
-
-  // ── Generic internal-state callbacks (game-agnostic) ──
-  //
-  // These replace per-game BSS address polling.  Wire to Bios methods in
-  // main_host.cpp so HLE stubs can block without per-game configuration.
-
-  /// Block until `frames` more VBlanks have fired. Returns new VBlank count.
-  std::function<uint32_t(uint32_t frames)> waitVSync;
-
-  /// Block until a CD command completes (INT2/INT3). Returns 2 on success,
-  /// 5 on disk error, 0 on timeout.
-  std::function<uint8_t(int timeoutMs)> waitForCdSync;
-
-  /// Block until CD data is ready (INT1/INT4). Returns 1/4 on success,
-  /// 5 on error, 0 on timeout.
-  std::function<uint8_t(int timeoutMs)> waitForCdReady;
 };
 
-/// Configure the HLE layer for the current game.  Call from Bios or main_host
-/// after setPsyqAddresses().
+/// Configure the HLE layer for the current game.  Call once from main_host
+/// at startup.
 void configure(const HleConfig &cfg);
 
 /// Read-only access to the current HleConfig — used by sibling libgpu/libcd

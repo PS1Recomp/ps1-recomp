@@ -33,6 +33,7 @@ add_library(ps1Runtime_lib STATIC
     src/psyq/psyq_font.cpp
     src/psyq/psyq_pad.cpp
     src/psyq/psyq_libc.cpp
+    src/psyq/psyq_state.cpp
 )
 
 target_include_directories(ps1Runtime_lib

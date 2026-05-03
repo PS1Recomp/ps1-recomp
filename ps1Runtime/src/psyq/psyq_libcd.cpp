@@ -4,9 +4,12 @@
 #include "runtime/memory.h"
 #include "runtime/psyq/psyq_hle.h"
 #include "runtime/psyq/psyq_registry.h"
+#include "runtime/psyq/psyq_state.h"
 
 #include <array>
+#include <chrono>
 #include <cstdint>
+#include <thread>
 
 namespace ps1::psyq {
 
@@ -121,28 +124,26 @@ void hle_libcd_CdInit(recomp_context *ctx) {
   }
 
   // Drive the BIOS event chain that mirrors what the PsyQ IRQ handler
-  // would do: INT3 = Acknowledge, INT2 = Complete.  Both map to
-  // cdSyncByte = 2 in the per-game BSS (see bios.cpp::triggerCdromEvent).
+  // would do: INT3 = Acknowledge, INT2 = Complete.  Both end up in
+  // psyq_state().cdSyncByte = 2 (see bios.cpp::triggerCdromEvent).
   bios->triggerCdromEvent(3);
   bios->triggerCdromEvent(2);
 
-  // Reset the read-state BSS slots that bios.cpp's HLE sector copy reads.
-  // These will move into PsyqState in Phase 2 — until then keep them in
-  // sync with the hardware state.
-  const auto &addrs = bios->psyqAddresses();
-  if (addrs.cdRemaining) ctx->mem->write32(addrs.cdRemaining, 0);
-  if (addrs.cdDestPtr)   ctx->mem->write32(addrs.cdDestPtr,   0);
-  if (addrs.cdWordCount) ctx->mem->write32(addrs.cdWordCount, 0);
+  // Reset the read-state slots that bios.cpp's HLE sector copy consults.
+  auto &state = psyq_state();
+  state.cdRemaining = 0;
+  state.cdDestPtr   = 0;
+  state.cdWordCount = 0;
 
   ctx->r[V0] = 1; // success
 }
 
 // ── CdRead(sectors, *buf, mode) ───────────────────────────────────────────
 //
-// Asynchronous read.  Updates the BSS read state that bios.cpp consults from
-// triggerCdromEvent(INT1)/drainPendingCallbacks, then issues CdlSetmode +
-// CdlReadN.  CdlSetloc must already have been sent by the caller (PsyQ
-// requires it before CdRead).
+// Asynchronous read.  Updates the read-state slots in psyq_state() that
+// bios.cpp consults from triggerCdromEvent(INT1)/drainPendingCallbacks,
+// then issues CdlSetmode + CdlReadN.  CdlSetloc must already have been
+// sent by the caller (PsyQ requires it before CdRead).
 //
 void hle_libcd_CdRead(recomp_context *ctx) {
   auto *bios = ctx->bios;
@@ -158,10 +159,10 @@ void hle_libcd_CdRead(recomp_context *ctx) {
   // sectors (whole-sector mode); the BIOS copies 585 words in that case.
   const uint32_t wordCount = (mode & 0x20) ? 585u : 512u;
 
-  const auto &addrs = bios->psyqAddresses();
-  if (addrs.cdRemaining) ctx->mem->write32(addrs.cdRemaining, static_cast<uint32_t>(sectors));
-  if (addrs.cdDestPtr)   ctx->mem->write32(addrs.cdDestPtr,   bufPtr);
-  if (addrs.cdWordCount) ctx->mem->write32(addrs.cdWordCount, wordCount);
+  auto &state = psyq_state();
+  state.cdRemaining = static_cast<uint32_t>(sectors);
+  state.cdDestPtr   = bufPtr;
+  state.cdWordCount = wordCount;
 
   if (auto *cdrom = bios->cdromController()) {
     // CdlSetmode with the requested mode byte.
@@ -176,22 +177,54 @@ void hle_libcd_CdRead(recomp_context *ctx) {
   ctx->r[V0] = 1;
 }
 
+// ── Cooperative wait on psyq_state() CD bytes (Phase 2.3) ──────────────────
+//
+// The CDROM IRQ path (Bios::triggerCdromEvent) writes to
+// psyq_state().cdSyncByte / cdReadyByte atomically.  These helpers poll the
+// atomic with a 100 µs sleep between checks, draining BIOS callbacks per
+// iteration so any pending mode-0x1000 handler runs on the game thread.  The
+// 5 s deadline matches the previous Bios::waitForCdSync timeout.
+//
+namespace {
+
+template <typename Atomic>
+uint8_t waitOnCdAtomic(Atomic &slot) {
+  // Reset to "pending" so we observe the NEXT CDROM event, not the previous
+  // one — same semantics the prior cv-based path enforced explicitly.
+  slot.store(0, std::memory_order_release);
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (std::chrono::steady_clock::now() < deadline) {
+    uint8_t v = slot.load(std::memory_order_acquire);
+    if (v != 0)
+      return v;
+    if (getConfig().drainCallbacks)
+      getConfig().drainCallbacks();
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+  }
+  return 0; // timeout
+}
+
+} // namespace
+
 // ── CdSync(mode, *result) ─────────────────────────────────────────────────
 //
 // In our model every CdControl-style call is synchronous (the controller
 // fires INT3+INT2 inline), so by the time the game polls CdSync the state
-// is already CdlComplete (2).  mode=0 should still block until completion;
-// we route through Bios::waitForCdSync for that, falling back to the
-// internal sync byte if the hook isn't wired (unit-test path).
+// is usually already CdlComplete (2).  When mode=0 the caller wants to
+// block until the next completion event — we poll psyq_state().cdSyncByte
+// cooperatively and surface the new value (2 or 5; 0 → timeout maps to
+// CdlNoIntr).  When mode≠0 (poll), we return Complete unconditionally
+// because synchronous CD command dispatch guarantees the prior command
+// already finished.
 //
 void hle_libcd_CdSync(recomp_context *ctx) {
   uint32_t mode      = ctx->r[A0];
   uint32_t resultPtr = ctx->r[A1];
 
   uint8_t code = CDL_COMPLETE;
-  if (mode == 0 && getConfig().waitForCdSync) {
-    uint8_t v = getConfig().waitForCdSync(5000);
-    code = (v == 0) ? CDL_NO_INTR : v; // 0 == timeout
+  if (mode == 0) {
+    uint8_t v = waitOnCdAtomic(psyq_state().cdSyncByte);
+    code = (v == 0) ? CDL_NO_INTR : v;
   }
 
   if (resultPtr != 0) {
@@ -207,27 +240,23 @@ void hle_libcd_CdSync(recomp_context *ctx) {
 
 // ── CdReady(mode, *result) ────────────────────────────────────────────────
 //
-// Same shape as CdSync but for data-ready (INT1/INT4) interrupts.  The
-// runtime delivers INT1 from cdrom_controller.tick() once a sector is
-// buffered; in non-blocking mode we simply read the latest readiness byte
-// the BIOS HLE wrote into BSS (cdReadyByte), since that mirrors the real
-// PsyQ polling expectation.
+// Same shape as CdSync but for data-ready (INT1/INT4) interrupts.  Phase 2.3
+// migrated the ready byte into psyq_state().cdReadyByte; mode=0 (block) does
+// the cooperative poll, mode≠0 (poll) reads the current value (or returns
+// CdlDataReady if nothing has arrived — keeps callers that poll
+// non-blocking and then hit CdGetSector from deadlocking).
 //
 void hle_libcd_CdReady(recomp_context *ctx) {
   uint32_t mode      = ctx->r[A0];
   uint32_t resultPtr = ctx->r[A1];
 
   uint8_t code = CDL_NO_INTR;
-  if (mode == 0 && getConfig().waitForCdReady) {
-    uint8_t v = getConfig().waitForCdReady(5000);
+  if (mode == 0) {
+    uint8_t v = waitOnCdAtomic(psyq_state().cdReadyByte);
     code = (v == 0) ? CDL_NO_INTR : v;
-  } else if (ctx->bios && ctx->bios->psyqAddresses().cdReadyByte) {
-    code = ctx->mem->read8(ctx->bios->psyqAddresses().cdReadyByte);
-    if (code == 0) code = CDL_NO_INTR;
   } else {
-    // No bios / no per-game ready byte — assume data is ready so callers
-    // that poll non-blocking and then hit CdGetSector won't deadlock.
-    code = CDL_DATA_READY;
+    uint8_t v = psyq_state().cdReadyByte.load(std::memory_order_acquire);
+    code = (v == 0) ? CDL_DATA_READY : v;
   }
 
   if (resultPtr != 0) {
@@ -299,17 +328,15 @@ void hle_libcd_CdGetSector(recomp_context *ctx) {
 namespace {
 
 // Shared body for the three callback setters: read prev, store new, return prev
-// in v0.  All three currently update cdDataCb because bios.cpp dispatches a
-// single data callback for INT1 / INT4 (the difference between Read and Ready
-// is mostly which interrupts the game expects, and our INT routing folds them).
+// in v0.  All three currently update psyq_state().cdDataCb because bios.cpp
+// dispatches a single data callback for INT1 / INT4 (the difference between
+// Read and Ready is mostly which interrupts the game expects, and our INT
+// routing folds them).
 void setDataCallback(recomp_context *ctx) {
   uint32_t fn = ctx->r[A0];
-  uint32_t slot = ctx->bios ? ctx->bios->psyqAddresses().cdDataCb : 0;
-  uint32_t prev = 0;
-  if (slot) {
-    prev = ctx->mem->read32(slot);
-    ctx->mem->write32(slot, fn);
-  }
+  auto &slot = psyq_state().cdDataCb;
+  uint32_t prev = slot;
+  slot = fn;
   ctx->r[V0] = prev;
 }
 
@@ -332,8 +359,8 @@ void hle_libcd_CdMix(recomp_context *ctx) {
 // ── CdReadBreak() ─────────────────────────────────────────────────────────
 //
 // Cancel an in-progress CdRead.  Stops the controller's read state machine
-// and zeros the BSS read counters so the next INT1 doesn't re-enter the
-// sector-copy path.
+// and zeros the read counters in psyq_state() so the next INT1 doesn't
+// re-enter the sector-copy path.
 //
 void hle_libcd_CdReadBreak(recomp_context *ctx) {
   auto *bios = ctx->bios;
@@ -342,10 +369,10 @@ void hle_libcd_CdReadBreak(recomp_context *ctx) {
   if (auto *cdrom = bios->cdromController())
     cdrom->stopReading();
 
-  const auto &addrs = bios->psyqAddresses();
-  if (addrs.cdRemaining) ctx->mem->write32(addrs.cdRemaining, 0);
-  if (addrs.cdDestPtr)   ctx->mem->write32(addrs.cdDestPtr,   0);
-  if (addrs.cdWordCount) ctx->mem->write32(addrs.cdWordCount, 0);
+  auto &state = psyq_state();
+  state.cdRemaining = 0;
+  state.cdDestPtr   = 0;
+  state.cdWordCount = 0;
 
   ctx->r[V0] = 1;
 }

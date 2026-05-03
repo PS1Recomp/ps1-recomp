@@ -4,8 +4,9 @@
  * @brief Runtime configuration structures and TOML config reader.
  *
  * `ps1::ConfigReader` loads a TOML file and populates the `ps1::Config`
- * aggregate (video, audio, input, paths). This is separate from the per-game
- * `psyq_addresses` config which is parsed directly by `main_host.cpp`.
+ * aggregate (video, audio, input, paths). Per-game PsyQ runtime state lives
+ * in `psyq_state()`; the legacy `[psyq_addresses]` block was removed in
+ * Phase 2.4 and no longer reaches this reader.
  *
  * Typical usage:
  * @code
