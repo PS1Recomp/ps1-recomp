@@ -221,6 +221,16 @@ void hle_libcd_CdSync(recomp_context *ctx) {
   uint32_t mode      = ctx->r[A0];
   uint32_t resultPtr = ctx->r[A1];
 
+  // Phase 3.3: drain the cross-thread CD IRQ queue before reading status.
+  // SDL-render-thread `cdromCtrl.tick()` enqueues IRQs into Bios's
+  // `cdEventQueue_`; without this drain `cdSyncByte` would observe stale
+  // state until the next `drainPendingCallbacks` call.  For mode==0 the
+  // wait loop also drains via `getConfig().drainCallbacks` each iteration,
+  // so polling integrates naturally; this leading drain handles mode!=0
+  // (poll) and the first iteration of mode==0.
+  if (auto *bios = ctx->bios)
+    bios->drainCdromEventQueue();
+
   uint8_t code = CDL_COMPLETE;
   if (mode == 0) {
     uint8_t v = waitOnCdAtomic(psyq_state().cdSyncByte);

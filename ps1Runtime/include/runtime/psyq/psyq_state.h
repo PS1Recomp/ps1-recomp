@@ -70,6 +70,17 @@ public:
   /// per-game `vsync_counter` BSS address.
   std::atomic<uint32_t> vsyncCounter{0};
 
+  /// Cross-thread flag: VBlank thread sets `true` once per tick (release);
+  /// game thread exchanges `false` at the end of each `hle_VSync`
+  /// (acq_rel) and, when it observed `true`, runs the actual VBlank
+  /// delivery (`Bios::triggerVBlankEvent`) on the game thread.  Phase 3.2
+  /// pulled all PsyqState/event-system writes off the IRQ-context VBlank
+  /// thread; only this single-byte atomic is touched there now.  Multiple
+  /// VBlanks coalesce into a single delivery — PsyQ event semantics are
+  /// status-flag based (TestEvent/EnableEvent), so coalescing does not
+  /// drop user-visible state.
+  std::atomic<bool> vblankPending{false};
+
   // ── CDROM sync flags ─────────────────────────────────────────────────
   /// Set by `Bios::triggerCdromEvent(CdlComplete)` to signal CdSync
   /// completion.  Replaces `cd_sync_byte` BSS slot.

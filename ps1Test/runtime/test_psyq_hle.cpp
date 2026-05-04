@@ -106,6 +106,68 @@ TEST_F(PsyqHleTest, VSyncReturnsCounterPostAdvance) {
     EXPECT_EQ(ctx.r[V0], psyq_state().vsyncCounter.load());
 }
 
+// Phase 3.2: the VBlank thread no longer calls Bios::triggerVBlankEvent()
+// directly — it only sets `psyq_state().vblankPending = true`.  hle_VSync,
+// running on the game thread, exchanges the flag at the end of its wait
+// and invokes `deliverVBlankEvent` exactly once when the flag was set.
+//
+// Two consecutive hle_VSync calls without an intervening VBlank thread
+// tick must NOT both observe the same pending flag — the first call
+// drains it, the second sees `false`.  This test wires
+// `deliverVBlankEvent` to a counter to assert the flag is delivered
+// once and only once.
+TEST_F(PsyqHleTest, VBlankPendingDeliveredOncePerFlagRaise) {
+    int vblankDeliveries = 0;
+    HleConfig cfg = getConfig();
+    cfg.deliverVBlankEvent = [&vblankDeliveries]() { ++vblankDeliveries; };
+    configure(cfg);
+
+    // Simulate one VBlank thread tick: counter bumped, flag raised.
+    psyq_state().vsyncCounter.store(0, std::memory_order_release);
+    psyq_state().vblankPending.store(true, std::memory_order_release);
+
+    // First hle_VSync(1) drains the flag and fires delivery once.
+    ctx.r[A0] = 1;
+    hle_VSync(&ctx);
+    EXPECT_EQ(vblankDeliveries, 1);
+    EXPECT_FALSE(psyq_state().vblankPending.load(std::memory_order_acquire));
+
+    // Second hle_VSync(1) — no new VBlank thread tick happened, so the
+    // flag must remain false and delivery count must NOT increment.
+    // The drainCallbacks fixture-hook still bumps the counter inside the
+    // wait loop so the call returns; only the deliverVBlankEvent path is
+    // exercised here.
+    ctx.r[A0] = 1;
+    hle_VSync(&ctx);
+    EXPECT_EQ(vblankDeliveries, 1)
+        << "Same VBlank delivered twice across consecutive hle_VSync calls";
+    EXPECT_FALSE(psyq_state().vblankPending.load(std::memory_order_acquire));
+
+    // Re-raise the flag (simulates the next VBlank thread tick) and
+    // confirm a third call now delivers a fresh VBlank.
+    psyq_state().vblankPending.store(true, std::memory_order_release);
+    ctx.r[A0] = 1;
+    hle_VSync(&ctx);
+    EXPECT_EQ(vblankDeliveries, 2);
+    EXPECT_FALSE(psyq_state().vblankPending.load(std::memory_order_acquire));
+}
+
+// Negative case: if no VBlank ever fired, hle_VSync must not call
+// deliverVBlankEvent at all.
+TEST_F(PsyqHleTest, VSyncSkipsDeliveryWhenFlagNeverRaised) {
+    int vblankDeliveries = 0;
+    HleConfig cfg = getConfig();
+    cfg.deliverVBlankEvent = [&vblankDeliveries]() { ++vblankDeliveries; };
+    configure(cfg);
+
+    // Flag stays false throughout.
+    EXPECT_FALSE(psyq_state().vblankPending.load(std::memory_order_acquire));
+
+    ctx.r[A0] = 1;
+    hle_VSync(&ctx);
+    EXPECT_EQ(vblankDeliveries, 0);
+}
+
 // ── ClearOTag ─────────────────────────────────────────────────────────────────
 
 TEST_F(PsyqHleTest, ClearOTagFillsEndMarker) {

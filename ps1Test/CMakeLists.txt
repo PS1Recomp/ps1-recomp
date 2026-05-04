@@ -69,6 +69,7 @@ add_executable(ps1Runtime_tests
     runtime/test_bios_table_b.cpp
     runtime/test_bios_table_c.cpp
     runtime/test_bios_integration.cpp
+    runtime/test_bios_custom_exception.cpp
     runtime/test_gpu_commands.cpp
     runtime/test_gpu_dma.cpp
     runtime/test_gpu_lines_rects.cpp

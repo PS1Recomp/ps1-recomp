@@ -4,6 +4,7 @@ namespace ps1::psyq {
 
 void PsyqState::reset() {
   vsyncCounter.store(0, std::memory_order_relaxed);
+  vblankPending.store(false, std::memory_order_relaxed);
   cdSyncByte.store(0, std::memory_order_relaxed);
   cdReadyByte.store(0, std::memory_order_relaxed);
   cdRemaining = 0;

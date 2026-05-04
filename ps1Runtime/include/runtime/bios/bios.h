@@ -9,7 +9,10 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdlib>
+#include <functional>
 #include <memory>
+#include <mutex>
+#include <queue>
 
 namespace ps1::gpu {
 class GPU;
@@ -52,11 +55,33 @@ public:
   void updatePadBuffers();
 
   // Trigger CDROM events in the event system based on interrupt type.
-  // Called from the main loop when CDROM controller has a pending interrupt.
+  // Called on the GAME thread (from libcd HLE syscall handlers and from
+  // `drainCdromEventQueue` consuming queued cross-thread IRQs).  Touches
+  // non-atomic event-system state, so it must NOT be invoked directly
+  // from the SDL render thread or any other thread that does not own the
+  // recompilation context.
   void triggerCdromEvent(uint8_t cdIntType);
+
+  // Cross-thread CDROM IRQ entry-point (Phase 3.3).  The cdrom controller's
+  // `interruptCallback` is wired here so SDL-render-thread `tick()` and
+  // game-thread `writeRegister` can both raise IRQs without racing on
+  // event-system state.  Push is `O(1)` under a short mutex.  Game-thread
+  // code drains the queue via `drainCdromEventQueue` (called from
+  // `drainPendingCallbacks` and `hle_libcd_CdSync`).
+  void queueCdromEvent(uint8_t cdIntType);
+
+  // Drain queued CDROM IRQs and run `triggerCdromEvent` for each on the
+  // current (game) thread.  Returns the number of events drained.  Safe
+  // to call on any iteration of a polling loop — events are queued
+  // (push) cross-thread and drained (pop + dispatch) game-thread-only.
+  std::size_t drainCdromEventQueue();
 
   // Trigger VBlank event in the event system.
   void triggerVBlankEvent();
+
+  // Invoke the handler installed via B0:0x19 (SetCustomExitFromException),
+  // if any.  Must run on the game thread (touches `recomp_context` GPRs).
+  void triggerCustomException();
 
   // ── Generic internal-state accessors (game-agnostic) ──
   //
@@ -88,19 +113,30 @@ private:
   uint32_t padBuf2Size_ = 0;
   bool padActive_ = false;
 
-  // CDROM interrupt pending — set from main thread, consumed on game thread.
-  // Simulates the SysEnqIntRP interrupt handler chain that never runs in our
-  // recompiled environment.  Stores the INT type (1-5) or 0 if nothing pending.
+  // CDROM interrupt pending — set on the game thread by triggerCdromEvent
+  // (which now runs only on the game thread post-3.3) and consumed by the
+  // pump loop in drainPendingCallbacks (also game thread).  Carries the
+  // INT type (1-5) or 0 if nothing pending.  Cross-thread IRQ delivery
+  // goes through `cdEventQueue_` below; this atomic is the single-INT
+  // hand-off slot between the queue drain and the pump loop dispatch.
   std::atomic<uint8_t> cdIntPending_{0};
 
-  // Deferred CD exception — set by triggerCdromEvent when customExceptionExit_
-  // is active.  Consumed by drainPendingCallbacks to fire the longjmp at a
-  // safe point (after the game enters its polling loop).
+  // Cross-thread CDROM IRQ queue (Phase 3.3).  Pushed from any thread
+  // by `queueCdromEvent`; popped only by `drainCdromEventQueue` on the
+  // game thread.  Mutex is held only for the short push/swap, so it
+  // does not contend with normal game-thread work.
+  std::mutex cdEventQueueMtx_;
+  std::queue<uint8_t> cdEventQueue_;
+
+  // Deferred CD exception — set by triggerCdromEvent when a B0:0x19 handler
+  // is registered.  Consumed by drainPendingCallbacks, which calls
+  // triggerCustomException() at a safe point (after the game enters its
+  // polling loop).
   std::atomic<uint8_t> cdExceptionPending_{0};
 
-  // Deferred VBlank exception — set by triggerVBlankEvent when
-  // customExceptionExit_ is active.  Fired from drainPendingCallbacks
-  // to avoid cross-thread register clobbering.
+  // Deferred VBlank exception — set by triggerVBlankEvent when a B0:0x19
+  // handler is registered.  Fired from drainPendingCallbacks via
+  // triggerCustomException() to avoid cross-thread register clobbering.
   std::atomic<uint8_t> vblankExceptionPending_{0};
 
   // ── Internal generic state (game-agnostic) ─────────────────────────────
@@ -111,8 +147,14 @@ private:
   // CD callbacks / sector bookkeeping + GPU swap callback migrated to
   // `psyq_state()` in Phase 2.4 — `[psyq_addresses]` removed from TOMLs.
 
-  // Global custom exception handler (SetCustomExitFromException)
-  uint32_t customExceptionExit_ = 0;
+  // Global custom exception handler (SetCustomExitFromException, B0:0x19).
+  // The lambda is installed on the game thread and invoked on the game thread
+  // via `triggerCustomException()`.  `customExceptionRegistered_` is the
+  // cross-thread gate read by `triggerVBlankEvent` (VBlank thread) to decide
+  // whether to flag a deferred dispatch — std::function itself is not
+  // safe to read concurrently with assignment.
+  std::function<void()> customExceptionCallback_;
+  std::atomic<bool> customExceptionRegistered_{false};
 
   // Specific Table handlers mapping
   void handleA0(uint32_t index);
@@ -122,5 +164,14 @@ private:
   // Common memory card/IO stubs (A0)
   void stub_printf();
 };
+
+// Restore CPU state from a PsyQ jmp_buf at `buf` (a kernel-mode address holding
+// RA, SP, FP, S0..S7, GP — total 48 bytes).  Mirrors what the PSX BIOS does
+// when `SetCustomExitFromException` fires: RA → PC, GPRs reloaded, COP0
+// Cause = 0x400, Status Register exception stack popped, V0 = 1.
+//
+// Extracted as a free function so it can be tested without spinning up Bios
+// (no event system, no CDROM, no heap).
+void hle_longjmp_emulator(recomp_context &ctx, Memory &mem, uint32_t buf);
 
 } // namespace ps1::bios

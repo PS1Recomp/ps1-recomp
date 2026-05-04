@@ -220,19 +220,24 @@ int main(int argc, char *argv[]) {
   // the GP0/GP1 writers and a callback drain hook — no addresses.
   {
     ps1::psyq::HleConfig hleCfg;
-    hleCfg.drainCallbacks = [&bios]() { bios.drainPendingCallbacks(); };
-    hleCfg.writeGP0       = [&gpu](uint32_t w) { gpu.writeGP0(w); };
-    hleCfg.writeGP1       = [&gpu](uint32_t w) { gpu.writeGP1(w); };
+    hleCfg.drainCallbacks      = [&bios]() { bios.drainPendingCallbacks(); };
+    hleCfg.writeGP0            = [&gpu](uint32_t w) { gpu.writeGP0(w); };
+    hleCfg.writeGP1            = [&gpu](uint32_t w) { gpu.writeGP1(w); };
+    hleCfg.deliverVBlankEvent  = [&bios]() { bios.triggerVBlankEvent(); };
     ps1::psyq::configure(hleCfg);
     psyq_registry_init_defaults();
     psyq_register_rayman_boot();
   }
 
-  // Wire CDROM interrupt callback → BIOS event system
-  // This fires IMMEDIATELY when a CDROM command completes (inside tick()),
-  // before the game thread can read/acknowledge the interrupt hardware flag.
+  // Wire CDROM interrupt callback → BIOS cross-thread queue (Phase 3.3).
+  // The callback fires from `cdromCtrl.tick()` on the SDL render thread AND
+  // from `cdromCtrl.writeRegister()` on the game thread — calling
+  // `triggerCdromEvent` directly from the SDL thread races on event-system
+  // state with the game thread.  Push onto a mutex-protected queue instead;
+  // `drainCdromEventQueue` pops and dispatches on the game thread (from
+  // `drainPendingCallbacks` and `hle_libcd_CdSync`).
   cdromCtrl.setInterruptCallback(
-      [&bios](uint8_t intType) { bios.triggerCdromEvent(intType); });
+      [&bios](uint8_t intType) { bios.queueCdromEvent(intType); });
 
   // ─── Initialize SDL2 ──────────────────────────────
 
@@ -404,6 +409,16 @@ int main(int argc, char *argv[]) {
   // VSync to read the same singleton).  This dedicated 60 Hz thread is
   // independent of SDL rendering, so the tick advances at the right rate
   // and the game's VSync wait exits quickly.
+  //
+  // Phase 3.2: this thread no longer calls `bios.triggerVBlankEvent()`
+  // directly.  That call writes non-atomic state — `drawSync.status[]`,
+  // event-system flags, queued swap callback — which was racing with the
+  // game thread.  Instead we just bump the atomic counter and raise the
+  // `vblankPending` flag; `hle_VSync`, running on the game thread, drains
+  // the flag at the end of its wait and runs `triggerVBlankEvent` there.
+  // `gpu.snapshotDisplayBuffer` and `bios.updatePadBuffers` stay here —
+  // they own their own thread safety (renderer double-buffer / atomic
+  // pad state) and are out of scope for 3.2.
   std::thread vblankThread([&]() {
     using namespace std::chrono;
     const auto period = microseconds(16667); // ~60 Hz
@@ -413,7 +428,8 @@ int main(int argc, char *argv[]) {
       next += period;
       ps1::psyq::psyq_state().vsyncCounter.fetch_add(
           1, std::memory_order_release);
-      bios.triggerVBlankEvent();
+      ps1::psyq::psyq_state().vblankPending.store(
+          true, std::memory_order_release);
       gpu.snapshotDisplayBuffer();
       bios.updatePadBuffers();
     }

@@ -35,6 +35,15 @@ static inline void drainOnce() {
 // wall-clock deadline (~60 frames at 60 Hz) guards against deadlock when
 // the VBlank thread is not running.
 //
+// Phase 3.2: after the wait loop, exchange `psyq_state().vblankPending`
+// to false.  When the flag was observed `true`, run `deliverVBlankEvent`
+// on this (game) thread — that is what now performs the actual PsyQ
+// VBlank work (event-system triggers, queued swap callback, drawSync
+// stamping) which used to run on the IRQ-context VBlank thread.  The
+// exchange both observes and clears the flag atomically, so two
+// consecutive `hle_VSync` calls without an intervening VBlank tick
+// cannot drain the same VBlank twice.
+//
 void hle_VSync(recomp_context *ctx) {
   int32_t n = static_cast<int32_t>(ctx->r[A0]);
   uint32_t frames = (n <= 0) ? 1u : static_cast<uint32_t>(n);
@@ -47,6 +56,11 @@ void hle_VSync(recomp_context *ctx) {
          std::chrono::steady_clock::now() < deadline) {
     drainOnce();
     std::this_thread::sleep_for(std::chrono::microseconds(100));
+  }
+
+  if (psyq_state().vblankPending.exchange(false, std::memory_order_acq_rel) &&
+      g_cfg.deliverVBlankEvent) {
+    g_cfg.deliverVBlankEvent();
   }
 
   ctx->r[V0] = counter.load(std::memory_order_acquire);

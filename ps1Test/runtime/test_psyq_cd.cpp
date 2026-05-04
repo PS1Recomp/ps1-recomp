@@ -39,9 +39,13 @@ protected:
     bios->setCdromController(&cdrom);
     ctx.bios = bios.get();
 
-    // Wire the controller's interrupt callback exactly like main_host.cpp.
+    // Wire the controller's interrupt callback exactly like main_host.cpp:
+    // cross-thread enqueue, drained game-thread-side via Bios::drainCdrom-
+    // EventQueue (called from drainPendingCallbacks and hle_libcd_CdSync).
+    // Phase 3.3 — direct triggerCdromEvent from this lambda would race on
+    // event-system state when the SDL render thread fires it concurrently.
     cdrom.setInterruptCallback(
-        [this](uint8_t intType) { bios->triggerCdromEvent(intType); });
+        [this](uint8_t intType) { bios->queueCdromEvent(intType); });
 
     psyq::psyq_state().reset();
   }
@@ -340,6 +344,87 @@ TEST_F(PsyqCdTest, TriggerVBlankSkipsSwapCbWhenZero) {
   // Default psyq_state().gpuSwapCb is 0 — VBlank must not crash queuing it.
   ASSERT_EQ(psyq::psyq_state().gpuSwapCb, 0u);
   EXPECT_NO_FATAL_FAILURE(bios->triggerVBlankEvent());
+}
+
+// ──────────────────────────────────────────────────────────
+// Phase 3.3 — cross-thread CDROM event queue
+// ──────────────────────────────────────────────────────────
+
+// queueCdromEvent must NOT touch psyq_state or the event system itself —
+// those side effects only run when the game thread later drains the queue.
+// This is what makes the call cross-thread-safe from the SDL render thread.
+TEST_F(PsyqCdTest, QueueCdromEventDefersAllSideEffectsUntilDrain) {
+  psyq::psyq_state().cdSyncByte.store(0);
+  psyq::psyq_state().cdReadyByte.store(0);
+
+  bios->queueCdromEvent(2); // INT2 Complete → would set cdSyncByte=2 if direct
+  bios->queueCdromEvent(1); // INT1 DataReady → would set cdReadyByte=1
+
+  // Nothing should have run yet.
+  EXPECT_EQ(psyq::psyq_state().cdSyncByte.load(), 0u);
+  EXPECT_EQ(psyq::psyq_state().cdReadyByte.load(), 0u);
+
+  // Drain on the game thread (this thread).  Both events fire in FIFO order.
+  std::size_t drained = bios->drainCdromEventQueue();
+  EXPECT_EQ(drained, 2u);
+  EXPECT_EQ(psyq::psyq_state().cdSyncByte.load(),  2u);
+  EXPECT_EQ(psyq::psyq_state().cdReadyByte.load(), 1u);
+
+  // Re-draining is a no-op — the queue is empty.
+  EXPECT_EQ(bios->drainCdromEventQueue(), 0u);
+}
+
+// hle_libcd_CdSync must drain the IRQ queue before reading status, so a
+// poll-mode caller (mode != 0) sees post-IRQ state.  Without the leading
+// drain, the cdSyncByte atomic would lag the queued IRQ until the next
+// drainPendingCallbacks call.
+TEST_F(PsyqCdTest, CdSyncDrainsQueueBeforeReadingStatus) {
+  HleConfig cfg{};
+  configure(cfg);
+
+  // Simulate a cross-thread IRQ that arrived just before the game thread
+  // entered CdSync — the controller's tick() callback would have queued
+  // an INT5 (DiskError) which maps to cdSyncByte = 5.
+  psyq::psyq_state().cdSyncByte.store(0);
+  bios->queueCdromEvent(5);
+  EXPECT_EQ(psyq::psyq_state().cdSyncByte.load(), 0u); // not drained yet
+
+  // Poll mode (mode != 0): hle_libcd_CdSync should drain the queue and
+  // return CDL_COMPLETE per the existing contract; the side effect we
+  // assert is that cdSyncByte was updated to 5 by the drained INT5.
+  ctx.r[A0] = 1; // poll
+  ctx.r[A1] = 0; // no result struct
+  hle_libcd_CdSync(&ctx);
+
+  EXPECT_EQ(psyq::psyq_state().cdSyncByte.load(), 5u)
+      << "CdSync must drain the queued IRQ before checking status";
+}
+
+// drainPendingCallbacks owns the same queue drain — so any code path that
+// reaches a yield point picks up cross-thread IRQs.  This is the "general
+// drain" hook for sites that don't go through CdSync.
+TEST_F(PsyqCdTest, DrainPendingCallbacksDrainsCdromEventQueue) {
+  psyq::psyq_state().cdSyncByte.store(0);
+  bios->queueCdromEvent(2);
+  EXPECT_EQ(psyq::psyq_state().cdSyncByte.load(), 0u);
+
+  bios->drainPendingCallbacks();
+
+  EXPECT_EQ(psyq::psyq_state().cdSyncByte.load(), 2u);
+}
+
+// FIFO ordering is preserved — the queue is std::queue<uint8_t> under the
+// hood and drain pops front-to-back.  Use the cdReadyByte atomic which
+// records the LAST INT1/INT4 to land (overwrites): if INT4 was queued
+// after INT1, the atomic should reflect 4.
+TEST_F(PsyqCdTest, QueuePreservesFifoOrderOnDrain) {
+  psyq::psyq_state().cdReadyByte.store(0);
+
+  bios->queueCdromEvent(1); // first → readyByte=1
+  bios->queueCdromEvent(4); // last  → readyByte=4 (overwrites)
+
+  bios->drainCdromEventQueue();
+  EXPECT_EQ(psyq::psyq_state().cdReadyByte.load(), 4u);
 }
 
 // ──────────────────────────────────────────────────────────

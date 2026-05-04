@@ -39,6 +39,14 @@ struct HleConfig {
 
   /// GPU control port (GP1) write — used by PutDispEnv.
   std::function<void(uint32_t)> writeGP1;
+
+  /// Game-thread VBlank delivery (Phase 3.2).  Runs `Bios::triggerVBlankEvent`
+  /// which writes non-atomic state (`drawSync.status[]`, event-system flags,
+  /// queued swap callback).  The host VBlank thread no longer touches that
+  /// state directly — it just sets `psyq_state().vblankPending`, and
+  /// `hle_VSync` exchanges the flag at the end of its wait, calling this
+  /// callback on the game thread when the flag was observed `true`.
+  std::function<void()> deliverVBlankEvent;
 };
 
 /// Configure the HLE layer for the current game.  Call once from main_host

@@ -670,11 +670,20 @@ void Bios::handleB0(uint32_t index) {
   case 0x18: // SetDefaultExitFromException
     BIOS_LOG("[BIOS] SetDefaultExitFromException() [STUB]\n");
     break;
-  case 0x19: // SetCustomExitFromException
-    BIOS_LOG("[BIOS] SetCustomExitFromException(handler: 0x{:08X})\n",
-               ctx_.r[A0]);
-    customExceptionExit_ = ctx_.r[A0];
+  case 0x19: { // SetCustomExitFromException
+    uint32_t buf = ctx_.r[A0];
+    BIOS_LOG("[BIOS] SetCustomExitFromException(handler: 0x{:08X})\n", buf);
+    if (buf == 0) {
+      customExceptionCallback_ = nullptr;
+      customExceptionRegistered_.store(false, std::memory_order_release);
+    } else {
+      customExceptionCallback_ = [this, buf]() {
+        hle_longjmp_emulator(ctx_, *ctx_.mem, buf);
+      };
+      customExceptionRegistered_.store(true, std::memory_order_release);
+    }
     break;
+  }
   case 0x20: // UnDeliverEvent
     BIOS_LOG("[BIOS] UnDeliverEvent(class: 0x{:X}, spec: 0x{:X}) [STUB]\n",
                ctx_.r[A0], ctx_.r[A1]);
@@ -851,6 +860,34 @@ static uint32_t cdIntToEventSpec(uint8_t intType) {
   }
 }
 
+void Bios::queueCdromEvent(uint8_t cdIntType) {
+  // Push under a short mutex.  This is the only cross-thread CDROM IRQ
+  // entry-point: `cdromCtrl.setInterruptCallback` (wired in main_host.cpp)
+  // routes here from both the SDL-render-thread `tick()` path and the
+  // game-thread synchronous `writeRegister` path.  The actual side-effects
+  // (psyq_state writes, eventSystem_.triggerEvent, cdIntPending_ set)
+  // happen later in `drainCdromEventQueue` on the game thread.
+  std::lock_guard<std::mutex> lk(cdEventQueueMtx_);
+  cdEventQueue_.push(cdIntType);
+}
+
+std::size_t Bios::drainCdromEventQueue() {
+  // Pop everything under the mutex into a local queue, then drop the lock
+  // before dispatching — `triggerCdromEvent` may re-enter via cdrom_->tick
+  // during the pump-loop pass and we don't want to recursively lock.
+  std::queue<uint8_t> local;
+  {
+    std::lock_guard<std::mutex> lk(cdEventQueueMtx_);
+    std::swap(local, cdEventQueue_);
+  }
+  std::size_t count = local.size();
+  while (!local.empty()) {
+    triggerCdromEvent(local.front());
+    local.pop();
+  }
+  return count;
+}
+
 void Bios::triggerCdromEvent(uint8_t cdIntType) {
   uint32_t spec = cdIntToEventSpec(cdIntType);
   if (spec == 0)
@@ -994,10 +1031,9 @@ void Bios::triggerVBlankEvent() {
   // state.  Instead, set a flag and let drainPendingCallbacks() (which runs
   // on the game thread) perform the actual longjmp.
   //
-  if (customExceptionExit_ != 0) {
+  if (customExceptionRegistered_.load(std::memory_order_acquire)) {
     vblankExceptionPending_.store(1, std::memory_order_release);
-    BIOS_LOG("[VBLANK-HLE] CustomExitFromException deferred (buf=0x{:08X})\n",
-             customExceptionExit_);
+    BIOS_LOG("[VBLANK-HLE] CustomExitFromException deferred\n");
   }
 
   // ── Deliver ALL standard PsyQ events that should fire each frame ──
@@ -1078,6 +1114,11 @@ void Bios::triggerVBlankEvent() {
 }
 
 void Bios::drainPendingCallbacks() {
+  // Drain any cross-thread CDROM IRQs first — they may set
+  // cdIntPending_ / cdExceptionPending_ / event-system state, which the
+  // rest of this method then consumes.  Phase 3.3.
+  drainCdromEventQueue();
+
   eventSystem_.drainPendingCallbacks();
 
   // ── Deferred CD customExceptionExit dispatch ──────────────────────
@@ -1091,29 +1132,17 @@ void Bios::drainPendingCallbacks() {
   // drainPendingCallbacks call.  CD takes priority over VBlank.
   uint8_t cdExc = cdExceptionPending_.exchange(0, std::memory_order_acquire);
   uint8_t vbExc = vblankExceptionPending_.exchange(0, std::memory_order_acquire);
-  if ((cdExc != 0 || vbExc != 0) && customExceptionExit_ != 0) {
-    uint32_t buf = customExceptionExit_;
-    uint32_t jmpRA = ctx_.mem->read32(buf + 0);
-    if (cdExc != 0) {
-      BIOS_LOG("[CDROM-HLE] Deferred customExceptionExit for INT{} -> RA=0x{:08X}\n",
-               cdExc, jmpRA);
-    } else {
-      BIOS_LOG("[VBLANK-HLE] Deferred customExceptionExit -> RA=0x{:08X}\n",
-               jmpRA);
+  if (cdExc != 0 || vbExc != 0) {
+    if (customExceptionCallback_) {
+      if (cdExc != 0) {
+        BIOS_LOG("[CDROM-HLE] Firing deferred customExceptionExit for INT{}\n",
+                 cdExc);
+      } else {
+        BIOS_LOG("[VBLANK-HLE] Firing deferred customExceptionExit\n");
+      }
+      triggerCustomException();
+      return; // longjmp fired — game handles it
     }
-    ctx_.r[31] = jmpRA;
-    ctx_.r[29] = ctx_.mem->read32(buf + 4);
-    ctx_.r[30] = ctx_.mem->read32(buf + 8);
-    for (int i = 0; i < 8; i++) {
-      ctx_.r[16 + i] = ctx_.mem->read32(buf + 12 + (i * 4));
-    }
-    ctx_.r[28] = ctx_.mem->read32(buf + 44);
-    ctx_.cop0[13] = 0x400;
-    ctx_.pc = ctx_.r[31];
-    ctx_.r[V0] = 1;
-    uint32_t sr = ctx_.cop0[12];
-    ctx_.cop0[12] = (sr & ~0xF) | ((sr >> 2) & 0xF);
-    return; // longjmp fired — game handles it
   }
 
   // ── Simulate SysEnqIntRP CDROM interrupt handler chain ──────────
@@ -1134,6 +1163,13 @@ void Bios::drainPendingCallbacks() {
   auto &state = ps1::psyq::psyq_state();
 
   for (int pump = 0; pump < MAX_SECTORS_PER_DRAIN; ++pump) {
+    // Drain the cross-thread queue at the top of each pump iteration: the
+    // previous iteration's `cdrom_->tick(...)` may have fired the IRQ
+    // callback inline, which now enqueues onto `cdEventQueue_` instead of
+    // calling `triggerCdromEvent` directly.  Draining here populates
+    // `cdIntPending_` so the loop body picks up streaming-read INT1s.
+    drainCdromEventQueue();
+
     uint8_t intType = cdIntPending_.exchange(0, std::memory_order_acquire);
     if (intType == 0)
       break;
@@ -1327,6 +1363,35 @@ void Bios::updatePadBuffers() {
 
   writePadBuffer(padBuf1Addr_, padBuf1Size_, 0);
   writePadBuffer(padBuf2Addr_, padBuf2Size_, 1);
+}
+
+void Bios::triggerCustomException() {
+  if (customExceptionCallback_)
+    customExceptionCallback_();
+}
+
+void hle_longjmp_emulator(recomp_context &ctx, Memory &mem, uint32_t buf) {
+  // PsyQ jmp_buf layout (matches BIOS exception exit):
+  //   +0   RA   +4   SP   +8   FP
+  //   +12  S0   ... +40  S7
+  //   +44  GP
+  uint32_t jmpRA = mem.read32(buf + 0);
+  ctx.r[RA] = jmpRA;
+  ctx.r[SP] = mem.read32(buf + 4);
+  ctx.r[FP] = mem.read32(buf + 8);
+  for (int i = 0; i < 8; i++) {
+    ctx.r[S0 + i] = mem.read32(buf + 12 + (i * 4));
+  }
+  ctx.r[GP] = mem.read32(buf + 44);
+
+  // Cause = ext-interrupt (matches what the BIOS exception path leaves behind)
+  ctx.cop0[COP0_CAUSE] = 0x400;
+  ctx.pc = jmpRA;
+  ctx.r[V0] = 1; // longjmp return convention
+
+  // Pop SR exception stack: bits 5:2 -> 3:0
+  uint32_t sr = ctx.cop0[COP0_SR];
+  ctx.cop0[COP0_SR] = (sr & ~0xFu) | ((sr >> 2) & 0xFu);
 }
 
 } // namespace ps1::bios
