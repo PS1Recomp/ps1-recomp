@@ -975,6 +975,19 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
     break;
   default: break;
   }
+
+  // BSS write-through (Phase 2.3 fallout): when the per-game TOML
+  // declares `[bss_mirrors]` cd_sync_byte / cd_ready_byte, mirror the
+  // atomic value into PS1 RAM so recompiled native MIPS that polls the
+  // legacy BSS slot directly (Rayman PsyQ CdReset at 0x801CF1D8 / 0x801CF1DC)
+  // observes the new state.  Single byte per slot — same width as the
+  // pre-2.3 BIOS handler used to write.
+  if (cdSyncMirror_ != 0)
+    ctx_.mem->write8(cdSyncMirror_,
+                     psyqSync.load(std::memory_order_acquire));
+  if (cdReadyMirror_ != 0)
+    ctx_.mem->write8(cdReadyMirror_,
+                     psyqReady.load(std::memory_order_acquire));
   BIOS_LOG("[CDROM-HLE] INT{} → psyq_state.sync={} ready={}\n", cdIntType,
            psyqSync.load(std::memory_order_relaxed),
            psyqReady.load(std::memory_order_relaxed));

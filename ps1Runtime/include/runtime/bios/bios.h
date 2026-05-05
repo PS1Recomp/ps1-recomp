@@ -95,6 +95,17 @@ public:
   // handlers.
   void drainPendingCallbacks();
 
+  // BSS mirrors for legacy MIPS polling.  Phase 2.3/2.4 retired the BSS
+  // writes of cd_sync_byte / cd_ready_byte in favor of `psyq_state()`
+  // atomics; recompiled native MIPS code may still poll the original BSS
+  // address (Rayman PsyQ CdReset reads `0x801CF1D8` / `0x801CF1DC`).
+  // When set non-zero, `triggerCdromEvent` writes the same INT-mapped
+  // value to PS1 RAM that the legacy BIOS handler used to write.
+  void setBssMirrors(uint32_t cdSyncMirror, uint32_t cdReadyMirror) {
+    cdSyncMirror_ = cdSyncMirror;
+    cdReadyMirror_ = cdReadyMirror;
+  }
+
 private:
   recomp_context &ctx_;
   Heap heap_;
@@ -112,6 +123,11 @@ private:
   uint32_t padBuf2Addr_ = 0;
   uint32_t padBuf2Size_ = 0;
   bool padActive_ = false;
+
+  // BSS mirror addresses for legacy MIPS polling (set via setBssMirrors).
+  // 0 = disabled (HLE-only games leave them unset).
+  uint32_t cdSyncMirror_ = 0;
+  uint32_t cdReadyMirror_ = 0;
 
   // CDROM interrupt pending — set on the game thread by triggerCdromEvent
   // (which now runs only on the game thread post-3.3) and consumed by the

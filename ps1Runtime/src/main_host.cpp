@@ -416,26 +416,43 @@ int main(int argc, char *argv[]) {
   // `vsyncCounter` bump AND a `mem.write32(addr, counter)` so legacy
   // polling continues to work with the current architecture.
   uint32_t vblankCounterMirror = 0;
+  uint32_t cdSyncMirror = 0;
+  uint32_t cdReadyMirror = 0;
   if (!config_path.empty()) {
     try {
       auto cfg = toml::parse(config_path);
       if (cfg.contains("bss_mirrors")) {
         auto &mirrors = toml::find(cfg, "bss_mirrors");
-        if (mirrors.is_table() && mirrors.contains("vblank_counter")) {
-          auto v = toml::find(mirrors, "vblank_counter");
-          if (v.is_string())
-            vblankCounterMirror = std::strtoul(v.as_string().c_str(), nullptr, 0);
-          else if (v.is_integer())
-            vblankCounterMirror = static_cast<uint32_t>(v.as_integer());
+        if (mirrors.is_table()) {
+          auto readAddr = [&](const char *key) -> uint32_t {
+            if (!mirrors.contains(key))
+              return 0;
+            auto v = toml::find(mirrors, key);
+            if (v.is_string())
+              return std::strtoul(v.as_string().c_str(), nullptr, 0);
+            if (v.is_integer())
+              return static_cast<uint32_t>(v.as_integer());
+            return 0;
+          };
+          vblankCounterMirror = readAddr("vblank_counter");
+          cdSyncMirror = readAddr("cd_sync_byte");
+          cdReadyMirror = readAddr("cd_ready_byte");
           if (vblankCounterMirror != 0)
             fmt::print("[bss_mirrors] vblank_counter = 0x{:08X}\n",
                        vblankCounterMirror);
+          if (cdSyncMirror != 0)
+            fmt::print("[bss_mirrors] cd_sync_byte   = 0x{:08X}\n",
+                       cdSyncMirror);
+          if (cdReadyMirror != 0)
+            fmt::print("[bss_mirrors] cd_ready_byte  = 0x{:08X}\n",
+                       cdReadyMirror);
         }
       }
     } catch (const std::exception &) {
       // Optional section — silent fallback.
     }
   }
+  bios.setBssMirrors(cdSyncMirror, cdReadyMirror);
 
   // ─── VBlank ticker thread ─────────────────────────────
   // The game spins polling psyq_state().vsyncCounter (and PsyQ HLE wraps
