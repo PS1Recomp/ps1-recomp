@@ -867,8 +867,22 @@ void Bios::queueCdromEvent(uint8_t cdIntType) {
   // game-thread synchronous `writeRegister` path.  The actual side-effects
   // (psyq_state writes, eventSystem_.triggerEvent, cdIntPending_ set)
   // happen later in `drainCdromEventQueue` on the game thread.
-  std::lock_guard<std::mutex> lk(cdEventQueueMtx_);
-  cdEventQueue_.push(cdIntType);
+  {
+    std::lock_guard<std::mutex> lk(cdEventQueueMtx_);
+    cdEventQueue_.push(cdIntType);
+  }
+
+  // Inline-drain when the push originates from the game thread itself
+  // (recompiled MIPS port writes -> cdromCtrl.writeRegister -> this
+  // callback fires synchronously on the game thread).  Recompiled PsyQ
+  // kernel polls BSS mirrors right after the port write — without the
+  // inline drain, triggerCdromEvent would only run later (next yield
+  // point) and the polling loop would observe stale mirror state.
+  // Cross-thread pushes (SDL render thread via tick) skip the drain;
+  // they're handled by the next drainPendingCallbacks / hle_libcd_CdSync.
+  if (std::this_thread::get_id() == gameThreadId_) {
+    drainCdromEventQueue();
+  }
 }
 
 std::size_t Bios::drainCdromEventQueue() {

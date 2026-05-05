@@ -494,6 +494,10 @@ int main(int argc, char *argv[]) {
 
   // Launch game thread
   std::thread gameThread([&]() {
+    // Identify ourselves so Bios::queueCdromEvent can inline-drain when
+    // the IRQ callback fires synchronously from MIPS-driven port writes
+    // on this thread.
+    bios.setGameThreadId(std::this_thread::get_id());
     try {
       ctx.pc = entryPoint;
       recomp_dispatch(memory.ramPtr(), &ctx, entryPoint);

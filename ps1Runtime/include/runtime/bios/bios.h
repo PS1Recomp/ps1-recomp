@@ -13,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <thread>
 
 namespace ps1::gpu {
 class GPU;
@@ -106,6 +107,15 @@ public:
     cdReadyMirror_ = cdReadyMirror;
   }
 
+  // Identify the game thread so `queueCdromEvent` can drain inline when
+  // called from it (recompiled MIPS writes to CDROM ports trigger the IRQ
+  // callback synchronously on the game thread; without inline drain, the
+  // BSS mirror writes never happen and PsyQ polling spins on stale BSS).
+  // Cross-thread pushes (cdromCtrl.tick from the SDL render thread) keep
+  // the queue's async semantics — they're drained from drainPendingCallbacks
+  // / hle_libcd_CdSync.
+  void setGameThreadId(std::thread::id id) { gameThreadId_ = id; }
+
 private:
   recomp_context &ctx_;
   Heap heap_;
@@ -128,6 +138,11 @@ private:
   // 0 = disabled (HLE-only games leave them unset).
   uint32_t cdSyncMirror_ = 0;
   uint32_t cdReadyMirror_ = 0;
+
+  // Game thread identity for inline-drain optimisation in queueCdromEvent.
+  // Default-constructed id never matches any real thread, so before
+  // setGameThreadId is called every push goes through the queue.
+  std::thread::id gameThreadId_{};
 
   // CDROM interrupt pending — set on the game thread by triggerCdromEvent
   // (which now runs only on the game thread post-3.3) and consumed by the
