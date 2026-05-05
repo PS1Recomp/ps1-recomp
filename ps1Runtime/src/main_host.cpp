@@ -404,6 +404,39 @@ int main(int argc, char *argv[]) {
   fmt::print("[Dispatch] Table initialized.\n");
 
 
+  // ─── BSS mirror addresses (per-game polling slots) ────────
+  // Phase 2.2 retired the per-game VBlank counter BSS slot in favor of
+  // `psyq_state().vsyncCounter` (atomic).  PsyQ HLE reads the singleton.
+  // BUT: recompiled native MIPS code can poll the legacy BSS address
+  // directly (`MEM_READ32(0x801CF2CC)` in Rayman) — without a write-
+  // through, those polls observe 0 forever and the game thread spins.
+  //
+  // `[bss_mirrors]` (TOML, optional) declares which BSS slots the VBlank
+  // ticker should mirror.  When set, the thread does an atomic
+  // `vsyncCounter` bump AND a `mem.write32(addr, counter)` so legacy
+  // polling continues to work with the current architecture.
+  uint32_t vblankCounterMirror = 0;
+  if (!config_path.empty()) {
+    try {
+      auto cfg = toml::parse(config_path);
+      if (cfg.contains("bss_mirrors")) {
+        auto &mirrors = toml::find(cfg, "bss_mirrors");
+        if (mirrors.is_table() && mirrors.contains("vblank_counter")) {
+          auto v = toml::find(mirrors, "vblank_counter");
+          if (v.is_string())
+            vblankCounterMirror = std::strtoul(v.as_string().c_str(), nullptr, 0);
+          else if (v.is_integer())
+            vblankCounterMirror = static_cast<uint32_t>(v.as_integer());
+          if (vblankCounterMirror != 0)
+            fmt::print("[bss_mirrors] vblank_counter = 0x{:08X}\n",
+                       vblankCounterMirror);
+        }
+      }
+    } catch (const std::exception &) {
+      // Optional section — silent fallback.
+    }
+  }
+
   // ─── VBlank ticker thread ─────────────────────────────
   // The game spins polling psyq_state().vsyncCounter (and PsyQ HLE wraps
   // VSync to read the same singleton).  This dedicated 60 Hz thread is
@@ -419,6 +452,10 @@ int main(int argc, char *argv[]) {
   // `gpu.snapshotDisplayBuffer` and `bios.updatePadBuffers` stay here —
   // they own their own thread safety (renderer double-buffer / atomic
   // pad state) and are out of scope for 3.2.
+  //
+  // BSS mirror (`vblankCounterMirror`): when set via `[bss_mirrors]`, also
+  // write-through to a PS1 RAM address so recompiled MIPS code that polls
+  // the legacy slot directly keeps working — see comment block above.
   std::thread vblankThread([&]() {
     using namespace std::chrono;
     const auto period = microseconds(16667); // ~60 Hz
@@ -426,10 +463,13 @@ int main(int argc, char *argv[]) {
     while (!gameFinished.load(std::memory_order_acquire)) {
       std::this_thread::sleep_until(next);
       next += period;
-      ps1::psyq::psyq_state().vsyncCounter.fetch_add(
-          1, std::memory_order_release);
+      uint32_t newCount = ps1::psyq::psyq_state().vsyncCounter.fetch_add(
+          1, std::memory_order_release) + 1;
       ps1::psyq::psyq_state().vblankPending.store(
           true, std::memory_order_release);
+      if (vblankCounterMirror != 0) {
+        memory.write32(vblankCounterMirror, newCount);
+      }
       gpu.snapshotDisplayBuffer();
       bios.updatePadBuffers();
     }

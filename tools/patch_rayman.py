@@ -56,12 +56,18 @@ else:
     print("  [1a] <thread>/<atomic> already included")
 
 OLD_INCLUDES2 = '#include <runtime/bios/bios.h>\n'
-NEW_INCLUDES2 = '#include <runtime/bios/bios.h>\n#include <runtime/psyq/psyq_hle.h>\n'
+NEW_INCLUDES2 = '#include <runtime/bios/bios.h>\n#include <runtime/psyq/psyq_hle.h>\n#include <runtime/psyq/psyq_state.h>\n'
 if '#include <runtime/psyq/psyq_hle.h>' not in text:
     text = text.replace(OLD_INCLUDES2, NEW_INCLUDES2, 1)
-    print("  [1b] Added psyq_hle.h include")
+    print("  [1b] Added psyq_hle.h + psyq_state.h includes")
+elif '#include <runtime/psyq/psyq_state.h>' not in text:
+    text = text.replace(
+        '#include <runtime/psyq/psyq_hle.h>\n',
+        '#include <runtime/psyq/psyq_hle.h>\n#include <runtime/psyq/psyq_state.h>\n',
+        1)
+    print("  [1b] Added psyq_state.h include (psyq_hle.h already there)")
 else:
-    print("  [1b] psyq_hle.h already included")
+    print("  [1b] psyq_hle.h + psyq_state.h already included")
 
 # ─── 2. HLE DrawSync: replace func_801AA484 body ────────────────────────────
 # Find the function body and replace it entirely
@@ -585,10 +591,13 @@ OLD_VSYNC_WAIT = (
 )
 NEW_VSYNC_WAIT = (
     'void func_801B954C(uint8_t* rdram, recomp_context* ctx) {\n'
-    '    // [HLE 12] VSync wait: block until vblankCounter (0x801CF2CC) >= r4.\n'
-    '    // The original PsyQ code loops 0x8000 times which completes in ~30µs on\n'
-    '    // x86 — far too fast for the 16.67ms VBlank period — causing "VSync: timeout".\n'
-    '    // We sleep 1ms per iteration so the VBlank thread (60Hz) has time to fire.\n'
+    '    // [HLE 12] VSync wait: block until vsyncCounter >= r4.\n'
+    '    // Pre-2.2 this read BSS `0x801CF2CC`, which the VBlank thread used\n'
+    '    // to write.  Phase 2.2 retired that BSS slot and routed the counter\n'
+    '    // through `psyq_state().vsyncCounter` (atomic) instead — reading\n'
+    '    // BSS now always returns 0, leaving this loop blocked forever.\n'
+    '    // Switch to the singleton atomic so the patch keeps working\n'
+    '    // post-2.2 / 3.2 (vblankPending coalescing also driven by it).\n'
     '    static std::atomic<uint32_t> vsync_call_count{0};\n'
     '    uint32_t n = ++vsync_call_count;\n'
     '    if (n % 60 == 0) {\n'
@@ -596,13 +605,14 @@ NEW_VSYNC_WAIT = (
     '        fflush(stderr);\n'
     '    }\n'
     '    uint32_t target = (uint32_t)(ctx->r4);\n'
+    '    auto &vsync = ps1::psyq::psyq_state().vsyncCounter;\n'
     '    for (int i = 0; i < 100; i++) {\n'
-    '        uint32_t cnt = (uint32_t)MEM_READ32(ctx, (int32_t)(0x801D0000) + -3380);\n'
+    '        uint32_t cnt = vsync.load(std::memory_order_acquire);\n'
     '        if (cnt >= target) break;\n'
     '        if (ctx->bios) ctx->bios->drainPendingCallbacks();\n'
     '        std::this_thread::sleep_for(std::chrono::milliseconds(1));\n'
     '    }\n'
-    '    ctx->r2 = (int32_t)(uint32_t)MEM_READ32(ctx, (int32_t)(0x801D0000) + -3380);\n'
+    '    ctx->r2 = (int32_t)vsync.load(std::memory_order_acquire);\n'
     '    return;\n'
     '    // Original code (unreachable):\n'
     '    ctx->r29 = (int32_t)((int32_t)(ctx->r29) + -32);\n'
