@@ -45,6 +45,17 @@ bool isPermissive() {
 } // namespace
 
 void psyq_dispatch(const char *name, recomp_context *ctx) {
+  // Optional per-call trace gated by `PS1_HLE_TRACE=1`.  Single getenv
+  // (cached) so the fast path is just a load+branch.
+  static const bool s_trace = []() {
+    const char *e = std::getenv("PS1_HLE_TRACE");
+    return e && std::strcmp(e, "0") != 0 && e[0] != '\0';
+  }();
+  if (s_trace) {
+    fmt::print(stderr, "[PSYQ] {} (a0={:08X} a1={:08X} a2={:08X} RA={:08X})\n",
+               name, ctx->r[4], ctx->r[5], ctx->r[6], ctx->r[31]);
+  }
+
   auto &reg = registry();
   auto it = reg.find(name);
   if (it == reg.end()) {

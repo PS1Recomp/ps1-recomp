@@ -514,6 +514,23 @@ void Bios::handleA0(uint32_t index) {
   case 0x44: // FlushCache (alternate)
     break;
 
+  // ── PsyQ libapi: directory iteration (PS1 BIOS A0:42 / A0:43) ──
+  // Real BIOS returns a pointer to the DIRENTRY out-buffer (a1) when a
+  // matching file is found, NULL (0) on no-match.  We return 0 to signal
+  // "no entry" cleanly — game's firstfile2 callers we've seen take the
+  // not-found branch (which skips file-iteration init paths) instead of
+  // reading garbage from a half-populated DIRENTRY.  A proper
+  // implementation would walk the ISO9660 directory via VirtualFs;
+  // upgrade if a future game depends on enumerating disc contents.
+  case 0x42: // firstfile2(name, *dir_entry)
+    BIOS_LOG("[BIOS] A0:42 firstfile2 [STUB returning 0 = no entry]\n");
+    ctx_.r[V0] = 0;
+    break;
+  case 0x43: // nextfile(*dir_entry)
+    BIOS_LOG("[BIOS] A0:43 nextfile [STUB returning 0 = end of dir]\n");
+    ctx_.r[V0] = 0;
+    break;
+
   // ── CD-ROM stubs ───────────────────────────
   case 0x70: // _bu_init
     BIOS_LOG("[BIOS] _bu_init() [STUB]\n");
@@ -1095,6 +1112,14 @@ void Bios::triggerVBlankEvent() {
   // Root Counter 2 (system clock / 8) — fast freerun timer
   eventSystem_.triggerEvent(0xF2000003, 0x0001);
   eventSystem_.triggerEvent(0xF2000003, 0x0002);
+
+  // NOTE: triggering 0xF0000011/12/13 (SYSTEM-side root-counter events,
+  // as opposed to the USER-side 0xF2000001/2/3 above) caused Rayman boot
+  // to enter a fast crash path — investigated 2026-05-05.  Game opens
+  // those classes during init but the path that consumes the events
+  // expects them to come ordered with other system signals we don't
+  // simulate.  Leaving them un-triggered keeps the game in its
+  // CdlInit-retry loop (slower but stable) until that path is mapped.
 
   // NOTE: Memory Card / CARD events (class 0xF4000001) are NOT triggered
   // here anymore.  On a real PS1, class 0xF4000001 is shared between the
