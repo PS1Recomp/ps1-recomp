@@ -160,15 +160,17 @@ void EventSystem::triggerEvent(uint32_t classId, uint32_t specId) {
                  classId, specId, found, events_.size(), triggeredBits_.load());
     }
   }
-  // Debug: log VSync callback queueing
+  // Debug: log VSync callback queueing.  Sample 1-of-30 after first
+  // burst so we see post-OpenEvent state (ID 9 registered late in boot).
   if (classId == 0xF2000002 && specId == 0x0002) {
     static int vsyncTriggerCount = 0;
-    vsyncTriggerCount++;
-    if (vsyncTriggerCount <= 10) {
+    int n = ++vsyncTriggerCount;
+    bool log = (n <= 10) || (n % 30 == 0);
+    if (log) {
       std::lock_guard<std::mutex> lk2(cbMtx_);
-      EVT_LOG("[VSYNC-DBG] triggerEvent(0x{:08X}, 0x{:04X}) found={} "
+      EVT_LOG("[VSYNC-DBG] #{} triggerEvent(0x{:08X}, 0x{:04X}) found={} "
                  "pendingCBs={} evCount={}\n",
-                 classId, specId, found, pendingCallbacks_.size(),
+                 n, classId, specId, found, pendingCallbacks_.size(),
                  events_.size());
     }
   }
