@@ -24,6 +24,9 @@ class InputController;
 namespace ps1::cdrom {
 class CdromController;
 }
+namespace ps1 {
+class DMA;
+}
 
 namespace ps1::bios {
 
@@ -36,6 +39,7 @@ public:
   void setGPU(gpu::GPU *gpu) { gpu_ = gpu; }
   void setInputController(input::InputController *input) { input_ = input; }
   void setCdromController(cdrom::CdromController *cdrom) { cdrom_ = cdrom; }
+  void setDma(::ps1::DMA *dma) { dma_ = dma; }
 
   // Read-only accessor used by libcd HLE (psyq_libcd.cpp) to drive the
   // backend controller directly. Returns nullptr when not attached (typical
@@ -126,6 +130,7 @@ private:
   gpu::GPU *gpu_ = nullptr;
   input::InputController *input_ = nullptr;
   cdrom::CdromController *cdrom_ = nullptr;
+  ::ps1::DMA *dma_ = nullptr;
 
   // Pad buffer state (InitPAD / StartPAD)
   uint32_t padBuf1Addr_ = 0;

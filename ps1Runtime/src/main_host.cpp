@@ -209,6 +209,7 @@ int main(int argc, char *argv[]) {
   bios.setGPU(&gpu);
   bios.setInputController(&input);
   bios.setCdromController(&cdromCtrl);
+  bios.setDma(&dma);
 
   // Enable display (GP1 0x03, val=0): mirrors what the real BIOS does during boot.
   // reset() leaves bit 23 = 1 (display off) per hardware spec.

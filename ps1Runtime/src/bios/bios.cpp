@@ -1,5 +1,6 @@
 #include "runtime/bios/bios.h"
 #include "runtime/cdrom/cdrom_controller.h"
+#include "runtime/dma/dma.h"
 #include "runtime/gpu/gpu.h"
 #include "runtime/input/input.h"
 #include "runtime/psyq/psyq_state.h"
@@ -976,6 +977,19 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
     // DO NOT ACK here — let the game thread's drainPendingCallbacks
     // handle ACK after dispatching the callback.  This keeps the CDROM
     // in waitingForAck state so tick() won't generate more INT1s.
+
+    // ── HLE register-direct sector copy ─────────────────────────────
+    // When the game programs DMA Ch3 directly (no libcd HLE in flight:
+    // cdRemaining == 0 and cdDataCb == 0), the channel was previously
+    // armed before the sector was ready — `DMA::executeChannel` deferred
+    // it and left the start bit set.  Now that INT1 has fired, retry
+    // any armed channels so the deferred CDROM transfer runs.  Safe to
+    // call unconditionally: other channels won't be triggered unless
+    // their own start/trigger bits are set.
+    auto &state = ps1::psyq::psyq_state();
+    if (dma_ && state.cdRemaining == 0 && state.cdDataCb == 0) {
+      dma_->checkAndRunTransfers();
+    }
   }
 
   // ── Update PsyQ CD state in psyq_state() singleton ────────────────────

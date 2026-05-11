@@ -5,6 +5,7 @@
 #include "runtime/memory.h"
 #include "runtime/spu/spu.h"
 #include <algorithm>
+#include <cstdlib>
 #include <fmt/format.h>
 
 namespace ps1 {
@@ -71,6 +72,19 @@ void DMA::writeRegister(uint32_t addr, uint32_t val) {
                      channels_[ch].blockControl, triggered,
                      isChannelEnabled(ch),
                      cdrom_ ? cdrom_->hasSectorReady() : false);
+        }
+      }
+      if (ch == GPU_CH) {
+        static const bool dbg = std::getenv("PS1_DMA2_DBG") != nullptr;
+        if (dbg) {
+          static int dma2TrigCount = 0;
+          if (++dma2TrigCount <= 20) {
+            fmt::print(stderr, "[DMA2-DBG] #{} CHCR=0x{:08X} MADR=0x{:06X} BCR=0x{:08X} sync={} fromRam={} caller={}\n",
+                       dma2TrigCount, val, channels_[ch].baseAddr,
+                       channels_[ch].blockControl,
+                       static_cast<int>(getSyncMode(ch)), isFromRam(ch),
+                       __builtin_return_address(0));
+          }
         }
       }
       if (isChannelTriggered(ch)) {
@@ -143,6 +157,17 @@ void DMA::executeChannel(uint32_t ch) {
     return;
 
   SyncMode sync = getSyncMode(ch);
+
+  // CDROM device→RAM: defer when no sector is buffered.  On a real PS1 the
+  // DMA controller waits for a DRQ from the CDROM before transferring; we
+  // emulate that by leaving the start bit set so a later retry (driven from
+  // Bios::triggerCdromEvent INT1) will re-enter this function once the
+  // sector is ready.  Previously we would copy a zeroed sector and clear
+  // the start bit, dropping the read entirely on register-direct paths.
+  if (ch == CDROM_CH && !isFromRam(ch) &&
+      (!cdrom_ || !cdrom_->hasSectorReady())) {
+    return;
+  }
 
   fmt::print("[DMA] Ch{} transfer: sync={}, fromRam={}, addr=0x{:08X}\n", ch,
              static_cast<int>(sync), isFromRam(ch), channels_[ch].baseAddr);
