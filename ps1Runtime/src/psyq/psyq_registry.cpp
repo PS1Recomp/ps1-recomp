@@ -77,6 +77,15 @@ void psyq_dispatch(const char *name, recomp_context *ctx) {
   it->second(ctx);
 }
 
+// Generic no-op stub for HLE entries that have no side-effect on early boot
+// (e.g. root-counter start/stop, streamed-CD interrupt handlers).  Returns 0
+// in v0 so callers that check status see "success".  Use sparingly — if a
+// game actually depends on the function's behaviour, a real implementation
+// is needed instead.
+static void hle_noop_stub(recomp_context *ctx) {
+  ctx->r[ps1::V0] = 0;
+}
+
 void psyq_registry_init_defaults() {
   if (g_defaults_initialized)
     return;
@@ -92,6 +101,21 @@ void psyq_registry_init_defaults() {
   psyq_register("libgpu_PutDispEnv",  &ps1::psyq::hle_PutDispEnv);
   psyq_register("libgpu_SetDefDrawEnv", &ps1::psyq::hle_SetDefDrawEnv);
   psyq_register("libgpu_PutDrawEnv",  &ps1::psyq::hle_PutDrawEnv);
+
+  // ── Minimal no-op stubs for early-boot HLEs Crash Bandicoot references ──
+  // These have no side-effect during init.  Promote to real impl if a game
+  // is observed waiting on their state (e.g. RCnt IRQs, OT linkage via
+  // TermPrim, immediate-mode draws via DrawPrim).
+  psyq_register("libapi_StopRCnt",       &hle_noop_stub);
+  psyq_register("libapi_StartRCnt",      &hle_noop_stub);
+  psyq_register("libcd_StCdInterrupt2",  &hle_noop_stub);
+  psyq_register("libgpu__reset",         &hle_noop_stub);
+  psyq_register("libgpu_TermPrim",       &hle_noop_stub);
+  psyq_register("libgpu_DrawPrim",       &hle_noop_stub);
+  // VSyncCallbacks (plural) is the same shape as VSyncCallback in PsyQ —
+  // game-thread-side it just registers a function pointer.  Aliasing to the
+  // existing libgpu_VSyncCallback handler covers Crash's usage.
+  // (Wired in psyq_libgpu.cpp::psyq_register_libgpu_extras.)
 }
 
 void psyq_register_rayman_boot() {

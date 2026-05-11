@@ -267,6 +267,9 @@ void psyq_register_libgpu_extras() {
   // VSyncCallback / SetVideoMode / GetVideoMode live in libetc per
   // psyq_signatures.toml (verified for v3.5/v4.0 LIBETC).
   psyq_register("libetc_VSyncCallback",     &hle_libgpu_VSyncCallback);
+  // Crash Bandicoot calls VSyncCallbacks (plural) — same semantics in PsyQ
+  // (registers a per-frame callback into psyq_state().gpuSwapCb).
+  psyq_register("libetc_VSyncCallbacks",    &hle_libgpu_VSyncCallback);
   psyq_register("libetc_SetVideoMode",      &hle_libgpu_SetVideoMode);
   psyq_register("libetc_GetVideoMode",      &hle_libgpu_GetVideoMode);
 
