@@ -149,6 +149,49 @@ TEST_F(PsyqCdTest, CdReadWithZeroSectorsPreservesRemaining) {
   EXPECT_EQ(psyq::psyq_state().cdRemaining, 0u);
 }
 
+TEST_F(PsyqCdTest, CdReadWithZeroSectorsDoesNotResetCurrentLba) {
+  // Re-issuing `CdlReadN` from CdRead(sectors=0) would reset the controller's
+  // `currentLba_` to whatever `seekTarget_` was last set to — Crash Bandicoot
+  // does an intervening CdlSetloc with a different MSF, so re-emitting ReadN
+  // would yank the in-flight read to the wrong sector.  Skip controller
+  // commands entirely when sectors==0.
+
+  // Start: Setloc to LBA 16 (ISO9660 PVD) + CdRead(1).
+  cdrom.writeRegister(0x1F801800, 0);
+  cdrom.writeRegister(0x1F801802, cdrom::CdromController::toBcd(0));   // M
+  cdrom.writeRegister(0x1F801802, cdrom::CdromController::toBcd(2));   // S
+  cdrom.writeRegister(0x1F801802, cdrom::CdromController::toBcd(16));  // F  -> LBA 16 (== M:S:F 0:2:16 - 150 pregap)
+  cdrom.writeRegister(0x1F801801, 0x02);       // Setloc
+  cdrom.ackInterrupt(0x1F);
+  cdrom.clearWaitingForAck();
+
+  ctx.r[A0] = 1;
+  ctx.r[A1] = 0x80020000u;
+  ctx.r[A2] = 0x80;
+  hle_libcd_CdRead(&ctx);
+  EXPECT_EQ(cdrom.getState(), cdrom::CdromState::ReadingData);
+
+  // Game now issues Setloc to a different MSF (0:2:0 = LBA 0).
+  cdrom.writeRegister(0x1F801800, 0);
+  cdrom.writeRegister(0x1F801802, cdrom::CdromController::toBcd(0));
+  cdrom.writeRegister(0x1F801802, cdrom::CdromController::toBcd(2));
+  cdrom.writeRegister(0x1F801802, cdrom::CdromController::toBcd(0));
+  cdrom.writeRegister(0x1F801801, 0x02);
+  cdrom.ackInterrupt(0x1F);
+  cdrom.clearWaitingForAck();
+
+  // CdRead(sectors=0) follow-up.  Must NOT issue another ReadN — that would
+  // overwrite `currentLba_` with the latest seekTarget (LBA 0).
+  ctx.r[A0] = 0;
+  ctx.r[A1] = 0x80030000u;
+  ctx.r[A2] = 0x80;
+  hle_libcd_CdRead(&ctx);
+
+  // Controller state should still reflect the first read.
+  EXPECT_EQ(cdrom.getState(), cdrom::CdromState::ReadingData);
+  EXPECT_EQ(psyq::psyq_state().cdRemaining, 1u);
+}
+
 // ──────────────────────────────────────────────────────────
 // CdSync / CdReady
 // ──────────────────────────────────────────────────────────

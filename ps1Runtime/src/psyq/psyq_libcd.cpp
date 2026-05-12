@@ -163,21 +163,25 @@ void hle_libcd_CdRead(recomp_context *ctx) {
   // PsyQ CdRead(sectors=0, ...) is an idiom some games (Crash Bandicoot)
   // use as a follow-up call after CdRead(N, ...): they re-issue the
   // command with sectors=0 expecting it to continue with the previous
-  // counter.  Zeroing `cdRemaining` here would discard the in-flight
-  // sector when INT1 arrives.  Preserve the prior count when sectors==0.
+  // counter.  Zeroing `cdRemaining` here (or re-issuing CdlReadN, which
+  // would reset `currentLba_` to the latest Setloc target) would discard
+  // the in-flight sector when INT1 arrives.  Preserve the prior count
+  // when sectors==0 and skip the controller commands entirely.
   if (sectors > 0)
     state.cdRemaining = static_cast<uint32_t>(sectors);
   state.cdDestPtr   = bufPtr;
   state.cdWordCount = wordCount;
 
-  if (auto *cdrom = bios->cdromController()) {
-    // CdlSetmode with the requested mode byte.
-    cdrom->writeRegister(CDR_PORT0, 0);
-    cdrom->writeRegister(CDR_PORT2, mode);
-    cdrom->writeRegister(CDR_PORT1, CDL_SETMODE);
+  if (sectors > 0) {
+    if (auto *cdrom = bios->cdromController()) {
+      // CdlSetmode with the requested mode byte.
+      cdrom->writeRegister(CDR_PORT0, 0);
+      cdrom->writeRegister(CDR_PORT2, mode);
+      cdrom->writeRegister(CDR_PORT1, CDL_SETMODE);
 
-    // CdlReadN — current Setloc target, no parameters.
-    issueCommand(cdrom, CDL_READN);
+      // CdlReadN — current Setloc target, no parameters.
+      issueCommand(cdrom, CDL_READN);
+    }
   }
 
   ctx->r[V0] = 1;
