@@ -218,6 +218,13 @@ void FunctionFinder::addFunction(uint32_t addr, const std::string& name, Functio
     m_functions.push_back(std::move(info));
 }
 
+void FunctionFinder::recomputeBoundaries(const ElfParser& elf) {
+    const Section* text = elf.getTextSection();
+    if (text != nullptr) {
+        computeBoundaries(*text);
+    }
+}
+
 bool FunctionFinder::hasFunction(uint32_t addr) const {
     return std::any_of(m_functions.begin(), m_functions.end(),
         [addr](const FunctionInfo& f) { return f.address == addr; });

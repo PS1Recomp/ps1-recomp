@@ -210,16 +210,9 @@ int main(int argc, char *argv[]) {
     std::string name = fmt::format("func_added_{:08X}", addr);
     finder.addFunction(addr, name, ps1recomp::FunctionSource::Symbol);
   }
-
-  // Need to recompute boundaries if we injected new functions inside text block
-  // This is a private method in original but we can just let it fall through or
-  // we can just hope it gets its size from the next function Actually
-  // findFunctions() calls computeBoundaries()! We need to add extra functions
-  // BEFORE computeBoundaries. Wait, findFunctions clears the list! We should
-  // add them manually after findFunctions, then re-sort them? No, we can't
-  // easily recompute boundaries here. Let me just add them after. The
-  // recompiler can deal with size=0 by reading until the next jr $ra. Wait,
-  // recompiler needs size!
+  if (!extraFuncs.empty()) {
+    finder.recomputeBoundaries(parser);
+  }
 
   // 2. Classify against PsyQ
   ps1recomp::PsyQMatcher matcher;

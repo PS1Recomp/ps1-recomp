@@ -129,6 +129,11 @@ public:
   void addFunction(uint32_t addr, const std::string &name,
                    FunctionSource source);
 
+  /// Re-run size computation after `addFunction` was called post-detection.
+  /// Functions added via `--add-func` start with size=0; this fixes them by
+  /// re-sorting and computing `size[i] = address[i+1] - address[i]`.
+  void recomputeBoundaries(const ElfParser &elf);
+
 private:
   std::vector<FunctionInfo> m_functions;
   std::set<uint32_t> m_jalTargets;

@@ -323,6 +323,43 @@ TEST(FunctionFinder, ComputesSizes) {
     cleanupFile(path);
 }
 
+TEST(FunctionFinder, RecomputeBoundariesAssignsSizeToLateAddedFunction) {
+    const std::string path = "/tmp/ps1recomp_test_ff_recompute.elf";
+
+    // Three known functions via symbols at +0x00, +0x20, +0x50.
+    // We will later inject a fourth at +0x40 via addFunction.
+    std::vector<uint32_t> code(32, makeNOP());
+    std::vector<std::pair<std::string, uint32_t>> syms = {
+        {"func_a", 0x80010000},
+        {"func_b", 0x80010020},
+        {"func_c", 0x80010050}
+    };
+
+    createElfWithCode(path, code, 0x80010000, true, syms);
+
+    ElfParser elf;
+    ASSERT_TRUE(elf.load(path));
+
+    FunctionFinder finder;
+    finder.findFunctions(elf);
+
+    // Inject an extra function inside the func_b range (post-detection).
+    finder.addFunction(0x80010040, "func_added",
+                       FunctionSource::Symbol);
+    finder.recomputeBoundaries(elf);
+
+    // The added function should get size = (next.address - addr) = 0x10.
+    // Existing functions keep their pre-computed size (computeBoundaries
+    // skips entries with size != 0).  Without `recomputeBoundaries` the
+    // added function would have stayed at size=0 — the bug this fixes.
+    auto* added = finder.findByAddress(0x80010040);
+    ASSERT_NE(added, nullptr);
+    EXPECT_EQ(added->size, 0x10u);
+    EXPECT_EQ(added->source, FunctionSource::Symbol);
+
+    cleanupFile(path);
+}
+
 // ──────────────────────────────────────────
 // Function Finder — Leaf Detection
 // ──────────────────────────────────────────
