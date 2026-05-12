@@ -123,6 +123,32 @@ TEST_F(PsyqCdTest, CdReadHonoursWholeSectorMode) {
   EXPECT_EQ(psyq::psyq_state().cdWordCount, 585u); // 2340 / 4
 }
 
+TEST_F(PsyqCdTest, CdReadWithZeroSectorsPreservesRemaining) {
+  // Crash Bandicoot calls libcd_CdRead twice back-to-back: first with
+  // sectors=N to start the read, then with sectors=0.  If the second call
+  // zeroes `cdRemaining`, the in-flight sector is discarded when INT1
+  // arrives.  We preserve the prior count when sectors==0 (dest/wordcount
+  // still get the fresh values from the call).
+  ctx.r[A0] = 3;             // start: read 3 sectors
+  ctx.r[A1] = 0x80020000u;
+  ctx.r[A2] = 0x80;
+  hle_libcd_CdRead(&ctx);
+  EXPECT_EQ(psyq::psyq_state().cdRemaining, 3u);
+
+  ctx.r[A0] = 0;             // follow-up call with sectors=0
+  ctx.r[A1] = 0x80030000u;
+  ctx.r[A2] = 0x80;
+  hle_libcd_CdRead(&ctx);
+
+  EXPECT_EQ(psyq::psyq_state().cdRemaining, 3u) << "remaining must be preserved";
+  EXPECT_EQ(psyq::psyq_state().cdDestPtr,   0x80030000u)
+      << "dest pointer follows the latest call";
+
+  // CdReadBreak is the supported way to cancel a read.
+  hle_libcd_CdReadBreak(&ctx);
+  EXPECT_EQ(psyq::psyq_state().cdRemaining, 0u);
+}
+
 // ──────────────────────────────────────────────────────────
 // CdSync / CdReady
 // ──────────────────────────────────────────────────────────

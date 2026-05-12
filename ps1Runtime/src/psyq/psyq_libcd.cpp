@@ -160,7 +160,13 @@ void hle_libcd_CdRead(recomp_context *ctx) {
   const uint32_t wordCount = (mode & 0x20) ? 585u : 512u;
 
   auto &state = psyq_state();
-  state.cdRemaining = static_cast<uint32_t>(sectors);
+  // PsyQ CdRead(sectors=0, ...) is an idiom some games (Crash Bandicoot)
+  // use as a follow-up call after CdRead(N, ...): they re-issue the
+  // command with sectors=0 expecting it to continue with the previous
+  // counter.  Zeroing `cdRemaining` here would discard the in-flight
+  // sector when INT1 arrives.  Preserve the prior count when sectors==0.
+  if (sectors > 0)
+    state.cdRemaining = static_cast<uint32_t>(sectors);
   state.cdDestPtr   = bufPtr;
   state.cdWordCount = wordCount;
 

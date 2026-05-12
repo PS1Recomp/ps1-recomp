@@ -978,6 +978,8 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
     // handle ACK after dispatching the callback.  This keeps the CDROM
     // in waitingForAck state so tick() won't generate more INT1s.
 
+    auto &state = ps1::psyq::psyq_state();
+
     // ── HLE register-direct sector copy ─────────────────────────────
     // When the game programs DMA Ch3 directly (no libcd HLE in flight:
     // cdRemaining == 0 and cdDataCb == 0), the channel was previously
@@ -986,9 +988,39 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
     // any armed channels so the deferred CDROM transfer runs.  Safe to
     // call unconditionally: other channels won't be triggered unless
     // their own start/trigger bits are set.
-    auto &state = ps1::psyq::psyq_state();
     if (dma_ && state.cdRemaining == 0 && state.cdDataCb == 0) {
       dma_->checkAndRunTransfers();
+    }
+
+    // ── HLE libcd sector copy (no callback registered) ──────────────
+    // When the game uses libcd HLE `CdRead` (state.cdRemaining > 0,
+    // cdDestPtr/cdWordCount stashed) but never registered
+    // `CdReadCallback` (cdDataCb == 0), the drainPendingCallbacks pump
+    // would dispatch nothing and ACK — discarding the sector.  Copy it
+    // ourselves to the destination CdRead stashed in psyq_state.
+    if (state.cdRemaining > 0 && state.cdDataCb == 0 &&
+        cdrom_->hasSectorReady() && state.cdDestPtr != 0) {
+      const uint8_t *sector = cdrom_->getSectorBuffer();
+      uint32_t sectorSz = cdrom_->getSectorSize();
+      // Raw sector (2352 bytes): 12-sync + 4-header + 8-subheader + data.
+      // sectorSize=2048 → user data at +24; sectorSize=2340 → +12.
+      uint32_t dataOff = (sectorSz == 2048) ? 24u : 12u;
+      uint32_t words = state.cdWordCount;
+      for (uint32_t i = 0; i < words; ++i) {
+        uint32_t off = dataOff + i * 4;
+        if (off + 3 >= 2352)
+          break;
+        uint32_t word = static_cast<uint32_t>(sector[off]) |
+                        (static_cast<uint32_t>(sector[off + 1]) << 8) |
+                        (static_cast<uint32_t>(sector[off + 2]) << 16) |
+                        (static_cast<uint32_t>(sector[off + 3]) << 24);
+        ctx_.mem->write32(state.cdDestPtr + i * 4, word);
+      }
+      state.cdDestPtr += words * 4;
+      state.cdRemaining -= 1;
+      cdrom_->clearSectorReady();
+      if (state.cdRemaining == 0)
+        cdrom_->stopReading();
     }
   }
 
