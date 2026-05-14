@@ -32,7 +32,7 @@ RECOMPILED_SRC = PROJECT_ROOT / "ps1Runtime" / "src" / "recompiled_out.cpp"
 mcp = FastMCP("ps1-recomp")
 
 
-# ─── Code index (lazy, cached) ───────────────────────────────────────────────
+# Code index (lazy, cached)
 
 _code_index: Optional[dict] = None   # addr_hex → line_number (1-based)
 _code_lines: Optional[list] = None   # all lines of recompiled_out.cpp
@@ -75,7 +75,7 @@ def _get_function_body(start_line: int, max_lines: int = 200) -> list[str]:
     return result
 
 
-# ─── helpers ────────────────────────────────────────────────────────────────
+# helpers
 
 def _analyze_vram(ppm_path: str) -> dict:
     """Read a VRAM PPM dump and return region pixel counts + color histogram."""
@@ -238,7 +238,7 @@ def _run_game(config: str, duration: int, bios_debug: bool) -> dict:
     }
 
 
-# ─── MCP Tools ──────────────────────────────────────────────────────────────
+# MCP Tools
 
 @mcp.tool()
 def run_game(duration: int = 20, config: str = "rayman.toml", bios_debug: bool = False) -> str:
@@ -362,7 +362,7 @@ def read_source(file_path: str, start_line: int = 1, end_line: int = 100) -> str
         return f"File not found: {full}"
 
 
-# ─── Ghidra-equivalent: code analysis tools ─────────────────────────────────
+# Ghidra-equivalent: code analysis tools
 
 @mcp.tool()
 def decompile_function(address: str, max_lines: int = 150) -> str:

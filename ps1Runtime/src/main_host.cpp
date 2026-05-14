@@ -592,37 +592,6 @@ int main(int argc, char *argv[]) {
                  irqCtrl.readIStat(), irqCtrl.readIMask());
     }
 
-    // One-shot display state + VRAM dump at frame 200
-    if (frameCount == 200) {
-      uint32_t stat = gpu.readGPUSTAT();
-      uint32_t dispX, dispY;
-      gpu.getDisplayArea(dispX, dispY);
-      uint32_t rx1, rx2, ry1, ry2;
-      gpu.getDisplayRange(rx1, rx2, ry1, ry2);
-      fmt::print("[DEBUG] Frame {}: GPUSTAT=0x{:08X} displayEnabled={} "
-                 "dispArea=({},{}) dispRange=({},{},{},{}) "
-                 "hres_bits={}\n",
-                 frameCount, stat, gpu.isDisplayEnabled(), dispX, dispY, rx1,
-                 rx2, ry1, ry2, (stat >> 17) & 3);
-      // Dump VRAM to PPM
-      const auto *vram = gpu.getDisplayVRAM();
-      FILE *f = fopen("/tmp/vram_frame200.ppm", "wb");
-      if (f) {
-        fprintf(f, "P6\n1024 512\n255\n");
-        for (int i = 0; i < 1024 * 512; i++) {
-          uint16_t c = vram[i].raw;
-          uint8_t r = (c & 0x1F) << 3;
-          uint8_t g = ((c >> 5) & 0x1F) << 3;
-          uint8_t b = ((c >> 10) & 0x1F) << 3;
-          fwrite(&r, 1, 1, f);
-          fwrite(&g, 1, 1, f);
-          fwrite(&b, 1, 1, f);
-        }
-        fclose(f);
-        fmt::print("[DEBUG] VRAM dumped to /tmp/vram_frame200.ppm\n");
-      }
-    }
-
     // Check if game thread ended
     if (gameFinished.load(std::memory_order_acquire)) {
       fmt::print("[Main] Game thread finished at frame {}\n", frameCount);
@@ -632,27 +601,6 @@ int main(int argc, char *argv[]) {
     // Frame pacing: SDL_GL_SetSwapInterval(1) provides VSync-based pacing
     // via the blocking SDL_GL_SwapWindow call in renderFrame().
     // No additional SDL_Delay needed — it would double the frame time.
-  }
-
-  // Final VRAM dump
-  {
-    const auto *vram = gpu.getVRAM();
-    FILE *f = fopen("/tmp/vram_final.ppm", "wb");
-    if (f) {
-      fprintf(f, "P6\n1024 512\n255\n");
-      for (int i = 0; i < 1024 * 512; i++) {
-        uint16_t c = vram[i].raw;
-        uint8_t r = (c & 0x1F) << 3;
-        uint8_t g = ((c >> 5) & 0x1F) << 3;
-        uint8_t b = ((c >> 10) & 0x1F) << 3;
-        fwrite(&r, 1, 1, f);
-        fwrite(&g, 1, 1, f);
-        fwrite(&b, 1, 1, f);
-      }
-      fclose(f);
-      fmt::print("[DEBUG] Final VRAM dumped to /tmp/vram_final.ppm (frame {})\n",
-                 frameCount);
-    }
   }
 
   // Cleanup

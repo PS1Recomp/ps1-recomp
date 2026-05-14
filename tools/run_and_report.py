@@ -27,7 +27,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 RUNTIME_BIN  = PROJECT_ROOT / "build" / "runtime" / "ps1Runtime"
 CONFIG       = PROJECT_ROOT / "configs" / "rayman.toml"
 
-# ─── VRAM analysis ──────────────────────────────────────────────────────────
+# VRAM analysis
 
 def analyze_vram(ppm_path: str) -> dict:
     """Read a VRAM PPM dump and return region pixel counts + sample colors."""
@@ -62,7 +62,7 @@ def analyze_vram(ppm_path: str) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
-# ─── Log parsing ────────────────────────────────────────────────────────────
+# Log parsing
 
 def parse_log(stdout: str, stderr: str) -> dict:
     lines_out = stdout.splitlines()
@@ -125,7 +125,7 @@ def parse_log(stdout: str, stderr: str) -> dict:
 
     return result
 
-# ─── Main ────────────────────────────────────────────────────────────────────
+# Main
 
 def main():
     parser = argparse.ArgumentParser(description="Run ps1Runtime and report game state")

@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-# ─── Configuration ────────────────────────────────────────────────────────────
+# Configuration
 
 PROJECT_ROOT = Path(__file__).parent.parent
 BUILD_DIR    = PROJECT_ROOT / "build"
@@ -37,7 +37,7 @@ TESTS_BIN    = BUILD_DIR / "ps1Test" / "ps1Runtime_tests"
 VRAM_W, VRAM_H = 1024, 512
 VRAM_BYTES = VRAM_W * VRAM_H * 2
 
-# ─── Data classes ─────────────────────────────────────────────────────────────
+# Data classes
 
 @dataclass
 class CheckResult:
@@ -72,7 +72,7 @@ class Report:
         print(f"  {passed_n}/{total} checks passed")
         print("="*60 + "\n")
 
-# ─── Step 1: Build ────────────────────────────────────────────────────────────
+# Step 1: Build
 
 def step_build(report: Report, target: str = "") -> bool:
     print("[1/5] Building project...")
@@ -90,7 +90,7 @@ def step_build(report: Report, target: str = "") -> bool:
     report.add("Build succeeds", ok, detail)
     return ok
 
-# ─── Step 2: Unit Tests ───────────────────────────────────────────────────────
+# Step 2: Unit Tests
 
 def step_unit_tests(report: Report) -> bool:
     print("[2/5] Running unit tests...")
@@ -112,7 +112,7 @@ def step_unit_tests(report: Report) -> bool:
     report.add("All unit tests pass", ok, detail)
     return ok
 
-# ─── Step 3: Game Runtime ─────────────────────────────────────────────────────
+# Step 3: Game Runtime
 
 def step_runtime(report: Report, config: Path, duration: int,
                  vram_dir: Path) -> tuple[bool, str, list[Path]]:
@@ -173,7 +173,7 @@ def step_runtime(report: Report, config: Path, duration: int,
 
     return True, log, vram_files
 
-# ─── Step 4: VRAM Analysis ────────────────────────────────────────────────────
+# Step 4: VRAM Analysis
 
 def load_ppm_as_bytes(path: Path) -> Optional[bytes]:
     """Load a binary PPM (P6) and return raw RGB pixel bytes."""
@@ -272,7 +272,7 @@ def step_vram_analysis(report: Report, vram_files: list[Path], log: str) -> bool
     ok = fb_pixels > 1000
     return ok
 
-# ─── Step 5: Summary Patch Status ─────────────────────────────────────────────
+# Step 5: Summary Patch Status
 
 def step_patch_status(report: Report, log: str):
     print("[5/5] Checking patch/HLE status from log...")
@@ -291,7 +291,7 @@ def step_patch_status(report: Report, log: str):
         passed = check(log)
         report.add(name, passed)
 
-# ─── Main ─────────────────────────────────────────────────────────────────────
+# Main
 
 def main():
     parser = argparse.ArgumentParser(description="ps1-recomp game validation pipeline")

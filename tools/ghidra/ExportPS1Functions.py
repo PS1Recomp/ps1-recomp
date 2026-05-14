@@ -23,7 +23,7 @@
 import os
 from ghidra.program.model.symbol import SymbolType
 
-# ─── Configuration ────────────────────────────────────────────────────────────
+# Configuration
 DEFAULT_OUTPUT = os.path.join(
     currentProgram.getDomainFile().getParent().getProjectLocator().getProjectDir().toString(),
     "ps1_functions.csv",
@@ -32,14 +32,14 @@ SKIP_THUNKS   = True   # Exclude thunk functions (wrappers with a single JR)
 SKIP_EXTERNAL = True   # Exclude external / imported symbols
 MIN_SIZE      = 4      # Skip functions smaller than N bytes (likely false positives)
 
-# ─── Ask user for output path ─────────────────────────────────────────────────
+# Ask user for output path
 output_path = askString(
     "Export PS1 Functions",
     "Output CSV path:",
     DEFAULT_OUTPUT,
 )
 
-# ─── Iterate functions ────────────────────────────────────────────────────────
+# Iterate functions
 function_manager = currentProgram.getFunctionManager()
 listing = currentProgram.getListing()
 addr_factory = currentProgram.getAddressFactory()
@@ -68,7 +68,7 @@ for func in function_manager.getFunctions(True):   # True = forward iteration
 
     rows.append("{},{},{},{}".format(name, start_hex, end_hex, size_hex))
 
-# ─── Write output ─────────────────────────────────────────────────────────────
+# Write output
 with open(output_path, "w") as f:
     f.write("Name,StartAddress,EndAddress,Size\n")
     for row in rows:
