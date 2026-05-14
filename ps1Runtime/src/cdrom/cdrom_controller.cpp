@@ -99,9 +99,6 @@ uint8_t CdromController::buildStatusByte() const {
 void CdromController::writeRegister(uint32_t addr, uint8_t val) {
   uint32_t port = addr & 3;
 
-  // fmt::print("[CDROM-IO] Write port{}.idx{} = 0x{:02X}\n", port, indexReg_,
-  //            val);
-
   CDROM_LOG("[CDROM-IO] Write port{}.idx{} = 0x{:02X}\n", port, indexReg_, val);
 
   if (port == 0) {
@@ -203,8 +200,6 @@ uint8_t CdromController::readRegister(uint32_t addr) {
     // bit 7: command/parameter busy
     if (commandPending_)
       stat |= (1 << 7);
-    // fmt::print("[CDROM-IO] Read port0 = 0x{:02X} (idx={})\n", stat,
-    // indexReg_);
     return stat;
   }
 
@@ -215,19 +210,12 @@ uint8_t CdromController::readRegister(uint32_t addr) {
       result = responseFifo_.front();
       responseFifo_.pop_front();
     }
-    // fmt::print(
-    //     "[CDROM-IO] Read port1.idx{} = 0x{:02X} (response, remaining={})\n",
-    //     indexReg_, result, responseFifo_.size());
     return result;
   case 2: // Data read (sector data)
-    // fmt::print("[CDROM-IO] Read port2.idx{} = 0x00 (data stub)\n",
-    // indexReg_);
     return 0; // DMA should be used instead
   case 3:
     if (indexReg_ == 0 || indexReg_ == 2) {
       result = interruptEnable_ | 0xE0;
-      // fmt::print("[CDROM-IO] Read port3.idx{} = 0x{:02X} (IE)\n", indexReg_,
-      // result);
     } else {
       result = interruptFlag_ | 0xE0;
       CDROM_LOG("[CDROM-IF] Read IF=0x{:02X} (interruptFlag_={}) idx={}\n",
