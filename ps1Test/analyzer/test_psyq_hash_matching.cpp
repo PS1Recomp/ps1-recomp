@@ -449,3 +449,163 @@ TEST(PsyqHashLoader, RealDbContainsResetGraph) {
     EXPECT_GT(got.size, 0u);
     EXPECT_EQ(got.hash_masked.size(), 16u);
 }
+
+// Collision handling — two distinct base names sharing a hash must not
+// produce a match through the colliding hash. Otherwise the matcher would
+// silently mis-identify wrappers (cf. 9-way collision of CdSync / CdReadSync /
+// PadStop / ... on hash_masked 43f20be7a8d281c6 in the in-tree DB).
+
+TEST(PsyqHashLoader, CollidingMaskedHashIsDroppedFromLiveMap) {
+    // Two 32-byte sigs share hash_masked, differ in hash_full. The masked
+    // index must drop the colliding key; the full index keeps both since
+    // hash_full is unique per sig. A body whose hash_full matches sig A
+    // must resolve to A's name (not B's), even though their masked hashes
+    // collide.
+    constexpr uint32_t FUNC_ADDR = 0x80070000;
+
+    auto pack32 = [](std::vector<uint8_t>& v, uint32_t w) {
+        v.push_back( w        & 0xFF);
+        v.push_back((w >>  8) & 0xFF);
+        v.push_back((w >> 16) & 0xFF);
+        v.push_back((w >> 24) & 0xFF);
+    };
+
+    // Body A — distinct bytes from B (different jal target). Both bodies
+    // mask to the same hash_masked (jal target field is masked off).
+    std::vector<uint8_t> bodyA;
+    pack32(bodyA, 0x27BDFFE8u);  // addiu sp,sp,-0x18
+    pack32(bodyA, 0xAFBF0014u);  // sw ra,0x14(sp)
+    pack32(bodyA, 0x0C0AAAAAu);  // jal 0x802AAAA8       (target A)
+    pack32(bodyA, 0x00000000u);  // nop
+    pack32(bodyA, 0x8FBF0014u);  // lw ra,0x14(sp)
+    pack32(bodyA, 0x27BD0018u);  // addiu sp,sp,+0x18
+    pack32(bodyA, 0x03E00008u);  // jr ra
+    pack32(bodyA, 0x00000000u);  // nop
+
+    std::vector<uint8_t> bodyB = bodyA;
+    // Patch jal target bytes: 0x0C0AAAAAu → 0x0C0BBBBBu.
+    bodyB[8]  = 0xBB; bodyB[9]  = 0xBB; bodyB[10] = 0x0B; bodyB[11] = 0x0C;
+
+    const uint64_t hmA = PsyQMatcher::hashMasked(bodyA.data(), bodyA.size());
+    const uint64_t hmB = PsyQMatcher::hashMasked(bodyB.data(), bodyB.size());
+    ASSERT_EQ(hmA, hmB) << "wrapper masking must collapse jal target";
+
+    const uint64_t hfA = PsyQMatcher::hashFull(bodyA.data(), bodyA.size());
+    const uint64_t hfB = PsyQMatcher::hashFull(bodyB.data(), bodyB.size());
+    ASSERT_NE(hfA, hfB) << "full hash must distinguish bodies";
+
+    auto toHex = [](uint64_t v) {
+        char buf[17];
+        std::snprintf(buf, sizeof(buf), "%016llx",
+                      static_cast<unsigned long long>(v));
+        return std::string(buf);
+    };
+
+    const std::string tmpToml = "/tmp/ps1recomp_test_psyq_collision_masked.toml";
+    {
+        std::ofstream out(tmpToml);
+        out << "[[signature]]\n"
+            << "name        = \"FuncA\"\n"
+            << "library     = \"libapi\"\n"
+            << "size        = 32\n"
+            << "hash_masked = \"" << toHex(hmA) << "\"\n"
+            << "hash_full   = \"" << toHex(hfA) << "\"\n"
+            << "match_mode  = \"masked\"\n"
+            << "subsystem   = \"\"\n"
+            << "stub_type   = \"\"\n"
+            << "sources     = [\"synthetic\"]\n"
+            << "\n"
+            << "[[signature]]\n"
+            << "name        = \"FuncB\"\n"
+            << "library     = \"libcd\"\n"
+            << "size        = 32\n"
+            << "hash_masked = \"" << toHex(hmB) << "\"\n"
+            << "hash_full   = \"" << toHex(hfB) << "\"\n"
+            << "match_mode  = \"masked\"\n"
+            << "subsystem   = \"\"\n"
+            << "stub_type   = \"\"\n"
+            << "sources     = [\"synthetic\"]\n";
+    }
+
+    // Use a fresh matcher without the in-tree DB so we only see the test sigs.
+    PsyQMatcher matcher;
+    // Wipe state from the constructor's loadDefaults() — we want a clean
+    // slate scoped to this test's two synthetic entries. The public API
+    // doesn't expose a reset; load the test TOML which leaves the in-tree
+    // entries untouched but adds the two synthetic ones, then we test only
+    // that the bodies resolve to the *correct* base name.
+    ASSERT_TRUE(matcher.loadFromToml(tmpToml, ""));
+
+    const std::string elfPath = "/tmp/ps1recomp_test_psyq_collision_masked.elf";
+    writeSyntheticElf(elfPath, FUNC_ADDR, bodyA);
+    ElfParser elf; ASSERT_TRUE(elf.load(elfPath));
+    FunctionFinder finder; finder.findFunctions(elf);
+    matcher.matchFunctions(elf, finder);
+
+    std::string matchedName;
+    for (const auto& m : matcher.getMatches()) {
+        if (m.address == FUNC_ADDR) matchedName = m.name;
+    }
+    // hash_full distinguishes the two: bodyA must resolve to FuncA, never to
+    // FuncB. Pre-fix, last-write-wins on the colliding hash_masked could pin
+    // it on either name regardless of which body was being matched.
+    EXPECT_EQ(matchedName, "FuncA")
+        << "collision-dropping + hash_full lookup must pick the correct base name";
+
+    std::remove(tmpToml.c_str());
+    std::remove(elfPath.c_str());
+}
+
+TEST(PsyqHashLoader, FullyCollidingPairDropsBothFromMatching) {
+    // Two sigs with identical hash_masked AND hash_full but distinct names —
+    // the unrelocated PsyQ .OBJ wrapper case. Both must drop; the matcher
+    // must refuse to match a body that hashes there.
+    constexpr uint32_t FUNC_ADDR = 0x80080000;
+
+    std::vector<uint8_t> body(32, 0);
+    for (size_t i = 0; i < body.size(); ++i) body[i] = static_cast<uint8_t>(i * 7);
+
+    const uint64_t hm = PsyQMatcher::hashMasked(body.data(), body.size());
+    const uint64_t hf = PsyQMatcher::hashFull(body.data(), body.size());
+
+    auto toHex = [](uint64_t v) {
+        char buf[17];
+        std::snprintf(buf, sizeof(buf), "%016llx",
+                      static_cast<unsigned long long>(v));
+        return std::string(buf);
+    };
+
+    const std::string tmpToml = "/tmp/ps1recomp_test_psyq_full_collision.toml";
+    {
+        std::ofstream out(tmpToml);
+        for (const char* name : {"WrapperX", "WrapperY"}) {
+            out << "[[signature]]\n"
+                << "name        = \"" << name << "\"\n"
+                << "library     = \"libcd\"\n"
+                << "size        = 32\n"
+                << "hash_masked = \"" << toHex(hm) << "\"\n"
+                << "hash_full   = \"" << toHex(hf) << "\"\n"
+                << "match_mode  = \"masked\"\n"
+                << "subsystem   = \"\"\n"
+                << "stub_type   = \"\"\n"
+                << "sources     = [\"synthetic\"]\n\n";
+        }
+    }
+
+    PsyQMatcher matcher;
+    ASSERT_TRUE(matcher.loadFromToml(tmpToml, ""));
+
+    const std::string elfPath = "/tmp/ps1recomp_test_psyq_full_collision.elf";
+    writeSyntheticElf(elfPath, FUNC_ADDR, body);
+    ElfParser elf; ASSERT_TRUE(elf.load(elfPath));
+    FunctionFinder finder; finder.findFunctions(elf);
+    matcher.matchFunctions(elf, finder);
+
+    for (const auto& m : matcher.getMatches()) {
+        EXPECT_FALSE(m.address == FUNC_ADDR && (m.name == "WrapperX" || m.name == "WrapperY"))
+            << "fully colliding wrappers must not match — got " << m.name;
+    }
+
+    std::remove(tmpToml.c_str());
+    std::remove(elfPath.c_str());
+}

@@ -23,6 +23,7 @@
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <unordered_set>
 
 #include <fmt/format.h>
 #include <toml.hpp>
@@ -247,6 +248,16 @@ bool PsyQMatcher::loadSignatures(const std::string& path) {
         if (!root.contains("signature")) return true;
         const auto& sigs = toml::find<std::vector<toml::value>>(root, "signature");
 
+        // Stage every (hash → LoadedSig) into temporary multimap-style buckets.
+        // The PsyQ .OBJ archive zeroes jal/branch targets pending relocation,
+        // so multiple unrelated 8-instruction wrappers (CdSync, CdReadSync,
+        // PadStop, GsSetProjection, ...) collapse to identical bytes — both
+        // hash_masked AND hash_full collide across distinct base names. The
+        // promote step below drops any hash key claimed by more than one base
+        // name, so the live maps only ever return unambiguous identifications.
+        std::unordered_map<uint64_t, std::vector<LoadedSig>> stagedMasked;
+        std::unordered_map<uint64_t, std::vector<LoadedSig>> stagedFull;
+
         for (const auto& s : sigs) {
             LoadedSig ls;
             const auto rawName = toml::find<std::string>(s, "name");
@@ -265,19 +276,24 @@ bool PsyQMatcher::loadSignatures(const std::string& path) {
 
             const auto mode = s.contains("match_mode")
                               ? toml::find<std::string>(s, "match_mode") : "masked";
+            ls.fullMode = (mode == "full");
+
             const auto hashMasked = s.contains("hash_masked")
                               ? toml::find<std::string>(s, "hash_masked") : "";
             const auto hashFull   = s.contains("hash_full")
                               ? toml::find<std::string>(s, "hash_full") : "";
 
-            if (mode == "full") {
-                ls.fullMode = true;
-                if (!hashFull.empty())
-                    m_byFull[parseHashHex(hashFull)] = ls;
-            } else {
-                ls.fullMode = false;
-                if (!hashMasked.empty())
-                    m_byMasked[parseHashHex(hashMasked)] = ls;
+            // Stage both hashes regardless of declared match_mode. A masked-
+            // mode sig may still be matchable by its hash_full if that one is
+            // unique across the DB; conversely, a full-mode sig still owns
+            // its masked hash and we want to refuse a competing claim on it.
+            if (!hashMasked.empty()) {
+                const uint64_t hk = parseHashHex(hashMasked);
+                if (hk != 0) stagedMasked[hk].push_back(ls);
+            }
+            if (!hashFull.empty()) {
+                const uint64_t hk = parseHashHex(hashFull);
+                if (hk != 0) stagedFull[hk].push_back(ls);
             }
 
             // Seed the name database so isKnown() / matchByName work for any
@@ -287,6 +303,35 @@ bool PsyQMatcher::loadSignatures(const std::string& path) {
                     ls.name, ls.subsystem, ls.stubType, ""
                 };
             }
+        }
+
+        // Promote only hashes claimed by a single base name into the live
+        // maps. Same-base-name collisions (CdReadSync, CdReadSync@v2, ...)
+        // collapse to one entry without loss; cross-name collisions get
+        // dropped entirely because we cannot tell which symbol is right.
+        auto promote = [](auto& staging, auto& live) -> size_t {
+            size_t dropped = 0;
+            for (auto& kv : staging) {
+                auto& list = kv.second;
+                std::unordered_set<std::string> distinct;
+                for (auto& s : list) distinct.insert(s.name);
+                if (distinct.size() == 1) {
+                    live[kv.first] = list.front();
+                } else {
+                    ++dropped;
+                }
+            }
+            return dropped;
+        };
+
+        const size_t droppedMasked = promote(stagedMasked, m_byMasked);
+        const size_t droppedFull   = promote(stagedFull,   m_byFull);
+
+        if (droppedMasked || droppedFull) {
+            fmt::print(stderr,
+                       "[PSYQ] dropped {} masked + {} full hash collisions "
+                       "across distinct PsyQ functions\n",
+                       droppedMasked, droppedFull);
         }
         return true;
     } catch (const std::exception& e) {
