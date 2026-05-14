@@ -1,9 +1,8 @@
 // recompiled_out_stub.cpp — CI / test build placeholder
 //
 // Used by CMake when the real recompiled_out.cpp has not been generated.
-// The real file is produced by:
-//   1. ps1Recomp <config.toml> <output.cpp>   — translates MIPS -> C++
-//   2. python3 tools/patch_rayman.py            — applies HLE patches
+// The real file is produced by `ps1Recomp <config.toml> <output.cpp>`, which
+// translates the game's MIPS instructions to C++.
 //
 // This stub satisfies the linker for unit tests and CI pipelines that do not
 // run a game binary.

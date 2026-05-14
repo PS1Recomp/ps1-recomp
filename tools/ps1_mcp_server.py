@@ -303,34 +303,6 @@ def build(target: str = "") -> str:
 
 
 @mcp.tool()
-def patch_and_build() -> str:
-    """
-    Run patch_rayman.py then rebuild the runtime.
-
-    Use this after modifying patch_rayman.py to apply and compile patches.
-    Returns patch output + last 50 lines of build output.
-    """
-    patch_result = subprocess.run(
-        [sys.executable, str(TOOLS_DIR / "patch_rayman.py")],
-        capture_output=True, text=True, cwd=str(PROJECT_ROOT)
-    )
-    patch_out = patch_result.stdout + patch_result.stderr
-
-    build_result = subprocess.run(
-        ["cmake", "--build", "build", f"-j{os.cpu_count() or 4}"],
-        capture_output=True, text=True, cwd=str(PROJECT_ROOT)
-    )
-    build_lines = (build_result.stdout + build_result.stderr).splitlines()[-50:]
-    build_out = "\n".join(build_lines)
-
-    return (
-        f"=== Patch ===\n{patch_out}\n"
-        f"=== Build (last 50 lines) ===\n{build_out}\n"
-        f"[build exit {build_result.returncode}]"
-    )
-
-
-@mcp.tool()
 def run_tests(filter: str = "") -> str:
     """
     Run the test suite with ctest.
