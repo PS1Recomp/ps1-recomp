@@ -15,7 +15,7 @@
 
 namespace ps1::cdrom {
 
-// ─── CD-ROM State Machine ───────────────────────────────
+// CD-ROM State Machine
 enum class CdromState : uint8_t {
   Idle,
   ReadingData,
@@ -25,7 +25,7 @@ enum class CdromState : uint8_t {
   SpinUp
 };
 
-// ─── Interrupt types ────────────────────────────────────
+// Interrupt types
 enum CdromInt : uint8_t {
   INT_NONE = 0,
   INT_DATA_READY = 1,
@@ -35,7 +35,7 @@ enum CdromInt : uint8_t {
   INT_ERROR = 5
 };
 
-// ─── CD-ROM Controller ──────────────────────────────────
+// CD-ROM Controller
 class CdromController {
 public:
   CdromController();
@@ -104,64 +104,64 @@ public:
   }
 
 private:
-  // ─── State ──────────────────────
+  // State
   CdromState state_ = CdromState::Idle;
   uint8_t indexReg_ = 0; // Current index (0x1F801800 bits 0-1)
 
-  // ─── FIFOs ──────────────────────
+  // FIFOs
   std::deque<uint8_t> paramFifo_;    // Parameter FIFO (16 byte max)
   std::deque<uint8_t> responseFifo_; // Response FIFO (16 byte max)
 
-  // ─── Interrupt ──────────────────
+  // Interrupt
   uint8_t interruptFlag_ = 0;
   uint8_t interruptEnable_ = 0x1F;
 
-  // ─── Location ───────────────────
+  // Location
   uint8_t setLocMinutes_ = 0;
   uint8_t setLocSeconds_ = 0;
   uint8_t setLocSector_ = 0;
   uint32_t currentLba_ = 0;
   uint32_t seekTarget_ = 0;
 
-  // ─── Mode ───────────────────────
+  // Mode
   uint8_t mode_ = 0; // bit7=speed, bit5=sectorSize, bit4=xaFilter,
                      // bit3=xaAdpcm, bit2=wholeSector
 
-  // ─── Sector data ────────────────
+  // Sector data
   std::array<uint8_t, 2352> sectorBuffer_;
   uint32_t sectorSize_ = 2048;
   bool sectorReady_ = false;
 
-  // ─── Timing ─────────────────────
+  // Timing
   uint32_t cyclesUntilResponse_ = 0;
   uint32_t cyclesPerSector_ = 0; // depends on 1x/2x speed
   int32_t readCycleCounter_ = 0; // signed: negative = startup seek delay
   bool waitingForAck_ = false;   // true after INT1 until game acknowledges
 
-  // ─── XA filter ──────────────────
+  // XA filter
   uint8_t xaFilterFile_ = 0;
   uint8_t xaFilterChannel_ = 0;
   bool xaFilterEnabled_ = false;
 
-  // ─── Motor ──────────────────────
+  // Motor
   bool motorOn_ = false;
   bool shellOpen_ = false;
 
-  // ─── External ───────────────────
+  // External
   VirtualFs *vfs_ = nullptr;
   XaCallback xaCallback_;
   InterruptCallback interruptCallback_;
 
-  // ─── Status byte ────────────────
+  // Status byte
   uint8_t buildStatusByte() const;
 
   // (fireSecondaryNow is now public — see above)
 
-  // ─── Command processing ─────────
+  // Command processing
   uint8_t pendingCommand_ = 0;
   bool commandPending_ = false;
 
-  // ─── Secondary Response (INT5) ──
+  // Secondary Response (INT5)
   bool hasSecondaryResponse_ = false;
   uint32_t secondaryResponseDelay_ = 0;
   CdromInt secondaryInterrupt_ = INT_NONE;

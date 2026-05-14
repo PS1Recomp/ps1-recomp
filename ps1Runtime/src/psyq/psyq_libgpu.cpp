@@ -120,7 +120,7 @@ void hle_libgpu_SetSprt16(recomp_context *ctx) {
   writeCode(ctx, p, 0x7C);
 }
 
-// ── Group 1.A — display-area / VRAM-transfer / video-mode HLEs ─────────────
+// Group 1.A — display-area / VRAM-transfer / video-mode HLEs
 //
 // All take args in the standard PsyQ a0..a3 + stack-spill convention; values
 // are converted to GP0/GP1 commands and pushed via `writeGP0`/`writeGP1`.
@@ -229,7 +229,7 @@ void hle_libgpu_GetVideoMode(recomp_context *ctx) {
   ctx->r[V0] = static_cast<uint32_t>(g_videoMode);
 }
 
-// ── Group 1.A — libgs scene-graph stubs ────────────────────────────────────
+// Group 1.A — libgs scene-graph stubs
 //
 // libgs is a higher-level wrapper around libgpu; neither Rayman nor Crash
 // links it. These NOP stubs keep the registry dispatch happy and warn once

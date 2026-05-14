@@ -7,21 +7,21 @@
 
 namespace ps1::psyq {
 
-// ── Module-level config ────────────────────────────────────────────────────
+// Module-level config
 static HleConfig g_cfg;
 
 void configure(const HleConfig &cfg) { g_cfg = cfg; }
 
 const HleConfig &getConfig() { return g_cfg; }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// Helpers
 
 static inline void drainOnce() {
   if (g_cfg.drainCallbacks)
     g_cfg.drainCallbacks();
 }
 
-// ── VSync ─────────────────────────────────────────────────────────────────
+// VSync
 //
 // PsyQ VSync(n):
 //   n == 0 → sync to next VBlank (wait for counter to change)
@@ -66,7 +66,7 @@ void hle_VSync(recomp_context *ctx) {
   ctx->r[V0] = counter.load(std::memory_order_acquire);
 }
 
-// ── DrawSync ──────────────────────────────────────────────────────────────
+// DrawSync
 //
 // PsyQ DrawSync(mode):
 //   mode 0 → wait until GPU drawing is complete, return 0
@@ -81,7 +81,7 @@ void hle_DrawSync(recomp_context *ctx) {
   ctx->r[V0] = 0; // 0 = complete / 0 primitives remaining
 }
 
-// ── ResetGraph ────────────────────────────────────────────────────────────
+// ResetGraph
 //
 // PsyQ ResetGraph(mode):
 //   mode 0 → reset + flush + clear display list
@@ -94,7 +94,7 @@ void hle_ResetGraph(recomp_context *ctx) {
   // NOP: runtime GPU is synchronous, no list to flush
 }
 
-// ── ClearOTag ─────────────────────────────────────────────────────────────
+// ClearOTag
 //
 // PsyQ ClearOTag(ot, n):
 //   Fills the first `n` entries of ordering table `ot` with end-of-list
@@ -120,7 +120,7 @@ void hle_ClearOTag(recomp_context *ctx) {
   ctx->r[V0] = base; // return pointer to ot
 }
 
-// ── ClearOTagR ────────────────────────────────────────────────────────────
+// ClearOTagR
 //
 // Same as ClearOTag but fills in reverse order — entries are linked
 // high-to-low so GPU traverses them from ot[n-1] down to ot[0].
@@ -141,7 +141,7 @@ void hle_ClearOTagR(recomp_context *ctx) {
   ctx->r[V0] = base;
 }
 
-// ── DrawOTag ──────────────────────────────────────────────────────────────
+// DrawOTag
 //
 // PsyQ DrawOTag(ot):
 //   Traverses the ordering-table linked list and submits each primitive's
@@ -172,7 +172,7 @@ void hle_DrawOTag(recomp_context *ctx) {
   ctx->r[V0] = 0;
 }
 
-// ── SetDefDispEnv ─────────────────────────────────────────────────────────
+// SetDefDispEnv
 //
 // PsyQ SetDefDispEnv(env, x, y, w, h):
 //   Initialises a DispEnv struct in PS1 RAM.
@@ -216,7 +216,7 @@ void hle_SetDefDispEnv(recomp_context *ctx) {
   ctx->r[V0] = envPtr;
 }
 
-// ── PutDispEnv ────────────────────────────────────────────────────────────
+// PutDispEnv
 //
 // PsyQ PutDispEnv(env):
 //   Applies a DispEnv to the GPU by sending GP1 commands:
@@ -263,7 +263,7 @@ void hle_PutDispEnv(recomp_context *ctx) {
   g_cfg.writeGP1(0x08000000u | dispMode);
 }
 
-// ── SetDefDrawEnv ─────────────────────────────────────────────────────────
+// SetDefDrawEnv
 //
 // PsyQ SetDefDrawEnv(env, x, y, w, h):
 //   Initialises a DrawEnv struct in PS1 RAM.
@@ -309,7 +309,7 @@ void hle_SetDefDrawEnv(recomp_context *ctx) {
   ctx->r[V0] = envPtr;
 }
 
-// ── PutDrawEnv ────────────────────────────────────────────────────────────
+// PutDrawEnv
 //
 // PsyQ PutDrawEnv(env):
 //   Applies a DrawEnv to the GPU by sending GP0 commands:

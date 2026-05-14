@@ -26,7 +26,7 @@ inline void dispatchC(recomp_context *ctx, uint32_t index) {
 
 } // namespace
 
-// ── Event manager ────────────────────────────────────────────────────────
+// Event manager
 void hle_libapi_OpenEvent(recomp_context *ctx)    { dispatchB(ctx, 0x08); }
 void hle_libapi_CloseEvent(recomp_context *ctx)   { dispatchB(ctx, 0x09); }
 void hle_libapi_DeliverEvent(recomp_context *ctx) { dispatchB(ctx, 0x07); }
@@ -34,7 +34,7 @@ void hle_libapi_EnableEvent(recomp_context *ctx)  { dispatchB(ctx, 0x0C); }
 void hle_libapi_DisableEvent(recomp_context *ctx) { dispatchB(ctx, 0x0D); }
 void hle_libapi_TestEvent(recomp_context *ctx)    { dispatchB(ctx, 0x0B); }
 
-// ── Critical section (kernel SYSCALL on real HW — stubbed here) ───────────
+// Critical section (kernel SYSCALL on real HW — stubbed here)
 //
 // EnterCriticalSection: SYS(01h).  Disables interrupts; returns 1 if they had
 // been enabled.  Our recompiler does not model COP0 interrupt enable bits, so
@@ -47,7 +47,7 @@ void hle_libapi_ExitCriticalSection(recomp_context *ctx) {
   ctx->r[V0] = 0;
 }
 
-// ── Exception / IRQ chain ────────────────────────────────────────────────
+// Exception / IRQ chain
 void hle_libapi_ReturnFromException(recomp_context *ctx) {
   dispatchB(ctx, 0x17);
 }
@@ -66,7 +66,7 @@ void hle_libapi_ChangeClearRCnt(recomp_context *ctx) {
   dispatchC(ctx, 0x0A);
 }
 
-// ── File / Memory Card I/O ───────────────────────────────────────────────
+// File / Memory Card I/O
 void hle_libapi_open(recomp_context *ctx)   { dispatchB(ctx, 0x32); }
 void hle_libapi_close(recomp_context *ctx)  { dispatchB(ctx, 0x36); }
 void hle_libapi_read(recomp_context *ctx)   { dispatchB(ctx, 0x34); }
@@ -83,16 +83,16 @@ void hle_libapi_firstfile2(recomp_context *ctx) { dispatchA(ctx, 0x42); }
 void hle_libapi_nextfile(recomp_context *ctx)   { dispatchA(ctx, 0x43); }
 void hle_libapi__96_remove(recomp_context *ctx) { dispatchA(ctx, 0x71); }
 
-// ── Pad ──────────────────────────────────────────────────────────────────
+// Pad
 void hle_libapi_InitPAD2(recomp_context *ctx)       { dispatchB(ctx, 0x12); }
 void hle_libapi_StartPAD2(recomp_context *ctx)      { dispatchB(ctx, 0x13); }
 void hle_libapi_StopPAD2(recomp_context *ctx)       { dispatchB(ctx, 0x14); }
 void hle_libapi_ChangeClearPAD(recomp_context *ctx) { dispatchB(ctx, 0x5B); }
 
-// ── Heap ─────────────────────────────────────────────────────────────────
+// Heap
 void hle_libapi_InitHeap(recomp_context *ctx) { dispatchA(ctx, 0x39); }
 
-// ── GPU command word passthrough ─────────────────────────────────────────
+// GPU command word passthrough
 void hle_libapi_GPU_cw(recomp_context *ctx) { dispatchA(ctx, 0x49); }
 
 void psyq_register_libapi() {

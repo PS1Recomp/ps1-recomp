@@ -3,7 +3,7 @@
 
 namespace ps1 {
 
-// ─── Interrupt Controller ───────────────────────────────
+// Interrupt Controller
 
 InterruptController::InterruptController() { reset(); }
 
@@ -24,7 +24,7 @@ void InterruptController::writeIMask(uint32_t val) {
 
 void InterruptController::raiseInterrupt(uint32_t irqBit) { iStat_ |= irqBit; }
 
-// ─── Timer ──────────────────────────────────────────────
+// Timer
 
 Timer::Timer() { reset(); }
 
@@ -97,7 +97,7 @@ bool Timer::tick(uint32_t cycles) {
   return fired;
 }
 
-// ─── Timers Manager ─────────────────────────────────────
+// Timers Manager
 
 Timers::Timers() { reset(); }
 

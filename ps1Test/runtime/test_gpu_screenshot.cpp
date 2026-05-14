@@ -4,7 +4,7 @@
 
 using namespace ps1::gpu;
 
-// ─── Screenshot / Visual Verification Tests ─────────────
+// Screenshot / Visual Verification Tests
 // These tests verify GPU rendering output by checking VRAM contents
 // after drawing operations, simulating screenshot comparison.
 

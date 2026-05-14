@@ -12,7 +12,7 @@
 
 namespace ps1recomp {
 
-// ─── MIPS Instruction Constants ──────────────────────────
+// MIPS Instruction Constants
 
 namespace mips {
 // Opcodes (bits 31-26)
@@ -78,7 +78,7 @@ inline bool isNOP(uint32_t instr) { return instr == 0; }
 
 } // namespace mips
 
-// ─── Function Detection Source ───────────────────────────
+// Function Detection Source
 
 enum class FunctionSource {
   EntryPoint, // ELF entry point
@@ -87,7 +87,7 @@ enum class FunctionSource {
   Prologue,   // Detected by ADDIU $sp, $sp, -N pattern
 };
 
-// ─── FunctionInfo ────────────────────────────────────────
+// FunctionInfo
 
 struct FunctionInfo {
   uint32_t address;      // Start address
@@ -101,7 +101,7 @@ struct FunctionInfo {
   }
 };
 
-// ─── FunctionFinder ──────────────────────────────────────
+// FunctionFinder
 
 class FunctionFinder {
 public:

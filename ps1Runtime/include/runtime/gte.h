@@ -17,7 +17,7 @@
 
 namespace ps1 {
 
-// ─── GTE Register Indices (Data registers cop2d[]) ──────
+// GTE Register Indices (Data registers cop2d[])
 
 enum GteDataReg : uint8_t {
   GTE_VXY0 = 0,
@@ -53,7 +53,7 @@ enum GteDataReg : uint8_t {
   GTE_LZCR = 31,
 };
 
-// ─── GTE Register Indices (Control registers cop2c[]) ───
+// GTE Register Indices (Control registers cop2c[])
 
 enum GteControlReg : uint8_t {
   GTE_RT11RT12 = 0,
@@ -90,7 +90,7 @@ enum GteControlReg : uint8_t {
   GTE_FLAG = 31,
 };
 
-// ─── FLAG register bits ─────────────────────────────────
+// FLAG register bits
 
 namespace gte_flag {
 constexpr uint32_t IR0_SATURATED = (1u << 12);
@@ -115,7 +115,7 @@ constexpr uint32_t MAC1_OF = (1u << 30);
 constexpr uint32_t ERROR_FLAG = (1u << 31);
 } // namespace gte_flag
 
-// ─── GTE Runtime Class ─────────────────────────────────
+// GTE Runtime Class
 
 class GTE {
 public:
@@ -151,7 +151,7 @@ public:
   static void NCCT(CPUContext *ctx, bool sf, bool lm);
 
 private:
-  // ─── Internal helpers ───────────────────────────────
+  // Internal helpers
 
   /// Get 16-bit signed values packed in a 32-bit register
   static int16_t lo16(uint32_t v) { return static_cast<int16_t>(v & 0xFFFF); }

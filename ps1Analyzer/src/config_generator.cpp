@@ -12,13 +12,13 @@
 
 namespace ps1recomp {
 
-// ─── String Helpers ──────────────────────────────────────
+// String Helpers
 
 static std::string hexAddr(uint32_t addr) {
     return fmt::format("0x{:08X}", addr);
 }
 
-// ─── Build TOML Tree ─────────────────────────────────────
+// Build TOML Tree
 
 static toml::value buildConfig(const ElfParser& elf,
                                const FunctionFinder& finder,
@@ -26,7 +26,7 @@ static toml::value buildConfig(const ElfParser& elf,
                                const std::string& elfPath) {
     toml::value root = toml::table{};
 
-    // ── [binary] section ──
+    // [binary] section
     {
         toml::table binary;
         binary["path"] = elfPath;
@@ -44,7 +44,7 @@ static toml::value buildConfig(const ElfParser& elf,
         root["binary"] = std::move(binary);
     }
 
-    // ── [stats] section ──
+    // [stats] section
     {
         toml::table stats;
         stats["total_functions"] = static_cast<int64_t>(finder.getFunctionCount());
@@ -60,7 +60,7 @@ static toml::value buildConfig(const ElfParser& elf,
         root["stats"] = std::move(stats);
     }
 
-    // ── [[functions]] array of tables ──
+    // [[functions]] array of tables
     {
         toml::array funcs;
         for (const auto& fi : finder.getFunctions()) {
@@ -97,7 +97,7 @@ static toml::value buildConfig(const ElfParser& elf,
         root["functions"] = std::move(funcs);
     }
 
-    // ── [[stubs]] array — PsyQ functions needing runtime stubs ──
+    // [[stubs]] array — PsyQ functions needing runtime stubs
     {
         toml::array stubs;
         for (const auto* m : matcher.getStubs()) {
@@ -111,7 +111,7 @@ static toml::value buildConfig(const ElfParser& elf,
         root["stubs"] = std::move(stubs);
     }
 
-    // ── [[skips]] array — debug/profiling functions to skip ──
+    // [[skips]] array — debug/profiling functions to skip
     {
         toml::array skips;
         for (const auto* m : matcher.getSkips()) {
@@ -124,7 +124,7 @@ static toml::value buildConfig(const ElfParser& elf,
         root["skips"] = std::move(skips);
     }
 
-    // ── [[passthroughs]] array — host-equivalent functions ──
+    // [[passthroughs]] array — host-equivalent functions
     {
         toml::array pass;
         for (const auto* m : matcher.getPassthroughs()) {
@@ -137,7 +137,7 @@ static toml::value buildConfig(const ElfParser& elf,
         root["passthroughs"] = std::move(pass);
     }
 
-    // ── [[hle_functions]] — forward-compat schema for ps1Recomp Sessao 0.5 ──
+    // [[hle_functions]] — forward-compat schema for ps1Recomp Sessao 0.5
     // Every match (any stub_type) shows up here with the canonical
     // `<library>_<basename>` identifier the recompiler will use to look up
     // the C++ HLE stub. Only emitted when the `library` field is filled
@@ -161,7 +161,7 @@ static toml::value buildConfig(const ElfParser& elf,
     return root;
 }
 
-// ─── Public API ──────────────────────────────────────────
+// Public API
 
 std::string ConfigGenerator::generateString(const ElfParser& elf,
                                             const FunctionFinder& finder,

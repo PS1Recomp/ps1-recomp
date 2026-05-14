@@ -37,7 +37,7 @@
 
 namespace ps1 {
 
-// ─── PS1 Memory Map ────────────────────────────────────
+// PS1 Memory Map
 //
 // 0x00000000 - 0x001FFFFF  Main RAM (2MB) — KUSEG
 // 0x1F800000 - 0x1F8003FF  Scratchpad (1KB data cache)
@@ -46,7 +46,6 @@ namespace ps1 {
 // 0x80000000 - 0x801FFFFF  Main RAM mirror — KSEG0 (cached)
 // 0xA0000000 - 0xA01FFFFF  Main RAM mirror — KSEG1 (uncached)
 //
-// ────────────────────────────────────────────────────────
 
 class Memory {
 public:
@@ -68,7 +67,7 @@ public:
     std::memset(bios_, 0xFF, sizeof(bios_)); // BIOS starts as 0xFF (ROM)
   }
 
-  // ─── Read ──────────────────────────────────────────
+  // Read
 
   uint8_t read8(uint32_t addr) const {
     uint32_t phys = toPhysical(addr);
@@ -86,7 +85,7 @@ public:
     if (phys >= BIOS_BASE && phys < BIOS_BASE + BIOS_SIZE) {
       return bios_[phys - BIOS_BASE];
     }
-    // ─── CD-ROM (byte-addressed reads) ──────────
+    // CD-ROM (byte-addressed reads)
     if (phys >= 0x1F801800 && phys < 0x1F801804) {
       if (cdrom_)
         return cdrom_->readRegister(phys);
@@ -99,28 +98,28 @@ public:
   uint16_t read16(uint32_t addr) const {
     uint32_t phys = toPhysical(addr);
 
-    // ─── SPU registers (16-bit) ─────────────────
+    // SPU registers (16-bit)
     if (phys >= 0x1F801C00 && phys < 0x1F802000) {
       if (spu_)
         return spu_->readRegister(phys);
       return 0;
     }
 
-    // ─── Timer registers (16-bit) ───────────────
+    // Timer registers (16-bit)
     if (phys >= 0x1F801100 && phys < 0x1F801130) {
       if (timers_)
         return timers_->readRegister(phys);
       return 0;
     }
 
-    // ─── Input SIO registers (16-bit) ───────────
+    // Input SIO registers (16-bit)
     if (phys >= 0x1F801040 && phys < 0x1F801050) {
       if (input_)
         return input_->readRegister16(phys);
       return 0;
     }
 
-    // ─── Interrupt registers (16-bit) ───────────
+    // Interrupt registers (16-bit)
     if (phys == 0x1F801070) {
       if (irqCtrl_)
         return irqCtrl_->readIStat() & 0xFFFF;
@@ -140,7 +139,7 @@ public:
   uint32_t read32(uint32_t addr) const {
     uint32_t phys = toPhysical(addr);
 
-    // ─── RAM fast-path (most common, avoids 4× read8 calls) ──
+    // RAM fast-path (most common, avoids 4× read8 calls)
     if (phys < RAM_SIZE) {
       std::atomic_thread_fence(std::memory_order_acquire);
       uint32_t val;
@@ -148,7 +147,7 @@ public:
       return val;  // little-endian, matches PS1
     }
 
-    // ─── GPU (32-bit) ───────────────────────────
+    // GPU (32-bit)
     if (phys == 0x1F801810) {
       return gpu_ ? gpu_->readGPUREAD() : 0;
     }
@@ -156,14 +155,14 @@ public:
       return gpu_ ? gpu_->readGPUSTAT() : 0;
     }
 
-    // ─── DMA registers (32-bit) ─────────────────
+    // DMA registers (32-bit)
     if (phys >= 0x1F801080 && phys <= 0x1F8010F4) {
       if (dma_)
         return dma_->readRegister(phys);
       return 0;
     }
 
-    // ─── Interrupt registers (32-bit) ───────────
+    // Interrupt registers (32-bit)
     if (phys == 0x1F801070) {
       if (irqCtrl_)
         return irqCtrl_->readIStat();
@@ -175,7 +174,7 @@ public:
       return 0;
     }
 
-    // ─── MDEC (32-bit) ──────────────────────────
+    // MDEC (32-bit)
     if (phys == 0x1F801820) {
       if (mdec_)
         return mdec_->readData();
@@ -187,28 +186,28 @@ public:
       return 0;
     }
 
-    // ─── Input SIO (32-bit reads) ───────────────
+    // Input SIO (32-bit reads)
     if (phys >= 0x1F801040 && phys < 0x1F801050) {
       if (input_)
         return input_->readRegister(phys);
       return 0;
     }
 
-    // ─── CD-ROM (8-bit mapped, return byte in low bits) ──
+    // CD-ROM (8-bit mapped, return byte in low bits)
     if (phys >= 0x1F801800 && phys < 0x1F801804) {
       if (cdrom_)
         return cdrom_->readRegister(phys);
       return 0;
     }
 
-    // ─── SPU (16-bit, compose 32-bit from two 16-bit reads)
+    // SPU (16-bit, compose 32-bit from two 16-bit reads)
     if (phys >= 0x1F801C00 && phys < 0x1F802000) {
       uint16_t lo = spu_ ? spu_->readRegister(phys) : 0;
       uint16_t hi = spu_ ? spu_->readRegister(phys + 2) : 0;
       return lo | (static_cast<uint32_t>(hi) << 16);
     }
 
-    // ─── Memory Control / Expansion ─────────────
+    // Memory Control / Expansion
     if (phys >= 0x1F801000 && phys < 0x1F801040) {
       return 0; // Memory control registers (stub)
     }
@@ -229,7 +228,7 @@ public:
            (static_cast<uint32_t>(b3) << 24);
   }
 
-  // ─── Write ─────────────────────────────────────────
+  // Write
 
   void write8(uint32_t addr, uint8_t val) {
     uint32_t phys = toPhysical(addr);
@@ -243,7 +242,7 @@ public:
       return;
     }
 
-    // ─── CD-ROM (byte-addressed) ────────────────
+    // CD-ROM (byte-addressed)
     if (phys >= 0x1F801800 && phys < 0x1F801804) {
       if (cdrom_)
         cdrom_->writeRegister(phys, val);
@@ -257,28 +256,28 @@ public:
   void write16(uint32_t addr, uint16_t val) {
     uint32_t phys = toPhysical(addr);
 
-    // ─── SPU registers (16-bit) ─────────────────
+    // SPU registers (16-bit)
     if (phys >= 0x1F801C00 && phys < 0x1F802000) {
       if (spu_)
         spu_->writeRegister(phys, val);
       return;
     }
 
-    // ─── Timer registers (16-bit) ───────────────
+    // Timer registers (16-bit)
     if (phys >= 0x1F801100 && phys < 0x1F801130) {
       if (timers_)
         timers_->writeRegister(phys, val);
       return;
     }
 
-    // ─── Input SIO (16-bit) ─────────────────────
+    // Input SIO (16-bit)
     if (phys >= 0x1F801040 && phys < 0x1F801050) {
       if (input_)
         input_->writeRegister16(phys, val);
       return;
     }
 
-    // ─── Interrupt registers (16-bit) ───────────
+    // Interrupt registers (16-bit)
     if (phys == 0x1F801070) {
       if (irqCtrl_)
         irqCtrl_->writeIStat(val);
@@ -297,7 +296,7 @@ public:
   void write32(uint32_t addr, uint32_t val) {
     uint32_t phys = toPhysical(addr);
 
-    // ─── RAM fast-path ──────────────────────────
+    // RAM fast-path
     if (phys < RAM_SIZE) {
       std::memcpy(&ram_[phys], &val, sizeof(val));
       std::atomic_thread_fence(std::memory_order_release);
@@ -309,7 +308,7 @@ public:
       return;
     }
 
-    // ─── GPU (32-bit) ───────────────────────────
+    // GPU (32-bit)
     if (phys == 0x1F801810) {
       if (gpu_)
         gpu_->writeGP0(val);
@@ -321,14 +320,14 @@ public:
       return;
     }
 
-    // ─── DMA registers (32-bit) ─────────────────
+    // DMA registers (32-bit)
     if (phys >= 0x1F801080 && phys <= 0x1F8010F4) {
       if (dma_)
         dma_->writeRegister(phys, val);
       return;
     }
 
-    // ─── Interrupt registers (32-bit) ───────────
+    // Interrupt registers (32-bit)
     if (phys == 0x1F801070) {
       if (irqCtrl_)
         irqCtrl_->writeIStat(val);
@@ -340,7 +339,7 @@ public:
       return;
     }
 
-    // ─── MDEC (32-bit) ──────────────────────────
+    // MDEC (32-bit)
     if (phys == 0x1F801820) {
       if (mdec_)
         mdec_->writeCommand(val);
@@ -352,21 +351,21 @@ public:
       return;
     }
 
-    // ─── Input SIO (32-bit writes) ──────────────
+    // Input SIO (32-bit writes)
     if (phys >= 0x1F801040 && phys < 0x1F801050) {
       if (input_)
         input_->writeRegister(phys, val);
       return;
     }
 
-    // ─── CD-ROM (byte writes via 32-bit) ────────
+    // CD-ROM (byte writes via 32-bit)
     if (phys >= 0x1F801800 && phys < 0x1F801804) {
       if (cdrom_)
         cdrom_->writeRegister(phys, val & 0xFF);
       return;
     }
 
-    // ─── SPU (32-bit → two 16-bit writes) ───────
+    // SPU (32-bit → two 16-bit writes)
     if (phys >= 0x1F801C00 && phys < 0x1F802000) {
       if (spu_) {
         spu_->writeRegister(phys, val & 0xFFFF);
@@ -375,7 +374,7 @@ public:
       return;
     }
 
-    // ─── Memory Control (stub) ──────────────────
+    // Memory Control (stub)
     if (phys >= 0x1F801000 && phys < 0x1F801040) {
       return; // Ignore memory control writes
     }
@@ -393,7 +392,7 @@ public:
     write8(addr + 3, static_cast<uint8_t>((val >> 24) & 0xFF));
   }
 
-  // ─── Direct access for loading binaries ────────────
+  // Direct access for loading binaries
 
   uint8_t *ramPtr() { return ram_; }
   const uint8_t *ramPtr() const { return ram_; }
@@ -404,7 +403,7 @@ public:
   uint8_t *scratchpadPtr() { return scratchpad_; }
   const uint8_t *scratchpadPtr() const { return scratchpad_; }
 
-  // ─── Hardware Connections ──────────────────────────
+  // Hardware Connections
 
   void setGPU(ps1::gpu::GPU *gpu) { gpu_ = gpu; }
   ps1::gpu::GPU *getGPU() const { return gpu_; }
@@ -416,7 +415,7 @@ public:
   void setTimers(Timers *timers) { timers_ = timers; }
   void setInterruptController(InterruptController *irq) { irqCtrl_ = irq; }
 
-  // ─── Write Watchpoint ──────────────────────────────
+  // Write Watchpoint
   // Register a single-address watchpoint: fires cb(newValue) whenever
   // the 32-bit word at virtAddr is written.  Used by the BIOS to detect
   // when the game clears cdSyncByte (writes 0) so that a deferred INT2

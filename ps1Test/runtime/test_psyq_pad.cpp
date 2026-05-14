@@ -59,9 +59,7 @@ protected:
 
 } // namespace
 
-// ──────────────────────────────────────────────────────────
 // PadInit / PadStartCom / PadStopCom — bookkeeping NOPs
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqPadTest, PadInitReturnsZero) {
   ctx.r[A0] = 0;
@@ -76,9 +74,7 @@ TEST_F(PsyqPadTest, PadStartComStopComReturnZero) {
   EXPECT_EQ(ctx.r[V0], 0u);
 }
 
-// ──────────────────────────────────────────────────────────
 // PadRead — packed (port2 << 16) | port1, active-low
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqPadTest, PadReadIdleReturnsAllOnes) {
   // No buttons pressed on either port → 0xFFFFFFFF.
@@ -119,9 +115,7 @@ TEST_F(PsyqPadTest, PadReadFallsBackWhenNoBackend) {
   EXPECT_EQ(ctx.r[V0], 0xFFFFFFFFu);
 }
 
-// ──────────────────────────────────────────────────────────
 // PadInitDirect — 34-byte status buffer refresh
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqPadTest, PadInitDirectSeedsBufferHeader) {
   uint32_t buf1 = 0x80120000u;
@@ -183,9 +177,7 @@ TEST_F(PsyqPadTest, PadInitDirectMarksMissingControllerInBuffer) {
   EXPECT_EQ(mem.read8(buf1 + 1), static_cast<uint8_t>(input::PadType::Digital));
 }
 
-// ──────────────────────────────────────────────────────────
 // PadGetState — collapsed two-state mapping
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqPadTest, PadGetStateStableWhenPadAttached) {
   ctx.r[A0] = 0;
@@ -206,9 +198,7 @@ TEST_F(PsyqPadTest, PadGetStateOutOfRangePort) {
   EXPECT_EQ(ctx.r[V0], static_cast<uint32_t>(PAD_STATE_DISCOVERY));
 }
 
-// ──────────────────────────────────────────────────────────
 // Registry coverage
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqPadTest, RegistryDispatchesAllPadNames) {
   psyq_register_libetc_pad();

@@ -7,7 +7,7 @@
 
 namespace ps1recomp {
 
-// ─── Register Reference ──────────────────────────────────
+// Register Reference
 
 std::string InstructionEmitter::reg(uint8_t r) {
   if (r == 0)
@@ -44,7 +44,7 @@ std::string InstructionEmitter::defaultFuncName(uint32_t addr) const {
   return fmt::format("func_{:08X}", addr);
 }
 
-// ─── Signed/Unsigned cast helpers ────────────────────────
+// Signed/Unsigned cast helpers
 
 static std::string s32(const std::string &val) {
   return fmt::format("(int32_t)({})", val);
@@ -54,7 +54,7 @@ static std::string u32(const std::string &val) {
   return fmt::format("(uint32_t)({})", val);
 }
 
-// ─── Delay Slot Conflict Detection ──────────────────────
+// Delay Slot Conflict Detection
 // Returns the GPR index written by an instruction, or -1 if none.
 // Used to detect when a delay slot instruction modifies a register
 // that the preceding branch/jump reads for its condition/target.
@@ -113,7 +113,7 @@ static void replaceRegRef(std::string &str, const std::string &from,
   }
 }
 
-// ─── ALU Emitter ─────────────────────────────────────────
+// ALU Emitter
 
 std::string InstructionEmitter::emitALU(const Instruction &inst) const {
   auto rs = reg(inst.rs);
@@ -175,7 +175,7 @@ std::string InstructionEmitter::emitALU(const Instruction &inst) const {
   }
 }
 
-// ─── Shift Emitter ───────────────────────────────────────
+// Shift Emitter
 
 std::string InstructionEmitter::emitShift(const Instruction &inst) const {
   auto rt = reg(inst.rt);
@@ -203,7 +203,7 @@ std::string InstructionEmitter::emitShift(const Instruction &inst) const {
   }
 }
 
-// ─── Multiply / Divide Emitter ──────────────────────────
+// Multiply / Divide Emitter
 
 std::string InstructionEmitter::emitMulDiv(const Instruction &inst) const {
   auto rs = reg(inst.rs);
@@ -243,7 +243,7 @@ std::string InstructionEmitter::emitMulDiv(const Instruction &inst) const {
   }
 }
 
-// ─── Load Emitter ────────────────────────────────────────
+// Load Emitter
 
 std::string InstructionEmitter::emitLoad(const Instruction &inst) const {
   auto base = reg(inst.rs);
@@ -276,7 +276,7 @@ std::string InstructionEmitter::emitLoad(const Instruction &inst) const {
   }
 }
 
-// ─── Store Emitter ───────────────────────────────────────
+// Store Emitter
 
 std::string InstructionEmitter::emitStore(const Instruction &inst) const {
   auto rt = reg(inst.rt);
@@ -299,7 +299,7 @@ std::string InstructionEmitter::emitStore(const Instruction &inst) const {
   }
 }
 
-// ─── Branch Emitter ──────────────────────────────────────
+// Branch Emitter
 
 std::string InstructionEmitter::emitBranch(const Instruction &inst,
                                            uint32_t pc) const {
@@ -332,7 +332,7 @@ std::string InstructionEmitter::emitBranch(const Instruction &inst,
   }
 }
 
-// ─── Jump Emitter ────────────────────────────────────────
+// Jump Emitter
 
 std::string InstructionEmitter::emitJump(const Instruction &inst,
                                          uint32_t pc) const {
@@ -357,7 +357,7 @@ std::string InstructionEmitter::emitJump(const Instruction &inst,
   }
 }
 
-// ─── COP0 Emitter ────────────────────────────────────────
+// COP0 Emitter
 
 std::string InstructionEmitter::emitCOP0(const Instruction &inst) const {
   switch (inst.id) {
@@ -374,7 +374,7 @@ std::string InstructionEmitter::emitCOP0(const Instruction &inst) const {
   }
 }
 
-// ─── GTE Register Move Emitter ──────────────────────────
+// GTE Register Move Emitter
 
 std::string InstructionEmitter::emitGTEMove(const Instruction &inst) const {
   switch (inst.id) {
@@ -398,7 +398,7 @@ std::string InstructionEmitter::emitGTEMove(const Instruction &inst) const {
   }
 }
 
-// ─── System Emitter ──────────────────────────────────────
+// System Emitter
 
 std::string InstructionEmitter::emitSystem(const Instruction &inst) const {
   switch (inst.id) {
@@ -412,7 +412,7 @@ std::string InstructionEmitter::emitSystem(const Instruction &inst) const {
   }
 }
 
-// ─── Main Dispatch ───────────────────────────────────────
+// Main Dispatch
 
 std::string InstructionEmitter::emitInstruction(const Instruction &inst,
                                                 uint32_t pc) const {
@@ -494,7 +494,7 @@ std::string InstructionEmitter::emitInstruction(const Instruction &inst,
   }
 }
 
-// ─── Function Emitter ────────────────────────────────────
+// Function Emitter
 
 std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
   std::string result;
@@ -506,7 +506,7 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
   uint32_t pc = func.address;
   size_t numInstr = func.instructions.size();
 
-  // ─── Pass 1: Pre-scan ALL instructions ─────────────────
+  // Pass 1: Pre-scan ALL instructions
   // Scan every instruction to find all branch/jump targets.
   // For targets within the emitted instruction range: mark as label.
   // For anything else (OOB or in gap beyond loaded instrs): dispatch.
@@ -556,7 +556,7 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
     }
   }
 
-  // ─── Pass 2: Emit code ─────────────────────────────────
+  // Pass 2: Emit code
   // Track reachability: after JR/JALR + delay slot, treat subsequent
   // words as data comments until the next branch target label.
   bool reachable = true;
@@ -589,7 +589,7 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
     Instruction inst = MipsDecoder::decode(func.instructions[i]);
     std::string code = emitInstruction(inst, addr);
 
-    // ── Jump table override ──────────────────────────────────
+    // Jump table override
     // If this JR $rx has a detected jump table, replace JUMP_INDIRECT
     // with a static switch/goto over the known target addresses.
     // A JUMP_INDIRECT fallback is kept for safety.
@@ -645,7 +645,7 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
         }
       }
 
-      // ── Auto-inject drainPendingCallbacks for backward branches ──
+      // Auto-inject drainPendingCallbacks for backward branches
       // Backward branches indicate potential busy-wait / polling loops.
       // We inject a yield point so the game thread can process pending
       // hardware callbacks (CD-ROM sector delivery, VBlank events, etc).
@@ -697,7 +697,7 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
     }
   }
 
-  // ─── Emit OOB target labels ────────────────────────────
+  // Emit OOB target labels
   // Always use recomp_dispatch for OOB — we can't trust that
   // the target corresponds to a known function.
   for (uint32_t target : oob_set) {
@@ -706,7 +706,7 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
         "    recomp_dispatch(rdram, ctx, 0x{:08X}); return;\n", target);
   }
 
-  // ─── Post-pass: catch-all for undefined labels ─────────
+  // Post-pass: catch-all for undefined labels
   // Scan the generated code for all "goto L_XXXXXXXX" references
   // and ensure every one has a matching "L_XXXXXXXX:" definition.
   // This catches any edge cases the pre-scan missed.

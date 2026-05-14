@@ -19,7 +19,7 @@
 #include <cstdio>
 
 int main(int /*argc*/, char** /*argv*/) {
-    // ── SDL2 init ─────────────────────────────────────────────────────────────
+    // SDL2 init
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         SDL_Log("SDL_Init error: %s", SDL_GetError());
         return 1;
@@ -60,7 +60,7 @@ int main(int /*argc*/, char** /*argv*/) {
     SDL_GL_MakeCurrent(window, glCtx);
     SDL_GL_SetSwapInterval(1); // vsync
 
-    // ── ImGui init ────────────────────────────────────────────────────────────
+    // ImGui init
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 
@@ -71,11 +71,11 @@ int main(int /*argc*/, char** /*argv*/) {
     ImGui_ImplSDL2_InitForOpenGL(window, glCtx);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    // ── Application state ─────────────────────────────────────────────────────
+    // Application state
     StudioState state;
     GUI::ApplySettings(state);
 
-    // ── Main loop ─────────────────────────────────────────────────────────────
+    // Main loop
     bool running = true;
     while (running) {
         SDL_Event event;
@@ -109,7 +109,7 @@ int main(int /*argc*/, char** /*argv*/) {
         SDL_GL_SwapWindow(window);
     }
 
-    // ── Cleanup ───────────────────────────────────────────────────────────────
+    // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();

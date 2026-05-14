@@ -4,7 +4,7 @@
 
 using namespace ps1;
 
-// ─── Basic Registration ─────────────────────────────────
+// Basic Registration
 
 TEST(OverlayManagerTest, RegisterOverlay) {
   OverlayManager mgr;
@@ -15,7 +15,7 @@ TEST(OverlayManagerTest, RegisterOverlay) {
   EXPECT_EQ(mgr.activeCount(), 0u);
 }
 
-// ─── Activation ────────────────────────────────────────
+// Activation
 
 TEST(OverlayManagerTest, ActivateDeactivate) {
   OverlayManager mgr;
@@ -36,7 +36,7 @@ TEST(OverlayManagerTest, ActivateNonexistent) {
   EXPECT_FALSE(mgr.activateOverlay("nonexistent"));
 }
 
-// ─── Memory Write Notification ─────────────────────────
+// Memory Write Notification
 
 TEST(OverlayManagerTest, NotifyActivatesOverlay) {
   OverlayManager mgr;

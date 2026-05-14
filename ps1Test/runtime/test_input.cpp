@@ -3,7 +3,7 @@
 
 using namespace ps1::input;
 
-// ─── Digital Pad Tests ──────────────────────────────────
+// Digital Pad Tests
 
 TEST(InputDigital, InitialStateAllReleased) {
   InputController input;
@@ -35,7 +35,7 @@ TEST(InputDigital, Port1Independent) {
   EXPECT_NE(input.buttonState(1) & BTN_START, 0); // Port 1 unaffected
 }
 
-// ─── Analog Stick Tests ─────────────────────────────────
+// Analog Stick Tests
 
 TEST(InputAnalog, DefaultCenter) {
   InputController input;
@@ -53,7 +53,7 @@ TEST(InputAnalog, SetAnalogValues) {
   EXPECT_TRUE(true);
 }
 
-// ─── Memory Card Tests ─────────────────────────────────
+// Memory Card Tests
 
 TEST(MemCard, InitialState) {
   MemoryCard mc;
@@ -90,7 +90,7 @@ TEST(MemCard, WriteAndReadBack) {
   EXPECT_FALSE(mc.isPresent());
 }
 
-// ─── SIO Register Tests ─────────────────────────────────
+// SIO Register Tests
 
 TEST(InputSIO, JoyCtrlReset) {
   InputController input;

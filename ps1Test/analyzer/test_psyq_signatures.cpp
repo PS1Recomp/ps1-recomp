@@ -10,9 +10,7 @@
 
 using namespace ps1recomp;
 
-// ──────────────────────────────────────────
 // Helper: Create ELF with PsyQ-like symbols
-// ──────────────────────────────────────────
 
 static std::string createPsyQElf(
     const std::string& path,
@@ -71,9 +69,7 @@ static void cleanupFile(const std::string& path) {
     std::remove(path.c_str());
 }
 
-// ──────────────────────────────────────────
 // Database Tests
-// ──────────────────────────────────────────
 
 TEST(PsyQMatcher, DatabaseNotEmpty) {
     PsyQMatcher matcher;
@@ -96,9 +92,7 @@ TEST(PsyQMatcher, KnownFunctions) {
     EXPECT_FALSE(matcher.isKnown("player_move"));
 }
 
-// ──────────────────────────────────────────
 // Subsystem Classification Tests
-// ──────────────────────────────────────────
 
 TEST(PsyQMatcher, ClassifyGraphics) {
     EXPECT_EQ(PsyQMatcher::classifySubsystem("GsInitGraph"), PsyQSubsystem::Graphics);
@@ -162,9 +156,7 @@ TEST(PsyQMatcher, ClassifyOther) {
     EXPECT_EQ(PsyQMatcher::classifySubsystem(""), PsyQSubsystem::Other);
 }
 
-// ──────────────────────────────────────────
 // Name Matching Tests
-// ──────────────────────────────────────────
 
 TEST(PsyQMatcher, MatchGraphicsFunctions) {
     const std::string path = "/tmp/ps1recomp_test_psyq_gfx.elf";
@@ -280,9 +272,7 @@ TEST(PsyQMatcher, NoMatchForGameFunctions) {
     cleanupFile(path);
 }
 
-// ──────────────────────────────────────────
 // Pass 3: Byte Signature Detection Tests
-// ──────────────────────────────────────────
 
 // Helper: write a 32-bit LE word into a byte buffer at position
 static void writeLE32(std::vector<uint8_t>& buf, size_t offset, uint32_t val) {
@@ -387,9 +377,7 @@ TEST(PsyQMatcher, Pass3DoesNotMatchUnrelatedFunction) {
     std::remove("/tmp/ps1recomp_test_psyq_p3_nop.elf");
 }
 
-// ──────────────────────────────────────────
 // String Helper Tests
-// ──────────────────────────────────────────
 
 TEST(PsyQMatcher, SubsystemNames) {
     EXPECT_STREQ(PsyQMatcher::subsystemName(PsyQSubsystem::Graphics), "Graphics");

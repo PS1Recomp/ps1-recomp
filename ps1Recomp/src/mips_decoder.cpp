@@ -5,7 +5,7 @@
 
 namespace ps1recomp {
 
-// ─── Field Extraction ────────────────────────────────────
+// Field Extraction
 
 static constexpr uint8_t  extractOpcode(uint32_t raw)   { return (raw >> 26) & 0x3F; }
 static constexpr uint8_t  extractRs(uint32_t raw)       { return (raw >> 21) & 0x1F; }
@@ -16,7 +16,7 @@ static constexpr uint8_t  extractFunct(uint32_t raw)    { return  raw        & 0
 static constexpr int16_t  extractImm16(uint32_t raw)    { return static_cast<int16_t>(raw & 0xFFFF); }
 static constexpr uint32_t extractTarget26(uint32_t raw) { return raw & 0x03FFFFFF; }
 
-// ─── Decode: SPECIAL (opcode 0x00) ───────────────────────
+// Decode: SPECIAL (opcode 0x00)
 
 static Instruction decodeSpecial(uint32_t raw) {
     Instruction inst;
@@ -29,39 +29,39 @@ static Instruction decodeSpecial(uint32_t raw) {
     uint8_t funct = extractFunct(raw);
 
     switch (funct) {
-        // ── Shifts (immediate) ──
+        // Shifts (immediate)
         case 0x00:  // SLL
             if (raw == 0) { inst.id = InstrId::NOP; inst.category = InstrCategory::Special; return inst; }
             inst.id = InstrId::SLL; break;
         case 0x02: inst.id = InstrId::SRL; break;
         case 0x03: inst.id = InstrId::SRA; break;
 
-        // ── Shifts (variable) ──
+        // Shifts (variable)
         case 0x04: inst.id = InstrId::SLLV; break;
         case 0x06: inst.id = InstrId::SRLV; break;
         case 0x07: inst.id = InstrId::SRAV; break;
 
-        // ── Jumps (register) ──
+        // Jumps (register)
         case 0x08: inst.id = InstrId::JR;   inst.category = InstrCategory::Jump; return inst;
         case 0x09: inst.id = InstrId::JALR; inst.category = InstrCategory::Jump; return inst;
 
-        // ── System ──
+        // System
         case 0x0C: inst.id = InstrId::SYSCALL; inst.category = InstrCategory::System; return inst;
         case 0x0D: inst.id = InstrId::BREAK;   inst.category = InstrCategory::System; return inst;
 
-        // ── HI/LO moves ──
+        // HI/LO moves
         case 0x10: inst.id = InstrId::MFHI; inst.category = InstrCategory::MulDiv; return inst;
         case 0x11: inst.id = InstrId::MTHI; inst.category = InstrCategory::MulDiv; return inst;
         case 0x12: inst.id = InstrId::MFLO; inst.category = InstrCategory::MulDiv; return inst;
         case 0x13: inst.id = InstrId::MTLO; inst.category = InstrCategory::MulDiv; return inst;
 
-        // ── Multiply / Divide ──
+        // Multiply / Divide
         case 0x18: inst.id = InstrId::MULT;  inst.category = InstrCategory::MulDiv; return inst;
         case 0x19: inst.id = InstrId::MULTU; inst.category = InstrCategory::MulDiv; return inst;
         case 0x1A: inst.id = InstrId::DIV;   inst.category = InstrCategory::MulDiv; return inst;
         case 0x1B: inst.id = InstrId::DIVU;  inst.category = InstrCategory::MulDiv; return inst;
 
-        // ── ALU R-type ──
+        // ALU R-type
         case 0x20: inst.id = InstrId::ADD;  break;
         case 0x21: inst.id = InstrId::ADDU; break;
         case 0x22: inst.id = InstrId::SUB;  break;
@@ -83,7 +83,7 @@ static Instruction decodeSpecial(uint32_t raw) {
     return inst;
 }
 
-// ─── Decode: REGIMM (opcode 0x01) ───────────────────────
+// Decode: REGIMM (opcode 0x01)
 
 static Instruction decodeRegimm(uint32_t raw) {
     Instruction inst;
@@ -108,7 +108,7 @@ static Instruction decodeRegimm(uint32_t raw) {
     return inst;
 }
 
-// ─── Decode: COP0 (opcode 0x10) ─────────────────────────
+// Decode: COP0 (opcode 0x10)
 
 static Instruction decodeCOP0(uint32_t raw) {
     Instruction inst;
@@ -136,7 +136,7 @@ static Instruction decodeCOP0(uint32_t raw) {
     return inst;
 }
 
-// ─── Decode: COP2 / GTE (opcode 0x12) ───────────────────
+// Decode: COP2 / GTE (opcode 0x12)
 
 static Instruction decodeCOP2(uint32_t raw) {
     Instruction inst;
@@ -192,19 +192,19 @@ static Instruction decodeCOP2(uint32_t raw) {
     return inst;
 }
 
-// ─── Main Decoder ────────────────────────────────────────
+// Main Decoder
 
 Instruction MipsDecoder::decode(uint32_t raw) {
     uint8_t opcode = extractOpcode(raw);
 
     switch (opcode) {
-        // ── SPECIAL group ──
+        // SPECIAL group
         case 0x00: return decodeSpecial(raw);
 
-        // ── REGIMM group ──
+        // REGIMM group
         case 0x01: return decodeRegimm(raw);
 
-        // ── J-type ──
+        // J-type
         case 0x02: {
             Instruction inst;
             inst.raw = raw;
@@ -222,7 +222,7 @@ Instruction MipsDecoder::decode(uint32_t raw) {
             return inst;
         }
 
-        // ── Branches ──
+        // Branches
         case 0x04: { // BEQ
             Instruction inst;
             inst.raw = raw;
@@ -262,7 +262,7 @@ Instruction MipsDecoder::decode(uint32_t raw) {
             return inst;
         }
 
-        // ── I-type ALU ──
+        // I-type ALU
         case 0x08: { // ADDI
             Instruction inst;
             inst.raw = raw;
@@ -343,13 +343,13 @@ Instruction MipsDecoder::decode(uint32_t raw) {
             return inst;
         }
 
-        // ── COP0 ──
+        // COP0
         case 0x10: return decodeCOP0(raw);
 
-        // ── COP2 / GTE ──
+        // COP2 / GTE
         case 0x12: return decodeCOP2(raw);
 
-        // ── Loads ──
+        // Loads
         case 0x20: { Instruction i; i.raw=raw; i.id=InstrId::LB;  i.category=InstrCategory::Memory; i.rs=extractRs(raw); i.rt=extractRt(raw); i.imm16=extractImm16(raw); return i; }
         case 0x21: { Instruction i; i.raw=raw; i.id=InstrId::LH;  i.category=InstrCategory::Memory; i.rs=extractRs(raw); i.rt=extractRt(raw); i.imm16=extractImm16(raw); return i; }
         case 0x22: { Instruction i; i.raw=raw; i.id=InstrId::LWL; i.category=InstrCategory::Memory; i.rs=extractRs(raw); i.rt=extractRt(raw); i.imm16=extractImm16(raw); return i; }
@@ -358,14 +358,14 @@ Instruction MipsDecoder::decode(uint32_t raw) {
         case 0x25: { Instruction i; i.raw=raw; i.id=InstrId::LHU; i.category=InstrCategory::Memory; i.rs=extractRs(raw); i.rt=extractRt(raw); i.imm16=extractImm16(raw); return i; }
         case 0x26: { Instruction i; i.raw=raw; i.id=InstrId::LWR; i.category=InstrCategory::Memory; i.rs=extractRs(raw); i.rt=extractRt(raw); i.imm16=extractImm16(raw); return i; }
 
-        // ── Stores ──
+        // Stores
         case 0x28: { Instruction i; i.raw=raw; i.id=InstrId::SB;  i.category=InstrCategory::Memory; i.rs=extractRs(raw); i.rt=extractRt(raw); i.imm16=extractImm16(raw); return i; }
         case 0x29: { Instruction i; i.raw=raw; i.id=InstrId::SH;  i.category=InstrCategory::Memory; i.rs=extractRs(raw); i.rt=extractRt(raw); i.imm16=extractImm16(raw); return i; }
         case 0x2A: { Instruction i; i.raw=raw; i.id=InstrId::SWL; i.category=InstrCategory::Memory; i.rs=extractRs(raw); i.rt=extractRt(raw); i.imm16=extractImm16(raw); return i; }
         case 0x2B: { Instruction i; i.raw=raw; i.id=InstrId::SW;  i.category=InstrCategory::Memory; i.rs=extractRs(raw); i.rt=extractRt(raw); i.imm16=extractImm16(raw); return i; }
         case 0x2E: { Instruction i; i.raw=raw; i.id=InstrId::SWR; i.category=InstrCategory::Memory; i.rs=extractRs(raw); i.rt=extractRt(raw); i.imm16=extractImm16(raw); return i; }
 
-        // ── COP2 Loads/Stores ──
+        // COP2 Loads/Stores
         case 0x32: { Instruction i; i.raw=raw; i.id=InstrId::LWC2; i.category=InstrCategory::GTE; i.rs=extractRs(raw); i.rt=extractRt(raw); i.imm16=extractImm16(raw); return i; }
         case 0x3A: { Instruction i; i.raw=raw; i.id=InstrId::SWC2; i.category=InstrCategory::GTE; i.rs=extractRs(raw); i.rt=extractRt(raw); i.imm16=extractImm16(raw); return i; }
 
@@ -379,7 +379,7 @@ Instruction MipsDecoder::decode(uint32_t raw) {
     }
 }
 
-// ─── Instruction::isStore / isLoad ───────────────────────
+// Instruction::isStore / isLoad
 
 bool Instruction::isStore() const {
     switch (id) {
@@ -399,7 +399,7 @@ bool Instruction::isLoad() const {
     }
 }
 
-// ─── Name Tables ─────────────────────────────────────────
+// Name Tables
 
 std::string_view MipsDecoder::instrName(InstrId id) {
     switch (id) {
@@ -538,7 +538,7 @@ std::string_view MipsDecoder::categoryName(InstrCategory cat) {
     }
 }
 
-// ─── Register Names ──────────────────────────────────────
+// Register Names
 
 static constexpr const char* s_gprNames[32] = {
     "$zero", "$at", "$v0", "$v1",

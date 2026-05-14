@@ -14,7 +14,7 @@ class ElfParser;
 class FunctionFinder;
 class PsyQMatcher;
 
-// ─── Config Generator ───────────────────────────────────
+// Config Generator
 
 class ConfigGenerator {
 public:

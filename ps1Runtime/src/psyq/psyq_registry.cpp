@@ -102,7 +102,7 @@ void psyq_registry_init_defaults() {
   psyq_register("libgpu_SetDefDrawEnv", &ps1::psyq::hle_SetDefDrawEnv);
   psyq_register("libgpu_PutDrawEnv",  &ps1::psyq::hle_PutDrawEnv);
 
-  // ── Minimal no-op stubs for early-boot HLEs Crash Bandicoot references ──
+  // Minimal no-op stubs for early-boot HLEs Crash Bandicoot references
   // These have no side-effect during init.  Promote to real impl if a game
   // is observed waiting on their state (e.g. RCnt IRQs, OT linkage via
   // TermPrim, immediate-mode draws via DrawPrim).

@@ -11,7 +11,7 @@
 
 namespace ps1recomp {
 
-// ─── PS1 Memory Map Constants ────────────────────────────
+// PS1 Memory Map Constants
 
 constexpr uint32_t PS1_RAM_SIZE = 2 * 1024 * 1024;  // 2MB
 constexpr uint32_t PS1_RAM_MASK = PS1_RAM_SIZE - 1; // 0x1FFFFF
@@ -29,7 +29,7 @@ constexpr uint32_t PS1_SCRATCHPAD_SIZE = 1024;
 constexpr uint32_t PS1_IO_BASE = 0x1F801000;
 constexpr uint32_t PS1_BIOS_START = 0xBFC00000;
 
-// ─── Section Types ───────────────────────────────────────
+// Section Types
 
 enum class SectionType {
   Text, // Executable code (.text)
@@ -38,7 +38,7 @@ enum class SectionType {
   Other // Unknown or unclassified
 };
 
-// ─── Symbol Types ────────────────────────────────────────
+// Symbol Types
 
 enum class SymbolType {
   Function, // STT_FUNC
@@ -47,7 +47,7 @@ enum class SymbolType {
   Other
 };
 
-// ─── Section ─────────────────────────────────────────────
+// Section
 
 struct Section {
   std::string name;
@@ -62,7 +62,7 @@ struct Section {
   }
 };
 
-// ─── Symbol ──────────────────────────────────────────────
+// Symbol
 
 struct Symbol {
   std::string name;
@@ -74,7 +74,7 @@ struct Symbol {
   bool isFunction() const { return type == SymbolType::Function; }
 };
 
-// ─── ElfParser ───────────────────────────────────────────
+// ElfParser
 
 class ElfParser {
 public:
@@ -124,7 +124,7 @@ public:
   /// Get load error message (empty if no error).
   const std::string &getError() const { return m_error; }
 
-  // ─── Static Helpers ──────────────────────────────────
+  // Static Helpers
 
   /// Convert a virtual address to a physical RAM offset.
   /// Returns std::nullopt if address is not in RAM.

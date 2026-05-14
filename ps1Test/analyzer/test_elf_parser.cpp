@@ -9,9 +9,7 @@
 
 using namespace ps1recomp;
 
-// ──────────────────────────────────────────
 // Helper: Create a minimal valid PS1 ELF
-// ──────────────────────────────────────────
 
 static std::string createMinimalPS1Elf(const std::string& path,
                                         uint32_t entryPoint = 0x80010000,
@@ -114,9 +112,7 @@ static void cleanupFile(const std::string& path) {
     std::remove(path.c_str());
 }
 
-// ──────────────────────────────────────────
 // Basic Loading Tests
-// ──────────────────────────────────────────
 
 TEST(ElfParser, LoadValidPS1Elf) {
     const std::string path = "/tmp/ps1recomp_test_valid.elf";
@@ -162,9 +158,7 @@ TEST(ElfParser, RejectEmptyFile) {
     cleanupFile(path);
 }
 
-// ──────────────────────────────────────────
 // Entry Point Tests
-// ──────────────────────────────────────────
 
 TEST(ElfParser, EntryPointKSEG0) {
     const std::string path = "/tmp/ps1recomp_test_kseg0.elf";
@@ -200,9 +194,7 @@ TEST(ElfParser, RejectBadEntryPoint) {
     cleanupFile(path);
 }
 
-// ──────────────────────────────────────────
 // Section Extraction Tests
-// ──────────────────────────────────────────
 
 TEST(ElfParser, ExtractSections) {
     const std::string path = "/tmp/ps1recomp_test_sections.elf";
@@ -289,9 +281,7 @@ TEST(ElfParser, SectionContainsAddress) {
     EXPECT_FALSE(sec.containsAddress(0x8000FFFF));
 }
 
-// ──────────────────────────────────────────
 // Symbol Extraction Tests
-// ──────────────────────────────────────────
 
 TEST(ElfParser, ExtractSymbols) {
     const std::string path = "/tmp/ps1recomp_test_symbols.elf";
@@ -343,9 +333,7 @@ TEST(ElfParser, NoSymbolsGraceful) {
     cleanupFile(path);
 }
 
-// ──────────────────────────────────────────
 // Size Calculation Tests
-// ──────────────────────────────────────────
 
 TEST(ElfParser, TotalCodeSize) {
     const std::string path = "/tmp/ps1recomp_test_codesize.elf";
@@ -372,9 +360,7 @@ TEST(ElfParser, TotalDataSize) {
     cleanupFile(path);
 }
 
-// ──────────────────────────────────────────
 // Static Helper Tests
-// ──────────────────────────────────────────
 
 TEST(ElfParser, VAddrToPhysical) {
     // KUSEG
@@ -416,9 +402,7 @@ TEST(ElfParser, IsLikelyPsyQ) {
     EXPECT_FALSE(ElfParser::isLikelyPsyQ(0x80010000));
 }
 
-// ──────────────────────────────────────────
 // PS1 Memory Map Constants
-// ──────────────────────────────────────────
 
 TEST(PS1Constants, RAMSize) {
     EXPECT_EQ(PS1_RAM_SIZE, 2u * 1024 * 1024);

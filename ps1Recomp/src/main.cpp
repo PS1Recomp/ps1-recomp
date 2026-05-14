@@ -19,7 +19,7 @@
 
 using namespace ps1recomp;
 
-// ─── Jump Table Auto-Detection ───────────────────────────
+// Jump Table Auto-Detection
 //
 // Detects the canonical MIPS switch table pattern:
 //   LUI   $rbase, hi       ; rbase = upper address
@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) {
       return 1;
     }
 
-    // ── HLE overrides: replace a function body with a named HLE stub ──────
+    // HLE overrides: replace a function body with a named HLE stub
     // Config section: [hle_overrides]
     //   "0x801AA484" = "hle_DrawSync"   (calls ps1::psyq::hle_DrawSync)
     //   "0x801B954C" = "hle_VSync"      (calls ps1::psyq::hle_VSync)
@@ -153,7 +153,7 @@ int main(int argc, char *argv[]) {
       fmt::print("HLE overrides: {} address(es)\n", hleOverrides.size());
     }
 
-    // ── Missing functions: emit a literal C++ body for dead-code stubs ────
+    // Missing functions: emit a literal C++ body for dead-code stubs
     // Config section: [missing_functions]
     //   "0x8019F848" = "recomp_dispatch(rdram, ctx, 0x8019F85C);"
     std::map<uint32_t, std::string> missingFunctions;
@@ -166,7 +166,7 @@ int main(int argc, char *argv[]) {
       fmt::print("Missing functions: {} address(es)\n", missingFunctions.size());
     }
 
-    // ── HLE functions: hash-detected PsyQ stubs from ps1Analyzer Sessao 0.4 ──
+    // HLE functions: hash-detected PsyQ stubs from ps1Analyzer Sessao 0.4
     // Config section: [[hle_functions]]
     //   address = "0x801ABCDE"
     //   hle     = true
@@ -363,7 +363,7 @@ int main(int argc, char *argv[]) {
             }
           }
         } else if (inst.id == InstrId::JR && inst.rs != 31) {
-          // ── Jump table auto-detection ──────────────────
+          // Jump table auto-detection
           // Try to detect the LUI+ADDIU+ADDU+LW+JR pattern and resolve
           // the table entries from the ELF binary.
           auto targets = detectJumpTable(rfunc.instructions, i, parser);
@@ -379,7 +379,7 @@ int main(int argc, char *argv[]) {
         }
       }
 
-      // ── HLE function (hash-detected): delegate to extern "C" hle_<name> ──
+      // HLE function (hash-detected): delegate to extern "C" hle_<name>
       if (hleFunctions.count(addr)) {
         ps1recomp::HleStub stub{addr, name, hleFunctions[addr]};
         result_cpp += ps1recomp::emitHleStub(stub);
@@ -388,7 +388,7 @@ int main(int argc, char *argv[]) {
         continue;
       }
 
-      // ── HLE override: emit a named stub instead of translating MIPS ──
+      // HLE override: emit a named stub instead of translating MIPS
       if (hleOverrides.count(addr)) {
         const std::string &stub = hleOverrides[addr];
         result_cpp += fmt::format(
@@ -400,7 +400,7 @@ int main(int argc, char *argv[]) {
         continue;
       }
 
-      // ── Missing function: emit literal body ───────────────────────────
+      // Missing function: emit literal body
       if (missingFunctions.count(addr)) {
         const std::string &body = missingFunctions[addr];
         result_cpp += fmt::format(
@@ -416,7 +416,7 @@ int main(int argc, char *argv[]) {
       result_cpp += "\n";
     }
 
-    // ── HLE stub bodies for [[hle_functions]] not covered by [[functions]] ──
+    // HLE stub bodies for [[hle_functions]] not covered by [[functions]]
     // The analyzer emits a [[hle_functions]] entry for every hash match but
     // also strips those addresses from [[functions]] (PsyQ functions don't
     // get MIPS bodies). So most HLE entries land here — bodies are emitted
@@ -484,7 +484,7 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // ─── Overlay support ──────────────────────────────────
+    // Overlay support
     // Parse [[overlays]] from config. Each overlay is a separate code segment
     // loaded from disc into RAM at a specific address. Functions are prefixed
     // with overlay name to avoid collisions when multiple overlays share RAM.
@@ -669,10 +669,10 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // ─── Emit overlay table ─────────────────────────────
+    // Emit overlay table
     // Runtime uses this to know which overlays exist and their address ranges
     if (overlayHandler.overlayCount() > 0) {
-      result_cpp += "\n// ─── Overlay Table ──────────────────────────────────\n";
+      result_cpp += "\n// Overlay Table\n";
       result_cpp += "#include <vector>\n";
       result_cpp += "#include <string>\n\n";
       result_cpp += "struct OverlayInfo {\n";
@@ -691,22 +691,22 @@ int main(int argc, char *argv[]) {
       result_cpp += "};\n\n";
     }
 
-    // ─── Emit dispatch table ──────────────────────────────
+    // Emit dispatch table
     // This allows CALL_INDIRECT / JUMP_INDIRECT to resolve
     // addresses to recompiled functions at runtime.
     // Uses std::unordered_map for O(1) average-case lookup.
-    result_cpp += "\n// ─── Dispatch Table ─────────────────────────────────\n";
+    result_cpp += "\n// Dispatch Table\n";
     result_cpp += "// Maps PS1 addresses to recompiled function pointers\n";
     result_cpp += "// Populated once at startup, queried on every indirect call/jump\n\n";
     result_cpp += "#include <unordered_map>\n\n";
     result_cpp +=
         "typedef void (*recomp_func_t)(uint8_t*, recomp_context*);\n\n";
 
-    // --- Global dispatch table (unordered_map) ---
+    // Global dispatch table (unordered_map)
     result_cpp += "static std::unordered_map<uint32_t, recomp_func_t> recomp_func_table;\n";
     result_cpp += "static bool recomp_table_ready = false;\n\n";
 
-    // --- Init function: populate the map once ---
+    // Init function: populate the map once
     result_cpp += "void recomp_init_dispatch_table() {\n";
     result_cpp += fmt::format("    recomp_func_table.reserve({});\n",
                               addr_to_name.size() + 16);
@@ -716,13 +716,13 @@ int main(int argc, char *argv[]) {
     result_cpp += "    recomp_table_ready = true;\n";
     result_cpp += "}\n\n";
 
-    // --- Lookup function ---
+    // Lookup function
     result_cpp += "recomp_func_t recomp_lookup(uint32_t addr) {\n";
     result_cpp += "    auto it = recomp_func_table.find(addr);\n";
     result_cpp += "    return (it != recomp_func_table.end()) ? it->second : nullptr;\n";
     result_cpp += "}\n\n";
 
-    // --- Main dispatch function ---
+    // Main dispatch function
     result_cpp += "void recomp_dispatch(uint8_t* rdram, recomp_context* ctx, "
                   "uint32_t addr) {\n";
     result_cpp += "    // Lazy-init on first call\n";

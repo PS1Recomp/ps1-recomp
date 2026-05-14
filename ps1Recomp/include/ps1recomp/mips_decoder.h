@@ -8,59 +8,59 @@
 
 namespace ps1recomp {
 
-// ─── Instruction IDs ─────────────────────────────────────
+// Instruction IDs
 
 enum class InstrId : uint8_t {
     // Invalid / Unknown
     INVALID = 0,
 
-    // ── R-type ALU ──
+    // R-type ALU
     ADD, ADDU, SUB, SUBU,
     AND, OR, XOR, NOR,
     SLT, SLTU,
 
-    // ── Shifts ──
+    // Shifts
     SLL, SRL, SRA,
     SLLV, SRLV, SRAV,
 
-    // ── Multiply / Divide ──
+    // Multiply / Divide
     MULT, MULTU, DIV, DIVU,
     MFHI, MTHI, MFLO, MTLO,
 
-    // ── I-type ALU ──
+    // I-type ALU
     ADDI, ADDIU,
     ANDI, ORI, XORI,
     SLTI, SLTIU,
     LUI,
 
-    // ── Loads ──
+    // Loads
     LB, LBU, LH, LHU, LW,
     LWL, LWR,
 
-    // ── Stores ──
+    // Stores
     SB, SH, SW,
     SWL, SWR,
 
-    // ── Branches ──
+    // Branches
     BEQ, BNE,
     BLEZ, BGTZ,
     BLTZ, BGEZ,
     BLTZAL, BGEZAL,
 
-    // ── Jumps ──
+    // Jumps
     J, JAL, JR, JALR,
 
-    // ── System ──
+    // System
     SYSCALL, BREAK,
 
-    // ── COP0 ──
+    // COP0
     MFC0, MTC0, RFE,
 
-    // ── COP2 / GTE register moves ──
+    // COP2 / GTE register moves
     MFC2, MTC2, CFC2, CTC2,
     LWC2, SWC2,
 
-    // ── COP2 / GTE commands ──
+    // COP2 / GTE commands
     GTE_RTPS,    // Perspective transform (single)
     GTE_NCLIP,   // Normal clipping
     GTE_OP,      // Outer product
@@ -90,7 +90,7 @@ enum class InstrId : uint8_t {
     COUNT  // Total count
 };
 
-// ─── Instruction Categories ─────────────────────────────
+// Instruction Categories
 
 enum class InstrCategory : uint8_t {
     ALU,        // Arithmetic/logic/shift
@@ -104,7 +104,7 @@ enum class InstrCategory : uint8_t {
     Special,    // NOP, INVALID
 };
 
-// ─── Decoded Instruction ─────────────────────────────────
+// Decoded Instruction
 
 struct Instruction {
     InstrId     id       = InstrId::INVALID;
@@ -141,7 +141,7 @@ struct Instruction {
     }
 };
 
-// ─── Decoder ─────────────────────────────────────────────
+// Decoder
 
 class MipsDecoder {
 public:
@@ -155,7 +155,7 @@ public:
     static std::string_view categoryName(InstrCategory cat);
 };
 
-// ─── Register Names ──────────────────────────────────────
+// Register Names
 
 /// GPR names ($zero, $at, $v0-v1, $a0-a3, $t0-t9, $s0-s7, $k0-k1, $gp, $sp, $fp, $ra)
 std::string_view gprName(uint8_t reg);

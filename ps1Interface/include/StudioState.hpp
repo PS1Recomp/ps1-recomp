@@ -16,7 +16,7 @@
 #include <ps1recomp/function_finder.h>
 #include <ps1recomp/psyq_signatures.h>
 
-// ── Enums ─────────────────────────────────────────────────────────────────────
+// Enums
 
 enum class OverrideStatus {
     Default,
@@ -31,7 +31,7 @@ enum class ThemeMode {
     Custom
 };
 
-// ── Settings (persisted to studio_settings.ini) ───────────────────────────────
+// Settings (persisted to studio_settings.ini)
 
 struct AppSettings {
     ThemeMode theme      = ThemeMode::Dark;
@@ -46,7 +46,7 @@ struct AppSettings {
     float customAccent[4] = {0.00f, 0.48f, 0.80f, 1.00f};
 };
 
-// ── Stream redirector (cout/cerr → Logs panel) ────────────────────────────────
+// Stream redirector (cout/cerr → Logs panel)
 
 class StreamRedirector : public std::stringbuf {
 public:
@@ -73,7 +73,7 @@ private:
     std::atomic<size_t>&      version_;
 };
 
-// ── Analysis result (PS1-specific) ───────────────────────────────────────────
+// Analysis result (PS1-specific)
 
 struct FunctionEntry {
     std::string name;
@@ -82,7 +82,7 @@ struct FunctionEntry {
     bool        isPsyQ   = false;   // matched against PsyQ signatures
 };
 
-// ── UI data ───────────────────────────────────────────────────────────────────
+// UI data
 
 struct UIState {
     std::string elfPath;
@@ -102,7 +102,7 @@ struct UIState {
     bool isAnalysisComplete = false;
 };
 
-// ── StudioState ───────────────────────────────────────────────────────────────
+// StudioState
 
 class StudioState {
 public:
@@ -122,7 +122,7 @@ public:
     StudioState();
     ~StudioState();
 
-    // ── Actions ───────────────────────────────────────────────────────────────
+    // Actions
     void LoadELF(const std::string& path);
     void StartAnalysis();
     void LoadConfigToml();
@@ -134,14 +134,14 @@ public:
     void LoadSettings();
     void SaveSettings();
 
-    // ── Logging ───────────────────────────────────────────────────────────────
+    // Logging
     void Log(const std::string& msg) {
         std::lock_guard<std::mutex> lock(stateMutex);
         logs.push_back("[Studio] " + msg);
         logVersion.fetch_add(1);
     }
 
-    // ── Status ────────────────────────────────────────────────────────────────
+    // Status
     void        SetStatus(const std::string& msg) {
         std::lock_guard<std::mutex> lock(statusMutex_);
         statusMessage_ = msg;

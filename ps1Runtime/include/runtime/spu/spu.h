@@ -11,7 +11,7 @@
 
 namespace ps1::spu {
 
-// ─── Constants ──────────────────────────────────────────
+// Constants
 static constexpr uint32_t NUM_VOICES = 24;
 static constexpr uint32_t SOUND_RAM_SIZE = 512 * 1024; // 512KB
 static constexpr uint32_t SAMPLE_RATE = 44100;
@@ -19,10 +19,10 @@ static constexpr uint32_t ADPCM_BLOCK_SIZE = 16; // bytes per ADPCM block
 static constexpr uint32_t ADPCM_SAMPLES_PER_BLOCK =
     28; // samples decoded per block
 
-// ─── ADSR Phase ─────────────────────────────────────────
+// ADSR Phase
 enum class AdsrPhase : uint8_t { Attack, Decay, Sustain, Release, Off };
 
-// ─── Voice State ────────────────────────────────────────
+// Voice State
 struct Voice {
   // Registers (set via I/O writes)
   int16_t volumeLeft = 0;
@@ -62,7 +62,7 @@ struct Voice {
   bool pitchMod = false;
 };
 
-// ─── Reverb Config ──────────────────────────────────────
+// Reverb Config
 struct ReverbConfig {
   uint16_t regs[32] = {}; // 32 reverb working area registers
   uint16_t workAreaStart = 0;
@@ -70,7 +70,7 @@ struct ReverbConfig {
   int16_t volumeRight = 0;
 };
 
-// ─── SPU Class ──────────────────────────────────────────
+// SPU Class
 class SPU {
 public:
   SPU();
@@ -113,13 +113,13 @@ public:
   std::mutex &getMutex() { return mutex_; }
 
 private:
-  // ─── Voices ──────────────────────
+  // Voices
   Voice voices_[NUM_VOICES];
 
-  // ─── Sound RAM ───────────────────
+  // Sound RAM
   uint8_t soundRam_[SOUND_RAM_SIZE];
 
-  // ─── Control Registers ───────────
+  // Control Registers
   uint16_t spuCtrl_ = 0; // SPUCNT (0x1F801D80)
   uint16_t spuStat_ = 0; // SPUSTAT (0x1F801D86)
   int16_t mainVolL_ = 0; // Main Volume Left
@@ -137,28 +137,28 @@ private:
   uint32_t reverbOn_ = 0;
   uint32_t endxFlags_ = 0; // End of sample flags
 
-  // ─── Transfer ────────────────────
+  // Transfer
   uint32_t transferAddr_ = 0; // current address for manual transfer
   uint16_t transferCtrl_ = 0;
 
-  // ─── Reverb ──────────────────────
+  // Reverb
   ReverbConfig reverb_;
 
-  // ─── Noise Generator ─────────────
+  // Noise Generator
   int32_t noiseLevel_ = 0;
   uint32_t noiseTimer_ = 0;
   uint32_t noiseStep_ = 0;
 
-  // ─── XA/CD-DA buffers ────────────
+  // XA/CD-DA buffers
   std::vector<int16_t> xaBuffer_;
   std::vector<int16_t> cdDaBuffer_;
   uint32_t xaReadPos_ = 0;
   uint32_t cdDaReadPos_ = 0;
 
-  // ─── Thread safety ───────────────
+  // Thread safety
   mutable std::mutex mutex_;
 
-  // ─── Internal Methods ────────────
+  // Internal Methods
   void processVoice(uint32_t voiceIdx, int32_t &outL, int32_t &outR,
                     int16_t prevVoiceOutput);
   int16_t decodeAdpcmSample(Voice &v);

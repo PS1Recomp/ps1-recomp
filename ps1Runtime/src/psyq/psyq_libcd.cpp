@@ -15,7 +15,7 @@ namespace ps1::psyq {
 
 namespace {
 
-// ── PsyQ libcd command bytes (subset relevant for boot path) ──
+// PsyQ libcd command bytes (subset relevant for boot path)
 // Mirrors `enum CdlCommand` from PsyQ <libcd.h>.
 constexpr uint8_t CDL_NOP       = 0x01;
 constexpr uint8_t CDL_SETLOC    = 0x02;
@@ -28,7 +28,7 @@ constexpr uint8_t CDL_SETMODE   = 0x0E;
 constexpr uint8_t CDL_GETTD     = 0x14;
 constexpr uint8_t CDL_TEST      = 0x19;
 
-// ── PsyQ libcd response codes ──
+// PsyQ libcd response codes
 // PsyQ <libcd.h> enum CdlIntr: NoIntr=0, DataReady=1, Complete=2,
 // Acknowledge=3, DataEnd=4, DiskError=5.
 constexpr uint8_t CDL_NO_INTR    = 0;
@@ -36,7 +36,7 @@ constexpr uint8_t CDL_DATA_READY = 1;
 constexpr uint8_t CDL_COMPLETE   = 2;
 constexpr uint8_t CDL_DISK_ERROR = 5;
 
-// ── PsyQ CDROM I/O ports (KSEG1 unmasked addresses) ──
+// PsyQ CDROM I/O ports (KSEG1 unmasked addresses)
 constexpr uint32_t CDR_PORT0 = 0x1F801800; // status / index
 constexpr uint32_t CDR_PORT1 = 0x1F801801; // command / response
 constexpr uint32_t CDR_PORT2 = 0x1F801802; // parameter / data
@@ -98,7 +98,7 @@ void issueCommand(cdrom::CdromController *cdrom, uint8_t com) {
 
 } // namespace
 
-// ── CdInit ────────────────────────────────────────────────────────────────
+// CdInit
 //
 // HLE replacement for the native PsyQ CdInit.  We deliberately bypass the
 // retry loop / B0:42 verification that "Init failed" comes from — the
@@ -138,7 +138,7 @@ void hle_libcd_CdInit(recomp_context *ctx) {
   ctx->r[V0] = 1; // success
 }
 
-// ── CdRead(sectors, *buf, mode) ───────────────────────────────────────────
+// CdRead(sectors, *buf, mode)
 //
 // Asynchronous read.  Updates the read-state slots in psyq_state() that
 // bios.cpp consults from triggerCdromEvent(INT1)/drainPendingCallbacks,
@@ -187,7 +187,7 @@ void hle_libcd_CdRead(recomp_context *ctx) {
   ctx->r[V0] = 1;
 }
 
-// ── Cooperative wait on psyq_state() CD bytes (Phase 2.3) ──────────────────
+// Cooperative wait on psyq_state() CD bytes (Phase 2.3)
 //
 // The CDROM IRQ path (Bios::triggerCdromEvent) writes to
 // psyq_state().cdSyncByte / cdReadyByte atomically.  These helpers poll the
@@ -216,7 +216,7 @@ uint8_t waitOnCdAtomic(Atomic &slot) {
 
 } // namespace
 
-// ── CdSync(mode, *result) ─────────────────────────────────────────────────
+// CdSync(mode, *result)
 //
 // In our model every CdControl-style call is synchronous (the controller
 // fires INT3+INT2 inline), so by the time the game polls CdSync the state
@@ -258,7 +258,7 @@ void hle_libcd_CdSync(recomp_context *ctx) {
   ctx->r[V0] = code;
 }
 
-// ── CdReady(mode, *result) ────────────────────────────────────────────────
+// CdReady(mode, *result)
 //
 // Same shape as CdSync but for data-ready (INT1/INT4) interrupts.  Phase 2.3
 // migrated the ready byte into psyq_state().cdReadyByte; mode=0 (block) does
@@ -288,7 +288,7 @@ void hle_libcd_CdReady(recomp_context *ctx) {
   ctx->r[V0] = code;
 }
 
-// ── CdControl(com, *param, *result) ───────────────────────────────────────
+// CdControl(com, *param, *result)
 //
 // Push the right number of parameter bytes, issue the command, drain the
 // status response.  The controller fires the appropriate interrupt inline
@@ -313,7 +313,7 @@ void hle_libcd_CdControl(recomp_context *ctx) {
   ctx->r[V0] = 1;
 }
 
-// ── CdControlF(com, *param) ───────────────────────────────────────────────
+// CdControlF(com, *param)
 //
 // Fire-and-forget variant of CdControl: same dispatch, no result drain.
 //
@@ -333,7 +333,7 @@ void hle_libcd_CdControlF(recomp_context *ctx) {
   ctx->r[V0] = 1;
 }
 
-// ── CdGetSector(*madr, size_words) ────────────────────────────────────────
+// CdGetSector(*madr, size_words)
 //
 // Streaming reads land in game RAM via the BIOS HLE sector copy (driven
 // from triggerCdromEvent INT1 + drainPendingCallbacks), so by the time the
@@ -366,7 +366,7 @@ void hle_libcd_CdReadCallback(recomp_context *ctx)  { setDataCallback(ctx); }
 void hle_libcd_CdReadyCallback(recomp_context *ctx) { setDataCallback(ctx); }
 void hle_libcd_CdDataCallback(recomp_context *ctx)  { setDataCallback(ctx); }
 
-// ── CdMix(*vol) ───────────────────────────────────────────────────────────
+// CdMix(*vol)
 //
 // CD audio mixing volume.  SPU CD-mix is not modeled (see CLAUDE.md "Long
 // Term: SPU accuracy"), so this is a NOP that returns 1 (success).
@@ -376,7 +376,7 @@ void hle_libcd_CdMix(recomp_context *ctx) {
   ctx->r[V0] = 1;
 }
 
-// ── CdReadBreak() ─────────────────────────────────────────────────────────
+// CdReadBreak()
 //
 // Cancel an in-progress CdRead.  Stops the controller's read state machine
 // and zeros the read counters in psyq_state() so the next INT1 doesn't
@@ -397,7 +397,7 @@ void hle_libcd_CdReadBreak(recomp_context *ctx) {
   ctx->r[V0] = 1;
 }
 
-// ── StSetMask ─────────────────────────────────────────────────────────────
+// StSetMask
 // XA-stream sector filter.  Not modeled.
 void hle_libcd_StSetMask(recomp_context *ctx) {
   ctx->r[V0] = 0;

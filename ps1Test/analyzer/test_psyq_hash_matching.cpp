@@ -25,7 +25,7 @@
 
 using namespace ps1recomp;
 
-// ─── Path to the in-tree TOML data ──────────────────────────────────────
+// Path to the in-tree TOML data
 // PS1RECOMP_DATA_DIR_DEFAULT is baked in by ps1Analyzer/CMakeLists.txt as
 // `${CMAKE_SOURCE_DIR}/ps1Analyzer/data` so the tests work regardless of
 // the build directory layout.
@@ -41,9 +41,7 @@ static std::string metaTomlPath() {
     return std::string(PS1RECOMP_DATA_DIR_DEFAULT) + "/psyq_metadata.toml";
 }
 
-// ───────────────────────────────────────────────────────────────────────
 // mask_immediates — parity with tools/tests/test_extract_psyq_signatures.py
-// ───────────────────────────────────────────────────────────────────────
 
 TEST(PsyqHashMasking, RTypePassthrough) {
     // add $v0, $a0, $a1 — pure R-type, no immediate
@@ -99,9 +97,7 @@ TEST(PsyqHashMasking, AddiuDifferentImmCollideOnMask) {
               PsyQMatcher::maskImmediates(0x240900ADu));
 }
 
-// ───────────────────────────────────────────────────────────────────────
 // SHA-256 → uint64 helpers
-// ───────────────────────────────────────────────────────────────────────
 
 TEST(PsyqHashHash, Deterministic) {
     const std::vector<uint8_t> bytes = {
@@ -151,10 +147,8 @@ TEST(PsyqHashHash, ParseHashHex) {
     EXPECT_EQ(PsyQMatcher::parseHashHex("zzzzzzzzzzzzzzzz"), 0u);
 }
 
-// ───────────────────────────────────────────────────────────────────────
 // TOML loader — verify the in-tree DB parses cleanly and populates the
 // matcher with a non-trivial number of signatures.
-// ───────────────────────────────────────────────────────────────────────
 
 TEST(PsyqHashLoader, LoadsInTreeDb) {
     PsyQMatcher m;
@@ -174,9 +168,7 @@ TEST(PsyqHashLoader, ExplicitLoadIsIdempotent) {
     EXPECT_EQ(m.getSignatureCount(), before);
 }
 
-// ───────────────────────────────────────────────────────────────────────
 // End-to-end synthetic-ELF detection
-// ───────────────────────────────────────────────────────────────────────
 
 namespace {
 

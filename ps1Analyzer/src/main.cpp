@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // ─── Overlay scanning mode ────────────────────────────
+  // Overlay scanning mode
   if (std::string(argv[1]) == "--scan-overlays") {
     if (argc < 3) {
       fmt::print(
@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // ─── Auto-detect BIN disc images ──────────────────────
+  // Auto-detect BIN disc images
   std::vector<uint8_t>
       extractedExe; // keeps data alive when extracted from disc
 
@@ -166,7 +166,7 @@ int main(int argc, char *argv[]) {
     fmt::print("Extracted to: {}\n\n", input_path);
   }
 
-  // ─── Load ELF or PS-EXE ──────────────────────────────
+  // Load ELF or PS-EXE
 
   ps1recomp::ElfParser parser;
   if (!parser.load(input_path)) {

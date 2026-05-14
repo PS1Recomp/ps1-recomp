@@ -19,7 +19,7 @@
 
 namespace ps1::psyq {
 
-// ── Global per-game configuration ─────────────────────────────────────────
+// Global per-game configuration
 
 /**
  * @brief Per-game configuration for the PsyQ HLE layer.
@@ -57,7 +57,7 @@ void configure(const HleConfig &cfg);
 /// stubs that need writeGP0/writeGP1 callbacks without re-binding them.
 const HleConfig &getConfig();
 
-// ── PsyQ SDK HLE implementations ─────────────────────────────────────────
+// PsyQ SDK HLE implementations
 
 /// VSync(n) — wait for n vertical blanks then return the total VBlank count.
 /// When n == 0, just drains pending callbacks and returns the current count.

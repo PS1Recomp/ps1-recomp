@@ -64,9 +64,7 @@ protected:
 
 } // namespace
 
-// ──────────────────────────────────────────────────────────
 // Memory routines — delegate to bios A0:0x2A..0x2D
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqLibcTest, MemcpyDispatchesA0_2A) {
   writeString(0x80100000u, "abcdef");
@@ -111,9 +109,7 @@ TEST_F(PsyqLibcTest, MemcmpDispatchesA0_2D) {
   EXPECT_NE(ctx.r[V0], 0u); // strings differ at byte 3
 }
 
-// ──────────────────────────────────────────────────────────
 // String routines — delegate to bios A0:0x15..0x1A
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqLibcTest, StrcpyDispatchesA0_15) {
   writeString(0x80100000u, "hello");
@@ -175,9 +171,7 @@ TEST_F(PsyqLibcTest, StrncmpDispatchesA0_1A) {
   EXPECT_EQ(ctx.r[V0], 0u); // first 3 bytes equal
 }
 
-// ──────────────────────────────────────────────────────────
 // Math / RNG — delegate to bios A0:0x10/0x11/0x1E/0x1F
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqLibcTest, AbsDispatchesA0_10) {
   ctx.r[A0] = static_cast<uint32_t>(-42);
@@ -202,9 +196,7 @@ TEST_F(PsyqLibcTest, RandIsDeterministicAfterSrand) {
   EXPECT_EQ(ctx.r[V0], r1);
 }
 
-// ──────────────────────────────────────────────────────────
 // atoi — standalone parse
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqLibcTest, AtoiParsesDecimal) {
   writeString(0x80100000u, "42");
@@ -233,9 +225,7 @@ TEST_F(PsyqLibcTest, AtoiReturnsZeroForNullPointer) {
   EXPECT_EQ(ctx.r[V0], 0u);
 }
 
-// ──────────────────────────────────────────────────────────
 // printf — standalone, gated on PS1_BIOS_DEBUG
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqLibcTest, PrintfReturnsCharCountEvenWhenSilent) {
   // PS1_BIOS_DEBUG is unset in the gtest harness by default, so stdout
@@ -267,9 +257,7 @@ TEST_F(PsyqLibcTest, PrintfTreatsNullStringAsLiteralNull) {
   EXPECT_EQ(ctx.r[V0], 8u); // "v=(null)" — 8 chars
 }
 
-// ──────────────────────────────────────────────────────────
 // sprintf — writes formatted result to PS1 RAM
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqLibcTest, SprintfWritesIntoBuffer) {
   writeString(0x80100020u, "x=%d hex=%x");
@@ -302,9 +290,7 @@ TEST_F(PsyqLibcTest, SprintfPercentPercentPassthrough) {
   EXPECT_EQ(readString(0x80100100u), "100%");
 }
 
-// ──────────────────────────────────────────────────────────
 // Registry coverage — canonical + aliased prefixes
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqLibcTest, RegistryDispatchesCanonicalAndAliases) {
   psyq_register_libc();

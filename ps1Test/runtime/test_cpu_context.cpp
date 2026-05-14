@@ -6,9 +6,7 @@
 
 using namespace ps1;
 
-// ──────────────────────────────────────────
 // Context Initialization
-// ──────────────────────────────────────────
 
 TEST(CPUContext, Reset) {
   CPUContext ctx;
@@ -45,9 +43,7 @@ TEST(CPUContext, StructLayout) {
   EXPECT_EQ(sizeof(CPUContext::cop2c), 32 * sizeof(uint32_t));
 }
 
-// ──────────────────────────────────────────
 // Register Aliases
-// ──────────────────────────────────────────
 
 TEST(CPUContext, RegisterAliases) {
   EXPECT_EQ(ZERO, 0u);
@@ -82,9 +78,7 @@ TEST(CPUContext, RegisterReadWrite) {
   EXPECT_EQ(ctx.lo, 100u);
 }
 
-// ──────────────────────────────────────────
 // COP0 Registers
-// ──────────────────────────────────────────
 
 TEST(CPUContext, COP0Registers) {
   CPUContext ctx;
@@ -107,9 +101,7 @@ TEST(CPUContext, COP0Registers) {
   EXPECT_EQ(ctx.cop0[COP0_PRID], 0x00000002u);
 }
 
-// ──────────────────────────────────────────
 // COP2/GTE Registers
-// ──────────────────────────────────────────
 
 TEST(CPUContext, GteDataRegisters) {
   CPUContext ctx;
@@ -145,9 +137,7 @@ TEST(CPUContext, GteControlRegisters) {
   EXPECT_EQ(ctx.cop2c[26], 0x00000100u);
 }
 
-// ──────────────────────────────────────────
 // PS1 Entry Point
-// ──────────────────────────────────────────
 
 TEST(CPUContext, PS1EntryPoint) {
   CPUContext ctx;

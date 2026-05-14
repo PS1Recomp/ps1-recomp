@@ -11,7 +11,7 @@
 
 using namespace ps1;
 
-// ─── Game Validation Framework ──────────────────────────
+// Game Validation Framework
 // Tests that verify the system can boot and run game-like workloads
 // without crashing. These don't test actual commercial games (which
 // require disc images), but validate the full hardware integration.
@@ -44,7 +44,7 @@ protected:
   }
 };
 
-// ─── Boot Sequence Tests ────────────────────────────────
+// Boot Sequence Tests
 
 TEST_F(GameValidationTest, MemoryIORoutingDoesntCrash) {
   // Simulate a game's boot sequence: writing to all I/O ports

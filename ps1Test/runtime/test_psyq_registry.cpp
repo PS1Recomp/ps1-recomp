@@ -42,9 +42,7 @@ protected:
 
 } // namespace
 
-// ──────────────────────────────────────────
 // Happy path: register + dispatch
-// ──────────────────────────────────────────
 
 TEST_F(PsyqRegistryTest, DispatchInvokesRegisteredFunction) {
   psyq_register("test_increment", &test_hle_increment);
@@ -75,9 +73,7 @@ TEST_F(PsyqRegistryTest, ReregisteringOverwritesBinding) {
   EXPECT_EQ(g_test_dispatch_calls.load(), 1); // increment not called again
 }
 
-// ──────────────────────────────────────────
 // Unknown name aborts (FATAL)
-// ──────────────────────────────────────────
 
 TEST_F(PsyqRegistryTest, DispatchUnknownNameAborts) {
   ctx.r[ps1::RA] = 0x80012340u;
@@ -88,9 +84,7 @@ TEST_F(PsyqRegistryTest, DispatchUnknownNameAborts) {
       "FATAL.*definitely_not_registered_xyz.*0x80012340");
 }
 
-// ──────────────────────────────────────────
 // init_defaults registers the 10 built-ins, idempotently
-// ──────────────────────────────────────────
 
 TEST_F(PsyqRegistryTest, InitDefaultsRegistersBuiltins) {
   psyq_registry_init_defaults();

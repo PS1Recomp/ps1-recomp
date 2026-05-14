@@ -7,7 +7,7 @@
 
 using namespace ps1;
 
-// ─── Test Fixture ────────────────────────────────────────
+// Test Fixture
 
 class GTETest : public ::testing::Test {
 protected:
@@ -51,7 +51,7 @@ protected:
   }
 };
 
-// ─── NCLIP ──────────────────────────────────────────────
+// NCLIP
 
 TEST_F(GTETest, NCLIP_CounterClockwise) {
   // Triangle: (0,0) (100,0) (0,100) → positive area
@@ -73,7 +73,7 @@ TEST_F(GTETest, NCLIP_Clockwise) {
   EXPECT_LT(mac0, 0); // Clockwise → negative
 }
 
-// ─── SQR ────────────────────────────────────────────────
+// SQR
 
 TEST_F(GTETest, SQR_Squares) {
   ctx.cop2d[GTE_IR1] = static_cast<uint32_t>(static_cast<int16_t>(100));
@@ -85,7 +85,7 @@ TEST_F(GTETest, SQR_Squares) {
   EXPECT_EQ(static_cast<int32_t>(ctx.cop2d[GTE_MAC3]), 40000);
 }
 
-// ─── AVSZ3 / AVSZ4 ─────────────────────────────────────
+// AVSZ3 / AVSZ4
 
 TEST_F(GTETest, AVSZ3_AverageZ) {
   ctx.cop2d[GTE_SZ1] = 100;
@@ -112,7 +112,7 @@ TEST_F(GTETest, AVSZ4_AverageZ) {
   EXPECT_EQ(ctx.cop2d[GTE_OTZ], 250u);
 }
 
-// ─── OP (Outer Product) ─────────────────────────────────
+// OP (Outer Product)
 
 TEST_F(GTETest, OP_CrossProduct) {
   // Rotation diagonal: R11=100, R22=200, R33=300
@@ -130,7 +130,7 @@ TEST_F(GTETest, OP_CrossProduct) {
   EXPECT_EQ(static_cast<int32_t>(ctx.cop2d[GTE_MAC2]), 0);
 }
 
-// ─── GPF (General Purpose Interpolation) ────────────────
+// GPF (General Purpose Interpolation)
 
 TEST_F(GTETest, GPF_Multiply) {
   ctx.cop2d[GTE_IR0] =
@@ -145,7 +145,7 @@ TEST_F(GTETest, GPF_Multiply) {
   EXPECT_EQ(static_cast<int32_t>(ctx.cop2d[GTE_MAC3]), 300);
 }
 
-// ─── MVMVA ──────────────────────────────────────────────
+// MVMVA
 
 TEST_F(GTETest, MVMVA_Identity) {
   setIdentityRotation();
@@ -169,7 +169,7 @@ TEST_F(GTETest, MVMVA_WithTranslation) {
   EXPECT_EQ(static_cast<int32_t>(ctx.cop2d[GTE_MAC3]), 3300);
 }
 
-// ─── FLAG register ──────────────────────────────────────
+// FLAG register
 
 TEST_F(GTETest, FlagClearOnCommand) {
   ctx.cop2c[GTE_FLAG] = 0xFFFFFFFF;
@@ -181,7 +181,7 @@ TEST_F(GTETest, FlagClearOnCommand) {
   EXPECT_EQ(ctx.cop2c[GTE_FLAG] & 0x7F87E000, 0u);
 }
 
-// ─── Register access ────────────────────────────────────
+// Register access
 
 TEST_F(GTETest, LZCR_PositiveValue) {
   GTE::writeData(&ctx, GTE_LZCS, 0x00010000); // bit 16 set

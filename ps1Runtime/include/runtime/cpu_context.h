@@ -39,7 +39,7 @@ struct CpuException : public std::exception {
   explicit CpuException(ExceptionCause c) : cause(c) {}
 };
 
-// ─── Register aliases ────────────────────────────────────
+// Register aliases
 
 enum Register : uint32_t {
   ZERO = 0,
@@ -76,7 +76,7 @@ enum Register : uint32_t {
   RA = 31,
 };
 
-// ─── COP0 Register indices ──────────────────────────────
+// COP0 Register indices
 
 enum COP0Reg : uint32_t {
   COP0_BPC = 3,      // Breakpoint on execute
@@ -92,7 +92,7 @@ enum COP0Reg : uint32_t {
   COP0_PRID = 15,    // Processor ID
 };
 
-// ─── CPU Context ────────────────────────────────────────
+// CPU Context
 
 /// PS1 R3000A CPU state — used by recompiled code
 /// Fields match what the InstructionEmitter and GteEmitter reference:

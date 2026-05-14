@@ -18,7 +18,7 @@ uint32_t sRandSeed = 1;
 
 void Bios::handleA0(uint32_t index) {
   switch (index) {
-  // ── String functions ──────────────────────
+  // String functions
   case 0x0A: { // bzero
     uint32_t dst = ctx_.r[A0];
     uint32_t n = ctx_.r[A1];
@@ -215,7 +215,7 @@ void Bios::handleA0(uint32_t index) {
     sRandSeed = ctx_.r[A0];
     break;
 
-  // ── Character functions ────────────────────
+  // Character functions
   case 0x25: // toupper
     ctx_.r[V0] = std::toupper(static_cast<unsigned char>(ctx_.r[A0]));
     break;
@@ -223,7 +223,7 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = std::tolower(static_cast<unsigned char>(ctx_.r[A0]));
     break;
 
-  // ── Memory functions ───────────────────────
+  // Memory functions
   case 0x27: { // bcopy (src, dst, len) — note: args reversed from memcpy
     uint32_t src = ctx_.r[A0];
     uint32_t dst = ctx_.r[A1];
@@ -295,7 +295,7 @@ void Bios::handleA0(uint32_t index) {
     break;
   }
 
-  // ── Heap ───────────────────────────────────
+  // Heap
   case 0x33: // malloc
     ctx_.r[V0] = heap_.malloc(ctx_.r[A0]);
     break;
@@ -339,12 +339,12 @@ void Bios::handleA0(uint32_t index) {
     BIOS_LOG("[BIOS] _exit({})\n", static_cast<int32_t>(ctx_.r[A0]));
     break;
 
-  // ── Printf ─────────────────────────────────
+  // Printf
   case 0x3F:
     stub_printf();
     break;
 
-  // ── GPU functions ───────────────────────────
+  // GPU functions
   case 0x46: { // GPU_dw — copy data block to GP0 (used by PutDispEnv init)
     // A0=src_addr, A1=count (words). Sends each word to GP0.
     uint32_t addr = ctx_.r[A0];
@@ -423,12 +423,12 @@ void Bios::handleA0(uint32_t index) {
     break;
   }
 
-  // ── Cache ──────────────────────────────────
+  // Cache
   case 0x40: // FlushCache — NOP in recompiler
   case 0x44: // FlushCache (alternate)
     break;
 
-  // ── PsyQ libapi: directory iteration (PS1 BIOS A0:42 / A0:43) ──
+  // PsyQ libapi: directory iteration (PS1 BIOS A0:42 / A0:43)
   // Real BIOS returns a pointer to the DIRENTRY out-buffer (a1) when a
   // matching file is found, NULL (0) on no-match.  We return 0 to signal
   // "no entry" cleanly — game's firstfile2 callers we've seen take the
@@ -445,7 +445,7 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = 0;
     break;
 
-  // ── CD-ROM stubs ───────────────────────────
+  // CD-ROM stubs
   case 0x70: // _bu_init
     BIOS_LOG("[BIOS] _bu_init() [STUB]\n");
     break;

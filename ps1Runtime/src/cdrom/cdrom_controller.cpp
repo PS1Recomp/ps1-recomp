@@ -9,7 +9,7 @@ static const bool s_cdVerbose = (std::getenv("PS1_BIOS_DEBUG") != nullptr);
 
 namespace ps1::cdrom {
 
-// ─── Helpers ────────────────────────────────────────────
+// Helpers
 
 uint32_t CdromController::msfToLba(uint8_t m, uint8_t s, uint8_t f) {
   return (m * 60 + s) * 75 + f;
@@ -30,7 +30,7 @@ uint8_t CdromController::fromBcd(uint8_t bcd) {
   return ((bcd >> 4) * 10) + (bcd & 0x0F);
 }
 
-// ─── Constructor / Reset ────────────────────────────────
+// Constructor / Reset
 
 CdromController::CdromController() { reset(); }
 
@@ -64,7 +64,7 @@ void CdromController::reset() {
 
 void CdromController::attachVirtualFs(VirtualFs *vfs) { vfs_ = vfs; }
 
-// ─── Status Byte ────────────────────────────────────────
+// Status Byte
 
 void CdromController::fireSecondaryNow() {
   if (!hasSecondaryResponse_)
@@ -94,7 +94,7 @@ uint8_t CdromController::buildStatusByte() const {
   return stat;
 }
 
-// ─── Register I/O ───────────────────────────────────────
+// Register I/O
 
 void CdromController::writeRegister(uint32_t addr, uint8_t val) {
   uint32_t port = addr & 3;
@@ -238,7 +238,7 @@ uint8_t CdromController::readRegister(uint32_t addr) {
   return 0;
 }
 
-// ─── Interrupt ──────────────────────────────────────────
+// Interrupt
 
 void CdromController::ackInterrupt(uint8_t val) {
   interruptFlag_ &= ~(val & 0x1F);
@@ -248,7 +248,7 @@ void CdromController::ackInterrupt(uint8_t val) {
 
 void CdromController::clearWaitingForAck() { waitingForAck_ = false; }
 
-// ─── Tick ───────────────────────────────────────────────
+// Tick
 
 void CdromController::tick(uint32_t cycles) {
   // Process pending command after delay
@@ -304,7 +304,7 @@ void CdromController::tick(uint32_t cycles) {
   }
 }
 
-// ─── Push Response ──────────────────────────────────────
+// Push Response
 
 void CdromController::pushResponse(CdromInt intType,
                                    std::initializer_list<uint8_t> data) {
@@ -319,7 +319,7 @@ void CdromController::pushResponse(CdromInt intType,
   }
 }
 
-// ─── Command Dispatch ───────────────────────────────────
+// Command Dispatch
 
 void CdromController::executeCommand(uint8_t cmd) {
   CDROM_LOG("[CDROM] Command 0x{:02X}\n", cmd);
@@ -399,7 +399,7 @@ void CdromController::executeCommand(uint8_t cmd) {
   paramFifo_.clear();
 }
 
-// ─── Command Implementations ────────────────────────────
+// Command Implementations
 
 void CdromController::cmdSync() {
   // CdlSync (0x00): abort any pending async command and return status.

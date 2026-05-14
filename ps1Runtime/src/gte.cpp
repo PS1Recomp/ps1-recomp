@@ -7,7 +7,7 @@
 
 namespace ps1 {
 
-// ─── CLZ (Count Leading Zeros) ──────────────────────────
+// CLZ (Count Leading Zeros)
 
 static int countLeadingZeros(uint32_t val) {
   if (val == 0)
@@ -39,7 +39,7 @@ static int countLeadingZeros(uint32_t val) {
 #endif
 }
 
-// ─── Newton-Raphson Division Table ──────────────────────
+// Newton-Raphson Division Table
 
 static const uint8_t s_unrTable[257] = {
     0xFF, 0xFD, 0xFB, 0xF9, 0xF7, 0xF5, 0xF3, 0xF1, 0xEF, 0xEE, 0xEC, 0xEA,
@@ -65,7 +65,7 @@ static const uint8_t s_unrTable[257] = {
     0x0D, 0x0C, 0x0C, 0x0B, 0x0B, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x08, 0x08,
     0x07, 0x07, 0x06, 0x06, 0x05};
 
-// ─── Register Access ────────────────────────────────────
+// Register Access
 
 uint32_t GTE::readData(CPUContext *ctx, uint8_t reg) {
   reg &= 0x1F;
@@ -120,7 +120,7 @@ void GTE::writeControl(CPUContext *ctx, uint8_t reg, uint32_t val) {
   ctx->cop2c[reg & 0x1F] = val;
 }
 
-// ─── Internal Helpers ───────────────────────────────────
+// Internal Helpers
 
 void GTE::getVector(CPUContext *ctx, uint8_t v, int16_t &vx, int16_t &vy,
                     int16_t &vz) {
@@ -347,7 +347,7 @@ uint32_t GTE::divide(CPUContext *ctx, uint16_t h, uint16_t sz3) {
   return res;
 }
 
-// ─── MVMVA core ─────────────────────────────────────────
+// MVMVA core
 
 void GTE::doMVMVA(CPUContext *ctx, uint8_t mx, uint8_t mv, uint8_t tv, bool sf,
                   bool lm) {
@@ -371,7 +371,7 @@ void GTE::doMVMVA(CPUContext *ctx, uint8_t mx, uint8_t mv, uint8_t tv, bool sf,
         static_cast<int32_t>(ctx->cop2d[GTE_MAC3]), lm);
 }
 
-// ─── RTPS core (single vertex) ──────────────────────────
+// RTPS core (single vertex)
 
 void GTE::doRTPS(CPUContext *ctx, uint8_t vecIdx, bool sf, bool lm,
                  bool lastVertex) {
@@ -407,7 +407,7 @@ void GTE::doRTPS(CPUContext *ctx, uint8_t vecIdx, bool sf, bool lm,
   }
 }
 
-// ─── Color clamp helper ─────────────────────────────────
+// Color clamp helper
 
 static uint8_t clampColor(CPUContext *ctx, int32_t val, uint32_t satFlag) {
   if (val < 0) {
@@ -421,7 +421,7 @@ static uint8_t clampColor(CPUContext *ctx, int32_t val, uint32_t satFlag) {
   return static_cast<uint8_t>(val);
 }
 
-// ─── NCS core (single vertex) ───────────────────────────
+// NCS core (single vertex)
 
 void GTE::doNCS(CPUContext *ctx, uint8_t vecIdx, bool sf, bool lm) {
   // Light matrix × normal → IR
@@ -439,7 +439,7 @@ void GTE::doNCS(CPUContext *ctx, uint8_t vecIdx, bool sf, bool lm) {
   pushRGB(ctx, r, g, b, cd);
 }
 
-// ─── NCDS core ──────────────────────────────────────────
+// NCDS core
 
 void GTE::doNCDS(CPUContext *ctx, uint8_t vecIdx, bool sf, bool lm) {
   doNCS(ctx, vecIdx, sf, lm);
@@ -477,7 +477,7 @@ void GTE::doNCDS(CPUContext *ctx, uint8_t vecIdx, bool sf, bool lm) {
   pushRGB(ctx, r2, g2, b2, cd);
 }
 
-// ─── NCCS core ──────────────────────────────────────────
+// NCCS core
 
 void GTE::doNCCS(CPUContext *ctx, uint8_t vecIdx, bool sf, bool lm) {
   // Light matrix × normal → IR
@@ -508,7 +508,7 @@ void GTE::doNCCS(CPUContext *ctx, uint8_t vecIdx, bool sf, bool lm) {
   pushRGB(ctx, r, g, b, cd);
 }
 
-// ─── DPCS core ──────────────────────────────────────────
+// DPCS core
 
 void GTE::doDPCS(CPUContext *ctx, bool sf, bool lm, uint8_t r, uint8_t g,
                  uint8_t b) {
@@ -539,9 +539,7 @@ void GTE::doDPCS(CPUContext *ctx, bool sf, bool lm, uint8_t r, uint8_t g,
   pushRGB(ctx, cr, cg, cb, cd);
 }
 
-// ═══════════════════════════════════════════════════════
 // PUBLIC GTE COMMANDS (22 total)
-// ═══════════════════════════════════════════════════════
 
 void GTE::RTPS(CPUContext *ctx, bool sf, bool lm) {
   ctx->cop2c[GTE_FLAG] = 0;

@@ -12,7 +12,7 @@
 
 namespace ps1recomp {
 
-// ─── GTE Register Names ──────────────────────────────────
+// GTE Register Names
 
 /// Data register names (cop2d, 0-31)
 std::string_view gteDataRegName(uint8_t reg);
@@ -20,7 +20,7 @@ std::string_view gteDataRegName(uint8_t reg);
 /// Control register names (cop2c, 0-31)
 std::string_view gteControlRegName(uint8_t reg);
 
-// ─── GTE Command Info ────────────────────────────────────
+// GTE Command Info
 
 struct GteCommandInfo {
     InstrId     id;
@@ -33,7 +33,7 @@ struct GteCommandInfo {
 /// Get info about a GTE command by InstrId
 const GteCommandInfo* getGteCommandInfo(InstrId id);
 
-// ─── GTE Emitter ─────────────────────────────────────────
+// GTE Emitter
 
 class GteEmitter {
 public:

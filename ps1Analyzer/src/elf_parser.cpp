@@ -10,7 +10,7 @@
 
 namespace ps1recomp {
 
-// ─── Load ────────────────────────────────────────────────
+// Load
 
 bool ElfParser::load(const std::string &path) {
   m_loaded = false;
@@ -44,7 +44,7 @@ bool ElfParser::load(const std::string &path) {
   return loadElf(path);
 }
 
-// ─── PS-EXE Loader ──────────────────────────────────────
+// PS-EXE Loader
 
 bool ElfParser::loadPsExe() {
   // PS-EXE header layout (2048 bytes):
@@ -95,7 +95,7 @@ bool ElfParser::loadPsExe() {
   return true;
 }
 
-// ─── ELF Loader ──────────────────────────────────────────
+// ELF Loader
 
 bool ElfParser::loadElf(const std::string &path) {
   // Parse with ELFIO
@@ -200,7 +200,7 @@ bool ElfParser::loadElf(const std::string &path) {
   return true;
 }
 
-// ─── Queries ─────────────────────────────────────────────
+// Queries
 
 const Section *ElfParser::getTextSection() const {
   return findSection(".text");
@@ -254,7 +254,7 @@ uint32_t ElfParser::getTotalDataSize() const {
   return total;
 }
 
-// ─── Static Helpers ──────────────────────────────────────
+// Static Helpers
 
 std::optional<uint32_t> ElfParser::vAddrToPhysical(uint32_t vaddr) {
   // KUSEG: 0x00000000 - 0x001FFFFF
@@ -282,7 +282,7 @@ bool ElfParser::isLikelyPsyQ(uint32_t addr) {
   return addr >= 0x800A0000;
 }
 
-// ─── Private ─────────────────────────────────────────────
+// Private
 
 bool ElfParser::validatePS1Elf(uint16_t machine, uint8_t elfClass,
                                uint8_t encoding) {

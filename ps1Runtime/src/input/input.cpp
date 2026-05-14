@@ -3,7 +3,7 @@
 
 namespace ps1::input {
 
-// ─── Memory Card ────────────────────────────────────────
+// Memory Card
 
 MemoryCard::MemoryCard() { reset(); }
 
@@ -106,7 +106,7 @@ uint8_t MemoryCard::transfer(uint8_t dataIn) {
   return 0xFF;
 }
 
-// ─── Input Controller ───────────────────────────────────
+// Input Controller
 
 InputController::InputController() { reset(); }
 
@@ -161,7 +161,7 @@ PadType InputController::getPadType(int port) const {
   return PadType::None;
 }
 
-// ─── SIO Register Access ────────────────────────────────
+// SIO Register Access
 
 void InputController::writeRegister(uint32_t addr, uint32_t val) {
   uint32_t offset = addr - 0x1F801040;
@@ -227,7 +227,7 @@ uint16_t InputController::readRegister16(uint32_t addr) const {
   return 0;
 }
 
-// ─── SIO Transfer State Machine ─────────────────────────
+// SIO Transfer State Machine
 
 uint8_t InputController::processSioTransfer(uint8_t dataIn) {
   const auto &port = ports_[selectedPort_];

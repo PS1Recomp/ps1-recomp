@@ -13,7 +13,7 @@
 
 namespace ps1recomp {
 
-// ─── Overlay Candidate ──────────────────────────────────
+// Overlay Candidate
 
 /// Result of scanning a single disc file for executable content
 struct OverlayCandidate {
@@ -41,7 +41,7 @@ struct OverlayCandidate {
   }
 };
 
-// ─── Scanner Options ────────────────────────────────────
+// Scanner Options
 
 struct OverlayScanOptions {
   float minMipsScore = 0.5f;          // Minimum valid MIPS ratio
@@ -52,7 +52,7 @@ struct OverlayScanOptions {
   std::string bootExeName;             // Boot EXE to exclude from scan
 };
 
-// ─── PS-X EXE Header ───────────────────────────────────
+// PS-X EXE Header
 
 /// PS-X EXE file header (2048 bytes, first sector of executable)
 struct PsxExeHeader {
@@ -69,7 +69,7 @@ struct PsxExeHeader {
   uint32_t spOffset;   // SP offset
 };
 
-// ─── Overlay Scanner ────────────────────────────────────
+// Overlay Scanner
 
 class OverlayScanner {
 public:

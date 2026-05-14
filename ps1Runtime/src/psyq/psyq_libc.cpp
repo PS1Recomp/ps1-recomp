@@ -15,7 +15,7 @@ namespace ps1::psyq {
 
 namespace {
 
-// ── Mirror `BIOS_LOG`'s gate so debug printf only fires under
+// Mirror `BIOS_LOG`'s gate so debug printf only fires under
 //    PS1_BIOS_DEBUG=1.  Cached in a function-local static so the
 //    getenv() call only happens once per process.
 bool isBiosDebug() {
@@ -23,13 +23,13 @@ bool isBiosDebug() {
   return v;
 }
 
-// ── BIOS A0/B0/C0 dispatch helpers (mirrors `psyq_libapi.cpp`) ──────────
+// BIOS A0/B0/C0 dispatch helpers (mirrors `psyq_libapi.cpp`)
 inline void dispatchA(recomp_context *ctx, uint32_t index) {
   ctx->r[T1] = index;
   ctx->bios->executeA0();
 }
 
-// ── Read a NUL-terminated PS1-RAM string, capped to keep a malformed
+// Read a NUL-terminated PS1-RAM string, capped to keep a malformed
 //    pointer from looping forever.  PsyQ format strings live in BSS or
 //    .rodata so 4 KiB is generous for sane inputs.
 std::string readCString(recomp_context *ctx, uint32_t addr,
@@ -45,7 +45,7 @@ std::string readCString(recomp_context *ctx, uint32_t addr,
   return out;
 }
 
-// ── Variadic argument fetcher.  o32 calling convention: $a0..$a3 are the
+// Variadic argument fetcher.  o32 calling convention: $a0..$a3 are the
 //    first four args; the rest spill at sp+0x10, sp+0x14, ...  printf-like
 //    callers consume `$a0` for `fmt`, so the first variadic lives at $a1.
 //    sprintf consumes `$a0=buf`, `$a1=fmt`, so its first variadic is $a2.
@@ -60,7 +60,7 @@ uint32_t fetchArg(recomp_context *ctx, unsigned argStartReg, unsigned i) {
   return ctx->mem->read32(sp + 0x10u + (absReg - A3 - 1u) * 4u);
 }
 
-// ── Format a printf-subset (`%d %i %u %x %X %p %c %s %%`) into `out`.
+// Format a printf-subset (`%d %i %u %x %X %p %c %s %%`) into `out`.
 //    Width/precision/length modifiers are parsed so they survive the
 //    consumed-character bookkeeping but their values are ignored — this
 //    matches stub_printf in bios.cpp and `formatFnt` in psyq_font.cpp.
@@ -154,13 +154,13 @@ size_t formatVa(recomp_context *ctx, const std::string &fmt,
 
 } // namespace
 
-// ── Memory routines — single source of truth in bios.cpp's A0 table ─────
+// Memory routines — single source of truth in bios.cpp's A0 table
 void hle_libc_memcpy(recomp_context *ctx)  { dispatchA(ctx, 0x2A); }
 void hle_libc_memset(recomp_context *ctx)  { dispatchA(ctx, 0x2B); }
 void hle_libc_memmove(recomp_context *ctx) { dispatchA(ctx, 0x2C); }
 void hle_libc_memcmp(recomp_context *ctx)  { dispatchA(ctx, 0x2D); }
 
-// ── String routines ─────────────────────────────────────────────────────
+// String routines
 void hle_libc_strcpy(recomp_context *ctx)  { dispatchA(ctx, 0x15); }
 void hle_libc_strcmp(recomp_context *ctx)  { dispatchA(ctx, 0x16); }
 void hle_libc_strlen(recomp_context *ctx)  { dispatchA(ctx, 0x17); }
@@ -168,17 +168,15 @@ void hle_libc_strncpy(recomp_context *ctx) { dispatchA(ctx, 0x18); }
 void hle_libc_strcat(recomp_context *ctx)  { dispatchA(ctx, 0x19); }
 void hle_libc_strncmp(recomp_context *ctx) { dispatchA(ctx, 0x1A); }
 
-// ── Math / RNG ──────────────────────────────────────────────────────────
+// Math / RNG
 void hle_libc_abs(recomp_context *ctx)  { dispatchA(ctx, 0x10); }
 void hle_libc_labs(recomp_context *ctx) { dispatchA(ctx, 0x11); }
 void hle_libc_rand(recomp_context *ctx) { dispatchA(ctx, 0x1E); }
 void hle_libc_srand(recomp_context *ctx) { dispatchA(ctx, 0x1F); }
 
-// ─────────────────────────────────────────────────────────────────────────
 //  atoi(s) — leading whitespace skip, optional sign, decimal digits only.
 //  Stops at first non-digit (no overflow detection beyond int32_t wrap, to
 //  match the historical PsyQ behaviour).  Returns 0 for empty/garbage input.
-// ─────────────────────────────────────────────────────────────────────────
 void hle_libc_atoi(recomp_context *ctx) {
   std::string s = readCString(ctx, ctx->r[A0]);
   size_t i = 0;
@@ -198,12 +196,10 @@ void hle_libc_atoi(recomp_context *ctx) {
   ctx->r[V0] = static_cast<uint32_t>(value);
 }
 
-// ─────────────────────────────────────────────────────────────────────────
 //  printf(fmt, ...) — debug stdout, gated on PS1_BIOS_DEBUG.  Returns the
 //  formatted-character count regardless of whether the gate suppresses
 //  the actual write, so callers that test the return value still observe
 //  realistic numbers.  Format args start at $a1 (a0 is the fmt pointer).
-// ─────────────────────────────────────────────────────────────────────────
 void hle_libc_printf(recomp_context *ctx) {
   std::string fmtStr = readCString(ctx, ctx->r[A0]);
   std::string out;
@@ -213,12 +209,10 @@ void hle_libc_printf(recomp_context *ctx) {
   ctx->r[V0] = static_cast<uint32_t>(n);
 }
 
-// ─────────────────────────────────────────────────────────────────────────
 //  sprintf(buf, fmt, ...) — write formatted bytes to PS1 RAM at $a0,
 //  including the trailing NUL.  Returns the character count *excluding*
 //  the NUL (libc convention).  Always runs — debug gating only suppresses
 //  the host stdout side of printf.  Format args start at $a2.
-// ─────────────────────────────────────────────────────────────────────────
 void hle_libc_sprintf(recomp_context *ctx) {
   uint32_t bufAddr = ctx->r[A0];
   std::string fmtStr = readCString(ctx, ctx->r[A1]);
@@ -234,7 +228,7 @@ void hle_libc_sprintf(recomp_context *ctx) {
   ctx->r[V0] = static_cast<uint32_t>(out.size());
 }
 
-// ─── Test-only state hooks ─────────────────────────────────────────────────
+// Test-only state hooks
 
 void psyq_libc_reset_for_tests() {
   // RNG state lives inside bios.cpp (`sRandSeed`), which exposes srand
@@ -242,7 +236,7 @@ void psyq_libc_reset_for_tests() {
   // Nothing local to reset here yet.
 }
 
-// ─── Registry wiring ───────────────────────────────────────────────────────
+// Registry wiring
 
 namespace {
 

@@ -31,7 +31,7 @@ namespace ps1recomp {
 
 namespace {
 
-// ─── SHA-256 (public-domain reference, compact) ──────────────────────────
+// SHA-256 (public-domain reference, compact)
 //
 // Operates on a single buffer in one shot — adequate for the small (<= 64KB)
 // function bodies we hash. Output is the 32-byte digest in big-endian order;
@@ -125,7 +125,7 @@ uint64_t sha256_high64(const uint8_t* data, size_t len) {
     return h;
 }
 
-// ─── String helpers ──────────────────────────────────────────────────────
+// String helpers
 
 PsyQSubsystem subsystemFromString(const std::string& s) {
     if (s == "graphics")   return PsyQSubsystem::Graphics;
@@ -180,7 +180,7 @@ std::string findDataFile(const std::string& filename) {
 
 } // namespace
 
-// ─── Constructor ─────────────────────────────────────────────────────────
+// Constructor
 
 PsyQMatcher::PsyQMatcher() {
     loadDefaults();
@@ -199,7 +199,7 @@ void PsyQMatcher::loadDefaults() {
     loadFromToml(sigs, meta);
 }
 
-// ─── Loader: explicit ────────────────────────────────────────────────────
+// Loader: explicit
 
 bool PsyQMatcher::loadFromToml(const std::string& sigsPath,
                                const std::string& metadataPath) {
@@ -295,7 +295,7 @@ bool PsyQMatcher::loadSignatures(const std::string& path) {
     }
 }
 
-// ─── Hash primitives ─────────────────────────────────────────────────────
+// Hash primitives
 
 uint32_t PsyQMatcher::maskImmediates(uint32_t word) {
     const uint32_t op = (word >> 26) & 0x3Fu;
@@ -358,7 +358,7 @@ uint64_t PsyQMatcher::parseHashHex(const std::string& hex) {
     return v;
 }
 
-// ─── Match driver ────────────────────────────────────────────────────────
+// Match driver
 
 void PsyQMatcher::matchFunctions(const ElfParser& elf, const FunctionFinder& finder) {
     m_matches.clear();
@@ -373,7 +373,7 @@ void PsyQMatcher::matchFunctions(const ElfParser& elf, const FunctionFinder& fin
     matchByHash(elf, finder);
 }
 
-// ─── Pass 1: Name Matching ───────────────────────────────────────────────
+// Pass 1: Name Matching
 
 void PsyQMatcher::matchByName(const ElfParser& elf) {
     for (const auto& sym : elf.getSymbols()) {
@@ -392,7 +392,7 @@ void PsyQMatcher::matchByName(const ElfParser& elf) {
     }
 }
 
-// ─── Pass 2: Prefix Matching ─────────────────────────────────────────────
+// Pass 2: Prefix Matching
 
 void PsyQMatcher::matchByPrefix(const ElfParser& elf, const FunctionFinder& finder) {
     for (const auto& func : finder.getFunctions()) {
@@ -417,7 +417,7 @@ void PsyQMatcher::matchByPrefix(const ElfParser& elf, const FunctionFinder& find
     }
 }
 
-// ─── Pass 3: Hash-based detection ────────────────────────────────────────
+// Pass 3: Hash-based detection
 
 namespace {
 constexpr uint32_t FULL_MATCH_SIZE_LIMIT = 24; // mirrors the Python generator
@@ -487,7 +487,7 @@ void PsyQMatcher::matchByHash(const ElfParser& elf, const FunctionFinder& finder
     }
 }
 
-// ─── Queries ─────────────────────────────────────────────────────────────
+// Queries
 
 std::vector<const PsyQMatch*> PsyQMatcher::getStubs() const {
     std::vector<const PsyQMatch*> out;
@@ -528,7 +528,7 @@ PsyQMatcher::LibraryCounts PsyQMatcher::getLibraryCounts() const {
     return c;
 }
 
-// ─── Subsystem Classification ────────────────────────────────────────────
+// Subsystem Classification
 
 PsyQSubsystem PsyQMatcher::classifySubsystem(const std::string& name) {
     if (name.empty()) return PsyQSubsystem::Other;
@@ -600,7 +600,7 @@ PsyQSubsystem PsyQMatcher::classifySubsystem(const std::string& name) {
     return PsyQSubsystem::Other;
 }
 
-// ─── String Helpers ──────────────────────────────────────────────────────
+// String Helpers
 
 const char* PsyQMatcher::subsystemName(PsyQSubsystem sub) {
     switch (sub) {

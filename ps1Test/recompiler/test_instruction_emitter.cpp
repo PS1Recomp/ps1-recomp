@@ -7,9 +7,7 @@
 
 using namespace ps1recomp;
 
-// ──────────────────────────────────────────
 // Encoding helpers (same as decoder tests)
-// ──────────────────────────────────────────
 
 static constexpr uint32_t encR(uint8_t op, uint8_t rs, uint8_t rt, uint8_t rd,
                                uint8_t shamt, uint8_t funct) {
@@ -37,9 +35,7 @@ static InstructionEmitter makeEmitter() {
   return emitter;
 }
 
-// ──────────────────────────────────────────
 // ALU Tests
-// ──────────────────────────────────────────
 
 TEST(InstructionEmitter, ALU_ADDU) {
   auto emitter = makeEmitter();
@@ -90,9 +86,7 @@ TEST(InstructionEmitter, ALU_BitwiseOps) {
   EXPECT_NE(code.find("^"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // Write-to-$zero Optimization
-// ──────────────────────────────────────────
 
 TEST(InstructionEmitter, SkipsWritesToZero) {
   auto emitter = makeEmitter();
@@ -108,9 +102,7 @@ TEST(InstructionEmitter, SkipsWritesToZero) {
   EXPECT_NE(code.find("NOP"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // Shift Tests
-// ──────────────────────────────────────────
 
 TEST(InstructionEmitter, Shifts) {
   auto emitter = makeEmitter();
@@ -127,9 +119,7 @@ TEST(InstructionEmitter, Shifts) {
   EXPECT_NE(code.find(">>"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // Multiply / Divide Tests
-// ──────────────────────────────────────────
 
 TEST(InstructionEmitter, MulDiv) {
   auto emitter = makeEmitter();
@@ -152,9 +142,7 @@ TEST(InstructionEmitter, MulDiv) {
   EXPECT_NE(code.find("!= 0"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // Load/Store Tests
-// ──────────────────────────────────────────
 
 TEST(InstructionEmitter, LoadWord) {
   auto emitter = makeEmitter();
@@ -192,9 +180,7 @@ TEST(InstructionEmitter, UnalignedLoadStore) {
   EXPECT_NE(code.find("DO_LWR"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // Branch Tests
-// ──────────────────────────────────────────
 
 TEST(InstructionEmitter, BranchBEQ) {
   auto emitter = makeEmitter();
@@ -228,9 +214,7 @@ TEST(InstructionEmitter, BranchComparisons) {
   EXPECT_NE(code.find("> 0"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // Jump Tests
-// ──────────────────────────────────────────
 
 TEST(InstructionEmitter, Jump_J) {
   auto emitter = makeEmitter();
@@ -265,9 +249,7 @@ TEST(InstructionEmitter, Jump_JR_NonRA) {
   EXPECT_NE(code.find("JUMP_INDIRECT"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // COP0 Tests
-// ──────────────────────────────────────────
 
 TEST(InstructionEmitter, COP0) {
   auto emitter = makeEmitter();
@@ -284,9 +266,7 @@ TEST(InstructionEmitter, COP0) {
   EXPECT_NE(code.find("cop0"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // GTE Tests
-// ──────────────────────────────────────────
 
 TEST(InstructionEmitter, GTE_RegisterMoves) {
   auto emitter = makeEmitter();
@@ -317,9 +297,7 @@ TEST(InstructionEmitter, GTE_Commands) {
   EXPECT_NE(code.find("ps1::GTE::NCLIP"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // NOP Handling
-// ──────────────────────────────────────────
 
 TEST(InstructionEmitter, NOP) {
   auto emitter = makeEmitter();
@@ -327,9 +305,7 @@ TEST(InstructionEmitter, NOP) {
   EXPECT_NE(code.find("NOP"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // Function Emission
-// ──────────────────────────────────────────
 
 TEST(InstructionEmitter, EmitFunction) {
   auto emitter = makeEmitter();
@@ -401,9 +377,7 @@ TEST(InstructionEmitter, EmitFunctionWithBranch) {
   EXPECT_NE(code.find("L_"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // Helpers
-// ──────────────────────────────────────────
 
 TEST(InstructionEmitter, RegHelper) {
   EXPECT_EQ(InstructionEmitter::reg(0), "(int32_t)0");

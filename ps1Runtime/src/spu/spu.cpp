@@ -6,11 +6,11 @@
 
 namespace ps1::spu {
 
-// ─── ADPCM Filter Coefficients ──────────────────────────
+// ADPCM Filter Coefficients
 constexpr int32_t SPU::ADPCM_FILTER_POS[5];
 constexpr int32_t SPU::ADPCM_FILTER_NEG[5];
 
-// ─── Constructor / Destructor ───────────────────────────
+// Constructor / Destructor
 
 SPU::SPU() { reset(); }
 
@@ -45,7 +45,7 @@ void SPU::reset() {
   cdDaReadPos_ = 0;
 }
 
-// ─── Register I/O ───────────────────────────────────────
+// Register I/O
 
 void SPU::writeRegister(uint32_t addr, uint16_t val) {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -271,7 +271,7 @@ uint16_t SPU::readRegister(uint32_t addr) const {
   return 0;
 }
 
-// ─── Sound RAM Access ───────────────────────────────────
+// Sound RAM Access
 
 void SPU::writeSoundRam(uint32_t addr, uint16_t val) {
   if (addr + 1 < SOUND_RAM_SIZE) {
@@ -306,7 +306,7 @@ void SPU::writeTransferData(uint16_t val) {
   }
 }
 
-// ─── XA / CD-DA ─────────────────────────────────────────
+// XA / CD-DA
 
 void SPU::pushXaSamples(const int16_t *samples, uint32_t count) {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -318,7 +318,7 @@ void SPU::pushCdDaSamples(const int16_t *samples, uint32_t count) {
   cdDaBuffer_.insert(cdDaBuffer_.end(), samples, samples + count);
 }
 
-// ─── Key On / Off ───────────────────────────────────────
+// Key On / Off
 
 void SPU::keyOnVoice(uint32_t idx) {
   Voice &v = voices_[idx];
@@ -343,7 +343,7 @@ void SPU::keyOffVoice(uint32_t idx) {
   v.keyOff = false;
 }
 
-// ─── ADPCM Decoding ────────────────────────────────────
+// ADPCM Decoding
 
 void SPU::advanceAdpcmBlock(Voice &v) {
   // Read the header byte of the 16-byte ADPCM block
@@ -423,7 +423,7 @@ int16_t SPU::decodeAdpcmSample(Voice &v) {
   return v.decodedSamples[v.decodedIndex];
 }
 
-// ─── ADSR ──────────────────────────────────────────────
+// ADSR
 
 void SPU::tickAdsr(Voice &v) {
   if (v.adsrPhase == AdsrPhase::Off) {
@@ -562,7 +562,7 @@ void SPU::tickAdsr(Voice &v) {
   v.currentVolume = static_cast<uint16_t>(v.adsrVolume);
 }
 
-// ─── Noise Generator ───────────────────────────────────
+// Noise Generator
 
 void SPU::tickNoiseGenerator() {
   // PS1 noise generator is a 15-bit LFSR
@@ -575,7 +575,7 @@ void SPU::tickNoiseGenerator() {
   }
 }
 
-// ─── Per-Voice Processing ──────────────────────────────
+// Per-Voice Processing
 
 void SPU::processVoice(uint32_t voiceIdx, int32_t &outL, int32_t &outR,
                        int16_t prevVoiceOutput) {
@@ -626,7 +626,7 @@ void SPU::processVoice(uint32_t voiceIdx, int32_t &outL, int32_t &outR,
   outR += right;
 }
 
-// ─── Main Sample Generation ────────────────────────────
+// Main Sample Generation
 
 void SPU::generateSamples(int16_t *outputBuffer, uint32_t numSamples) {
   std::lock_guard<std::mutex> lock(mutex_);

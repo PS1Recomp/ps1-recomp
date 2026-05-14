@@ -12,7 +12,7 @@
 using namespace ps1;
 using namespace ps1::psyq;
 
-// ── Fixture ──────────────────────────────────────────────────────────────────
+// Fixture
 
 class PsyqHleTest : public ::testing::Test {
 protected:
@@ -51,7 +51,7 @@ protected:
     }
 };
 
-// ── DrawSync ─────────────────────────────────────────────────────────────────
+// DrawSync
 
 TEST_F(PsyqHleTest, DrawSyncMode0ReturnsZero) {
     ctx.r[A0] = 0; // mode 0 = wait for completion
@@ -65,7 +65,7 @@ TEST_F(PsyqHleTest, DrawSyncMode1ReturnsZero) {
     EXPECT_EQ(ctx.r[V0], 0u);
 }
 
-// ── ResetGraph ────────────────────────────────────────────────────────────────
+// ResetGraph
 
 TEST_F(PsyqHleTest, ResetGraphIsNop) {
     ctx.r[A0] = 0;
@@ -75,7 +75,7 @@ TEST_F(PsyqHleTest, ResetGraphIsNop) {
     EXPECT_TRUE(gp1Words.empty());
 }
 
-// ── VSync ─────────────────────────────────────────────────────────────────────
+// VSync
 
 TEST_F(PsyqHleTest, VSyncWaitsOneFrame) {
     ctx.r[A0] = 1;
@@ -168,7 +168,7 @@ TEST_F(PsyqHleTest, VSyncSkipsDeliveryWhenFlagNeverRaised) {
     EXPECT_EQ(vblankDeliveries, 0);
 }
 
-// ── ClearOTag ─────────────────────────────────────────────────────────────────
+// ClearOTag
 
 TEST_F(PsyqHleTest, ClearOTagFillsEndMarker) {
     // Write a 4-entry OT starting at 0x1000
@@ -190,7 +190,7 @@ TEST_F(PsyqHleTest, ClearOTagNZeroIsNop) {
     EXPECT_EQ(ctx.r[V0], 0x2000u);
 }
 
-// ── ClearOTagR ────────────────────────────────────────────────────────────────
+// ClearOTagR
 
 TEST_F(PsyqHleTest, ClearOTagRLastEntryIsEndMarker) {
     const uint32_t base = 0x2000;
@@ -223,7 +223,7 @@ TEST_F(PsyqHleTest, ClearOTagRNZeroIsNop) {
     EXPECT_EQ(ctx.r[V0], 0x3000u);
 }
 
-// ── DrawOTag ─────────────────────────────────────────────────────────────────
+// DrawOTag
 
 TEST_F(PsyqHleTest, DrawOTagEmptyListEmitsNothing) {
     // Write a single terminal node at 0x1000
@@ -272,7 +272,7 @@ TEST_F(PsyqHleTest, DrawOTagTraversesChain) {
     EXPECT_EQ(gp0Words[1], 0xAAAAAAAAu); // from B
 }
 
-// ── SetDefDispEnv ─────────────────────────────────────────────────────────────
+// SetDefDispEnv
 
 TEST_F(PsyqHleTest, SetDefDispEnvWritesFields) {
     const uint32_t env = 0x3000;
@@ -294,7 +294,7 @@ TEST_F(PsyqHleTest, SetDefDispEnvWritesFields) {
     EXPECT_EQ(ctx.r[V0],            env);  // returns env ptr
 }
 
-// ── PutDispEnv ────────────────────────────────────────────────────────────────
+// PutDispEnv
 
 TEST_F(PsyqHleTest, PutDispEnvEmitsFourGP1Commands) {
     const uint32_t env = 0x4000;
@@ -317,7 +317,7 @@ TEST_F(PsyqHleTest, PutDispEnvEmitsFourGP1Commands) {
     EXPECT_EQ(gp1Words[3] >> 24, 0x08u);
 }
 
-// ── SetDefDrawEnv ─────────────────────────────────────────────────────────────
+// SetDefDrawEnv
 
 TEST_F(PsyqHleTest, SetDefDrawEnvWritesClipAndOffset) {
     const uint32_t env = 0x5000;
@@ -340,7 +340,7 @@ TEST_F(PsyqHleTest, SetDefDrawEnvWritesClipAndOffset) {
     EXPECT_EQ(ctx.r[V0], env);
 }
 
-// ── PutDrawEnv ────────────────────────────────────────────────────────────────
+// PutDrawEnv
 
 TEST_F(PsyqHleTest, PutDrawEnvEmitsGP0Commands) {
     const uint32_t env = 0x6000;

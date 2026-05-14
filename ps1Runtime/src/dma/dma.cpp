@@ -18,7 +18,7 @@ void DMA::reset() {
   dicr_ = 0;
 }
 
-// ─── Register I/O ───────────────────────────────────────
+// Register I/O
 
 void DMA::writeRegister(uint32_t addr, uint32_t val) {
   uint32_t offset = addr - 0x1F801080;
@@ -121,7 +121,7 @@ uint32_t DMA::readRegister(uint32_t addr) const {
   return 0;
 }
 
-// ─── Channel Control ────────────────────────────────────
+// Channel Control
 
 bool DMA::isChannelEnabled(uint32_t ch) const {
   return (dpcr_ >> (ch * 4 + 3)) & 1;
@@ -150,7 +150,7 @@ bool DMA::isFromRam(uint32_t ch) const {
   return (channels_[ch].channelControl >> 0) & 1; // bit0: 0=to RAM, 1=from RAM
 }
 
-// ─── Channel Execution ─────────────────────────────────
+// Channel Execution
 
 void DMA::executeChannel(uint32_t ch) {
   if (!mem_)

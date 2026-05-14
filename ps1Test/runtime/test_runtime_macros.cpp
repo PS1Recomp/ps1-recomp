@@ -6,9 +6,7 @@
 
 using namespace ps1;
 
-// ──────────────────────────────────────────
 // GTE Register Access
-// ──────────────────────────────────────────
 
 TEST(RuntimeMacros, GteReadWriteData) {
   CPUContext ctx;
@@ -35,9 +33,7 @@ TEST(RuntimeMacros, GteRegisterMasking) {
   EXPECT_EQ(gte_read_data(&ctx, 0), 0xABCDu);
 }
 
-// ──────────────────────────────────────────
 // Unaligned Loads (LWL / LWR)
-// ──────────────────────────────────────────
 
 TEST(RuntimeMacros, LWLAligned) {
   Memory mem;
@@ -91,9 +87,7 @@ TEST(RuntimeMacros, LWRPartialMerge) {
   EXPECT_EQ(result, (0x11223344u & 0xFFFFFF00) | (0xAABBCCDD >> 24));
 }
 
-// ──────────────────────────────────────────
 // Unaligned Stores (SWL / SWR)
-// ──────────────────────────────────────────
 
 TEST(RuntimeMacros, SWLFullWrite) {
   Memory mem;
@@ -119,9 +113,7 @@ TEST(RuntimeMacros, SWRFullWrite) {
   EXPECT_EQ(mem.read32(0x2000), 0xAABBCCDDu);
 }
 
-// ──────────────────────────────────────────
 // MEM_READ/WRITE Macros (via recomp_context)
-// ──────────────────────────────────────────
 
 TEST(RuntimeMacros, MemMacros32) {
   Memory mem;

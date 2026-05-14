@@ -9,7 +9,7 @@
 #include <runtime/cpu_context.h>
 #include <runtime/memory.h>
 
-// ─── Memory Access Macros ──────────────────────────────
+// Memory Access Macros
 // Used by InstructionEmitter for LB/LH/LW/SB/SH/SW
 
 #define MEM_READ8(ctx, addr) (ctx)->mem->read8(addr)
@@ -20,7 +20,7 @@
 #define MEM_WRITE16(ctx, addr, val) (ctx)->mem->write16(addr, val)
 #define MEM_WRITE32(ctx, addr, val) (ctx)->mem->write32(addr, val)
 
-// ─── Unaligned Load/Store ──────────────────────────────
+// Unaligned Load/Store
 // Used for LWL/LWR/SWL/SWR instructions
 
 inline uint32_t DO_LWL(recomp_context *ctx, uint32_t rt, uint32_t addr) {
@@ -105,7 +105,7 @@ inline void DO_SWR(recomp_context *ctx, uint32_t rt, uint32_t addr) {
   ctx->mem->write32(aligned, word);
 }
 
-// ─── GTE Register Access ──────────────────────────────
+// GTE Register Access
 // Used by GteEmitter for MFC2/MTC2/CFC2/CTC2
 
 inline uint32_t gte_read_data(ps1::CPUContext *ctx, uint8_t reg) {
@@ -124,7 +124,7 @@ inline void gte_write_control(ps1::CPUContext *ctx, uint8_t reg, uint32_t val) {
   ctx->cop2c[reg & 0x1F] = val;
 }
 
-// ─── Control flow and System macros ──────────────────────
+// Control flow and System macros
 #define BREAK(ctx) throw ps1::CpuException(ps1::ExceptionCause::Bp)
 
 // SYSCALL: EnterCritical ($a0=1) returns old SR IE bit in $v0,

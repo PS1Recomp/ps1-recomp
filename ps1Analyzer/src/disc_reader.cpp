@@ -12,7 +12,7 @@
 
 namespace ps1recomp {
 
-// ─── Open ───────────────────────────────────────────────
+// Open
 
 bool DiscReader::open(const std::string &binPath) {
   m_binPath = binPath;
@@ -29,7 +29,7 @@ bool DiscReader::open(const std::string &binPath) {
   return true;
 }
 
-// ─── Read Sector Data ───────────────────────────────────
+// Read Sector Data
 
 bool DiscReader::readSectorData(uint32_t lba, uint8_t *out) const {
   if (!m_fp)
@@ -46,7 +46,7 @@ bool DiscReader::readSectorData(uint32_t lba, uint8_t *out) const {
   return fread(out, 1, SECTOR_SIZE_DATA, m_fp) == SECTOR_SIZE_DATA;
 }
 
-// ─── Read Sectors ───────────────────────────────────────
+// Read Sectors
 
 std::vector<uint8_t> DiscReader::readSectors(uint32_t lba,
                                              uint32_t count) const {
@@ -60,7 +60,7 @@ std::vector<uint8_t> DiscReader::readSectors(uint32_t lba,
   return data;
 }
 
-// ─── Read File ──────────────────────────────────────────
+// Read File
 
 std::vector<uint8_t> DiscReader::readFile(const DiscFile &file) const {
   uint32_t sectorsNeeded =
@@ -73,7 +73,7 @@ std::vector<uint8_t> DiscReader::readFile(const DiscFile &file) const {
   return data;
 }
 
-// ─── Parse Filesystem ───────────────────────────────────
+// Parse Filesystem
 
 bool DiscReader::parseFilesystem() {
   if (!m_fp) {
@@ -117,7 +117,7 @@ bool DiscReader::parseFilesystem() {
   return true;
 }
 
-// ─── Parse Directory ────────────────────────────────────
+// Parse Directory
 
 bool DiscReader::parseDirectory(uint32_t lba, uint32_t size,
                                 const std::string &parentPath) {
@@ -194,7 +194,7 @@ bool DiscReader::parseDirectory(uint32_t lba, uint32_t size,
   return true;
 }
 
-// ─── Parse SYSTEM.CNF ───────────────────────────────────
+// Parse SYSTEM.CNF
 
 bool DiscReader::parseSystemCnf() {
   const DiscFile *cnf = findFile("SYSTEM.CNF");
@@ -240,7 +240,7 @@ bool DiscReader::parseSystemCnf() {
   return !m_bootFilename.empty();
 }
 
-// ─── Find File ──────────────────────────────────────────
+// Find File
 
 const DiscFile *DiscReader::findFile(const std::string &name) const {
   std::string upperName = toUpper(cleanFilename(name));
@@ -252,7 +252,7 @@ const DiscFile *DiscReader::findFile(const std::string &name) const {
   return nullptr;
 }
 
-// ─── Helpers ────────────────────────────────────────────
+// Helpers
 
 std::string DiscReader::cleanFilename(const std::string &raw) {
   std::string result = raw;

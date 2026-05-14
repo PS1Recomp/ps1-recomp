@@ -83,9 +83,7 @@ void matMul3x3(const int16_t a[3][3], const int16_t b[3][3], int16_t out[3][3]) 
 
 } // namespace
 
-// ─────────────────────────────────────────────────────────────────
 // Group 0.7
-// ─────────────────────────────────────────────────────────────────
 
 // SetGeomOffset(ofx, ofy):
 //   PsyQ stores OFX/OFY as 1/65536 fixed-point screen offsets.  The libgte
@@ -107,9 +105,7 @@ void hle_libgte_SetDQA(recomp_context *ctx) {
   ctx->cop2c[GTE_DQA] = ctx->r[A0] & 0xFFFFu;
 }
 
-// ─────────────────────────────────────────────────────────────────
 // Group 1.C — control-register loaders
-// ─────────────────────────────────────────────────────────────────
 
 // InitGeom(): on real PsyQ this enables COP2 in the COP0 status register
 // and clears a few defaults.  Our recompiled context always has GTE
@@ -175,9 +171,7 @@ void hle_libgte_SetFarColor(recomp_context *ctx) {
   ctx->cop2c[GTE_BFC] = ctx->r[A2];
 }
 
-// ─────────────────────────────────────────────────────────────────
 // Group 1.C — matrix builders
-// ─────────────────────────────────────────────────────────────────
 
 // RotMatrix(SVECTOR *r, MATRIX *m): build a YXZ Tait-Bryan rotation matrix
 // (M = Rz × Rx × Ry) into m->m[3][3] from Euler angles in r->{vx,vy,vz}.
@@ -267,9 +261,7 @@ void hle_libgte_MulMatrix(recomp_context *ctx) {
   ctx->r[V0] = p0;
 }
 
-// ─────────────────────────────────────────────────────────────────
 // Group 1.C — per-vertex transform wrappers
-// ─────────────────────────────────────────────────────────────────
 
 namespace {
 
@@ -323,9 +315,7 @@ void hle_libgte_RotTransPers(recomp_context *ctx) {
   ctx->r[V0] = ctx->cop2d[GTE_SZ3] >> 2;
 }
 
-// ─────────────────────────────────────────────────────────────────
 // Registry
-// ─────────────────────────────────────────────────────────────────
 
 void psyq_register_libgte() {
   // 0.7

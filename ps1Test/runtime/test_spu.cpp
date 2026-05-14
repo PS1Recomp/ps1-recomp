@@ -3,7 +3,7 @@
 
 using namespace ps1::spu;
 
-// ─── ADPCM Decoding Tests ──────────────────────────────
+// ADPCM Decoding Tests
 
 class SpuAdpcmTest : public ::testing::Test {
 protected:
@@ -80,7 +80,7 @@ TEST_F(SpuAdpcmTest, MultipleBlocksDontCrash) {
   EXPECT_TRUE(true);
 }
 
-// ─── ADSR Envelope Tests ────────────────────────────────
+// ADSR Envelope Tests
 
 class SpuAdsrTest : public ::testing::Test {
 protected:
@@ -143,7 +143,7 @@ TEST_F(SpuAdsrTest, KeyOffTransitionsToRelease) {
   EXPECT_TRUE(true);
 }
 
-// ─── Volume Tests ───────────────────────────────────────
+// Volume Tests
 
 class SpuVolumeTest : public ::testing::Test {
 protected:
@@ -171,7 +171,7 @@ TEST_F(SpuVolumeTest, RegisterReadback) {
   EXPECT_EQ(spu.readRegister(0x1F801D82), 0x1234);
 }
 
-// ─── SPU Reverb Tests ───────────────────────────────────
+// SPU Reverb Tests
 
 class SpuReverbTest : public ::testing::Test {
 protected:
@@ -190,7 +190,7 @@ TEST_F(SpuReverbTest, ReverbRegisterWriteDoesntCrash) {
   EXPECT_TRUE(true);
 }
 
-// ─── XA-ADPCM Tests ────────────────────────────────────
+// XA-ADPCM Tests
 
 class XaAdpcmTest : public ::testing::Test {
 protected:
@@ -243,7 +243,7 @@ TEST_F(XaAdpcmTest, CdDaSamplesAreMixed) {
   EXPECT_TRUE(hasNonZero);
 }
 
-// ─── Sound RAM Tests ────────────────────────────────────
+// Sound RAM Tests
 
 TEST(SpuSoundRam, WriteAndReadBack) {
   SPU spu;
@@ -267,7 +267,7 @@ TEST(SpuSoundRam, TransferViaRegister) {
   EXPECT_EQ(spu.readSoundRam(8), 0xDEAD);
 }
 
-// ─── Control Register Tests ─────────────────────────────
+// Control Register Tests
 
 TEST(SpuControl, SpuCtrlReadback) {
   SPU spu;

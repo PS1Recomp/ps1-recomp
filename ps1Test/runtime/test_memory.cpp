@@ -6,9 +6,7 @@
 
 using namespace ps1;
 
-// ──────────────────────────────────────────
 // Basic Read/Write
-// ──────────────────────────────────────────
 
 TEST(Memory, ReadWrite8) {
   Memory mem;
@@ -41,9 +39,7 @@ TEST(Memory, ReadWrite32LittleEndian) {
   EXPECT_EQ(mem.read8(0x00002003), 0xDE);
 }
 
-// ──────────────────────────────────────────
 // Address Mirroring (KSEG0 / KSEG1)
-// ──────────────────────────────────────────
 
 TEST(Memory, KSEG0Mirror) {
   Memory mem;
@@ -71,9 +67,7 @@ TEST(Memory, CrossMirrorWrite) {
   EXPECT_EQ(mem.read32(0xA0030000), 0xAAAABBBBu);
 }
 
-// ──────────────────────────────────────────
 // Scratchpad (Data Cache)
-// ──────────────────────────────────────────
 
 TEST(Memory, ScratchpadReadWrite) {
   Memory mem;
@@ -94,9 +88,7 @@ TEST(Memory, ScratchpadIsolated) {
   EXPECT_EQ(mem.read32(0x00000000), 0xBBBBBBBBu);
 }
 
-// ──────────────────────────────────────────
 // BIOS ROM
-// ──────────────────────────────────────────
 
 TEST(Memory, BiosReadOnly) {
   Memory mem;
@@ -119,9 +111,7 @@ TEST(Memory, BiosLoadViaDirect) {
   EXPECT_EQ(mem.read8(0x1FC00001), 0x53u);
 }
 
-// ──────────────────────────────────────────
 // Reset
-// ──────────────────────────────────────────
 
 TEST(Memory, Reset) {
   Memory mem;
@@ -135,9 +125,7 @@ TEST(Memory, Reset) {
   EXPECT_EQ(mem.read8(0x1FC00000), 0xFFu); // BIOS stays 0xFF
 }
 
-// ──────────────────────────────────────────
 // Unmapped Regions
-// ──────────────────────────────────────────
 
 TEST(Memory, UnmappedReturnsZero) {
   Memory mem;
@@ -145,9 +133,7 @@ TEST(Memory, UnmappedReturnsZero) {
   EXPECT_EQ(mem.read32(0x1F801000), 0u);
 }
 
-// ──────────────────────────────────────────
 // Direct Pointer Access
-// ──────────────────────────────────────────
 
 TEST(Memory, DirectRamAccess) {
   Memory mem;

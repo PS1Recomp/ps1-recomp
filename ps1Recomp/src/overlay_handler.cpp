@@ -9,7 +9,7 @@
 
 namespace ps1recomp {
 
-// ─── Config Loading ──────────────────────────────────────
+// Config Loading
 
 bool OverlayHandler::loadFromConfig(const std::string &configPath) {
   try {
@@ -50,13 +50,13 @@ bool OverlayHandler::loadFromConfig(const std::string &configPath) {
   }
 }
 
-// ─── Overlay Management ──────────────────────────────────
+// Overlay Management
 
 void OverlayHandler::addOverlay(OverlaySection section) {
   m_overlays.push_back(std::move(section));
 }
 
-// ─── Address Lookup ──────────────────────────────────────
+// Address Lookup
 
 bool OverlayHandler::isOverlayAddress(uint32_t addr) const {
   return findOverlay(addr) != nullptr;
@@ -82,7 +82,7 @@ OverlayHandler::findConflicts(uint32_t addr) const {
   return result;
 }
 
-// ─── Naming ──────────────────────────────────────────────
+// Naming
 
 std::string OverlayHandler::qualifiedName(uint32_t addr) const {
   auto conflicts = findConflicts(addr);
@@ -101,7 +101,7 @@ std::string OverlayHandler::qualifiedName(uint32_t addr) const {
   return fmt::format("overlay_{}__{:08X}", conflicts[0]->name, addr);
 }
 
-// ─── Dispatch Table Emission ────────────────────────────
+// Dispatch Table Emission
 
 std::string OverlayHandler::emitDispatchTable() const {
   if (m_overlays.empty()) {

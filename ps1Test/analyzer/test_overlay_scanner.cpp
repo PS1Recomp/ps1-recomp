@@ -4,7 +4,7 @@
 
 using namespace ps1recomp;
 
-// ─── Helper: build a minimal PS-X EXE blob ─────────────
+// Helper: build a minimal PS-X EXE blob
 
 static std::vector<uint8_t> makePsxExe(uint32_t pc, uint32_t tAddr,
                                         uint32_t tSize,
@@ -26,7 +26,7 @@ static std::vector<uint8_t> makePsxExe(uint32_t pc, uint32_t tAddr,
   return data;
 }
 
-// ─── Helper: build MIPS code buffer ─────────────────────
+// Helper: build MIPS code buffer
 
 static std::vector<uint8_t> makeMipsCode(const std::vector<uint32_t> &words) {
   std::vector<uint8_t> data(words.size() * 4);
@@ -36,7 +36,7 @@ static std::vector<uint8_t> makeMipsCode(const std::vector<uint32_t> &words) {
   return data;
 }
 
-// ─── PsxExeHeader tests ────────────────────────────────
+// PsxExeHeader tests
 
 TEST(OverlayScannerTest, ParsePsxExeHeaderValid) {
   auto exe = makePsxExe(0x80010000, 0x80010000, 4096);
@@ -59,7 +59,7 @@ TEST(OverlayScannerTest, ParsePsxExeHeaderTooSmall) {
   EXPECT_FALSE(hdr.has_value());
 }
 
-// ─── MIPS Score tests ──────────────────────────────────
+// MIPS Score tests
 
 TEST(OverlayScannerTest, MipsScoreAllNop) {
   // All NOPs — valid but heavily penalized
@@ -107,7 +107,7 @@ TEST(OverlayScannerTest, MipsScoreEmptyData) {
   EXPECT_EQ(score, 0.0f);
 }
 
-// ─── Function detection tests ──────────────────────────
+// Function detection tests
 
 TEST(OverlayScannerTest, DetectFunctionPrologues) {
   std::vector<uint32_t> code = {
@@ -138,7 +138,7 @@ TEST(OverlayScannerTest, DetectFunctionPrologues) {
   }
 }
 
-// ─── RAM base inference tests ──────────────────────────
+// RAM base inference tests
 
 TEST(OverlayScannerTest, InferRamBaseFromLuiOri) {
   std::vector<uint32_t> code = {
@@ -179,7 +179,7 @@ TEST(OverlayScannerTest, InferRamBaseNoCode) {
   EXPECT_EQ(base, 0u);
 }
 
-// ─── ScanFile tests ────────────────────────────────────
+// ScanFile tests
 
 TEST(OverlayScannerTest, ScanFilePsxExe) {
   std::vector<uint32_t> code = {
@@ -242,7 +242,7 @@ TEST(OverlayScannerTest, ScanFileNotCode) {
   EXPECT_FALSE(result.isLikelyCode());
 }
 
-// ─── TOML export tests ─────────────────────────────────
+// TOML export tests
 
 TEST(OverlayScannerTest, ExportTomlSingleOverlay) {
   OverlayCandidate c;

@@ -8,9 +8,7 @@
 
 using namespace ps1recomp;
 
-// ──────────────────────────────────────────
 // Helper: create a temporary TOML config
-// ──────────────────────────────────────────
 
 static std::string createTempConfig(const std::string &content) {
   auto path = std::filesystem::temp_directory_path() / "test_overlay.toml";
@@ -20,9 +18,7 @@ static std::string createTempConfig(const std::string &content) {
   return path.string();
 }
 
-// ──────────────────────────────────────────
 // Basic Overlay Management
-// ──────────────────────────────────────────
 
 TEST(OverlayHandler, AddOverlay) {
   OverlayHandler handler;
@@ -49,9 +45,7 @@ TEST(OverlayHandler, OverlayData) {
   EXPECT_EQ(overlays[0].functions.size(), 2u);
 }
 
-// ──────────────────────────────────────────
 // Address Lookup
-// ──────────────────────────────────────────
 
 TEST(OverlayHandler, IsOverlayAddress) {
   OverlayHandler handler;
@@ -98,9 +92,7 @@ TEST(OverlayHandler, AddressBoundaries) {
   EXPECT_FALSE(handler.isOverlayAddress(0x8003FFFF));
 }
 
-// ──────────────────────────────────────────
 // Conflict Detection
-// ──────────────────────────────────────────
 
 TEST(OverlayHandler, FindConflicts) {
   OverlayHandler handler;
@@ -123,9 +115,7 @@ TEST(OverlayHandler, FindConflicts) {
   EXPECT_TRUE(conflicts.empty());
 }
 
-// ──────────────────────────────────────────
 // Qualified Naming
-// ──────────────────────────────────────────
 
 TEST(OverlayHandler, QualifiedName) {
   OverlayHandler handler;
@@ -145,9 +135,7 @@ TEST(OverlayHandler, QualifiedNameNoOverlay) {
   EXPECT_EQ(name, "func_80010000");
 }
 
-// ──────────────────────────────────────────
 // Dispatch Table Emission
-// ──────────────────────────────────────────
 
 TEST(OverlayHandler, EmitDispatchTable) {
   OverlayHandler handler;
@@ -170,9 +158,7 @@ TEST(OverlayHandler, EmitDispatchTableEmpty) {
   EXPECT_NE(table.find("No overlays"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // Config Loading
-// ──────────────────────────────────────────
 
 TEST(OverlayHandler, LoadFromConfig) {
   // 0x10000=65536, 0x80040000=2147745792, 0x8000=32768

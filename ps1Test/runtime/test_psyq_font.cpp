@@ -64,9 +64,7 @@ protected:
 
 } // namespace
 
-// ──────────────────────────────────────────────────────────
 // FntOpen
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqFontTest, FntOpenReturnsZeroFirstCall) {
   ctx.r[A0] = 32; ctx.r[A1] = 32;
@@ -108,9 +106,7 @@ TEST_F(PsyqFontTest, FntOpenStoresIsbgAndCapacity) {
   EXPECT_STREQ(psyq_font_slot_buffer(static_cast<int>(id)), "ABCD");
 }
 
-// ──────────────────────────────────────────────────────────
 // FntPrint — formatting
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqFontTest, FntPrintAppendsLiteral) {
   // Open with no capacity limit (n=0 → unlimited in our impl).
@@ -166,9 +162,7 @@ TEST_F(PsyqFontTest, FntPrintRejectsUnopenedSlot) {
   EXPECT_EQ(static_cast<int32_t>(ctx.r[V0]), -1);
 }
 
-// ──────────────────────────────────────────────────────────
 // FntFlush
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqFontTest, FntFlushEmitsFillRectWhenIsbgSet) {
   ctx.r[A0] = 16; ctx.r[A1] = 24;
@@ -219,9 +213,7 @@ TEST_F(PsyqFontTest, FntFlushClearsBuffer) {
   EXPECT_STREQ(psyq_font_slot_buffer(static_cast<int>(id)), "");
 }
 
-// ──────────────────────────────────────────────────────────
 // FntLoad — bookkeeping NOP
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqFontTest, FntLoadDoesNotCrash) {
   ctx.r[A0] = 960; ctx.r[A1] = 256;
@@ -230,9 +222,7 @@ TEST_F(PsyqFontTest, FntLoadDoesNotCrash) {
   EXPECT_TRUE(gp0Sink.empty());
 }
 
-// ──────────────────────────────────────────────────────────
 // FntSystem
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqFontTest, FntSystemReturnsPreviousDefault) {
   ctx.r[A0] = 0;
@@ -268,9 +258,7 @@ TEST_F(PsyqFontTest, FntPrintSystemDefaultRoutesToFntSystemSlot) {
   EXPECT_STREQ(psyq_font_slot_buffer(1), "via default");
 }
 
-// ──────────────────────────────────────────────────────────
 // Registry coverage
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqFontTest, RegistryDispatchesAllFontNames) {
   psyq_register_libgpu_font();

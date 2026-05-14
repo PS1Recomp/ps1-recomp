@@ -5,7 +5,7 @@
 
 namespace ps1 {
 
-// ─── Simple TOML-like parser ────────────────────────────
+// Simple TOML-like parser
 // Supports: [section], key = "value", key = number, key = true/false
 // This avoids requiring the toml11 dependency at runtime.
 

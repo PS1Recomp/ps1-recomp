@@ -89,7 +89,7 @@ protected:
 
 } // namespace
 
-// ─── InitGeom — NOP ────────────────────────────────────────
+// InitGeom — NOP
 
 TEST_F(PsyqGteTest, InitGeomDoesNotCrash) {
   // No state preconditions — just must return without aborting.
@@ -97,7 +97,7 @@ TEST_F(PsyqGteTest, InitGeomDoesNotCrash) {
   SUCCEED();
 }
 
-// ─── Setters: matrix loaders ───────────────────────────────
+// Setters: matrix loaders
 
 TEST_F(PsyqGteTest, SetRotMatrixCopiesNineShortsIntoCop2C0to4) {
   // Load distinct values and verify packing.  Bytes 0..1 = m[0][0],
@@ -171,7 +171,7 @@ TEST_F(PsyqGteTest, SetFarColorWritesRFCGFCBFC) {
   EXPECT_EQ(ctx.cop2c[GTE_BFC], 0x300u);
 }
 
-// ─── Matrix builders ───────────────────────────────────────
+// Matrix builders
 
 TEST_F(PsyqGteTest, RotMatrixZeroAnglesProducesIdentity) {
   // r = (0, 0, 0) → cos=4096, sin=0 on every axis → M = I.
@@ -286,7 +286,7 @@ TEST_F(PsyqGteTest, MulMatrixDiagonalProductDoublesCorrectly) {
   EXPECT_EQ(readMatShort(MAT_PTR, 0, 1), 0);
 }
 
-// ─── Per-vertex transforms ─────────────────────────────────
+// Per-vertex transforms
 
 TEST_F(PsyqGteTest, RotTransIdentityRTZeroTRReturnsInputVector) {
   // RT = I (1.3.12, diagonal = 4096), TR = 0.
@@ -367,7 +367,7 @@ TEST_F(PsyqGteTest, RotTransPersWritesOutputsAndDoesNotCrash) {
   EXPECT_NE(mem.read32(FLAG_PTR), 0xDEADBEEFu);
 }
 
-// ─── Registry coverage ─────────────────────────────────────
+// Registry coverage
 
 TEST_F(PsyqGteTest, RegisterLibgteCoversAllNewNames) {
   psyq_register_libgte();

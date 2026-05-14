@@ -143,7 +143,6 @@ inline int normaliseId(int id) {
 
 } // namespace
 
-// ─────────────────────────────────────────────────────────────────────────
 //  FntOpen(x, y, w, h, isbg, n)
 //   a0 = x, a1 = y, a2 = w, a3 = h
 //   sp+0x10 = isbg, sp+0x14 = n
@@ -153,7 +152,6 @@ inline int normaliseId(int id) {
 //  primitive buffer in BSS, but we keep all of that in C++ so the recompiled
 //  game's BSS layout is irrelevant.  This sidesteps the Crash crash where the
 //  PS1-side buffer pointer table dispatches through an uninitialised vtable.
-// ─────────────────────────────────────────────────────────────────────────
 void hle_libgpu_FntOpen(recomp_context *ctx) {
   int16_t x = static_cast<int16_t>(ctx->r[A0]);
   int16_t y = static_cast<int16_t>(ctx->r[A1]);
@@ -181,7 +179,6 @@ void hle_libgpu_FntOpen(recomp_context *ctx) {
   ctx->r[V0] = static_cast<uint32_t>(id);
 }
 
-// ─────────────────────────────────────────────────────────────────────────
 //  FntPrint(id, fmt, ...)
 //   a0 = id (or -1 for "system default")
 //   a1 = fmt (PS1 RAM pointer)
@@ -190,7 +187,6 @@ void hle_libgpu_FntOpen(recomp_context *ctx) {
 //
 //  We respect the slot's `capacity` field (PsyQ silently truncates instead
 //  of overflowing the per-stream primitive buffer).
-// ─────────────────────────────────────────────────────────────────────────
 void hle_libgpu_FntPrint(recomp_context *ctx) {
   int32_t rawId = static_cast<int32_t>(ctx->r[A0]);
   int id = (rawId < 0) ? g_systemDefault : normaliseId(rawId);
@@ -216,7 +212,6 @@ void hle_libgpu_FntPrint(recomp_context *ctx) {
   ctx->r[V0] = 0;
 }
 
-// ─────────────────────────────────────────────────────────────────────────
 //  FntFlush(id)
 //   a0 = id (or -1 for "system default")
 //   v0 = id processed
@@ -226,7 +221,6 @@ void hle_libgpu_FntPrint(recomp_context *ctx) {
 //  is to (optionally) clear the window with GP0 FillRect, drop the text on
 //  the floor, and reset the buffer.  warnOnceFor() makes the reduced
 //  fidelity visible in the log.
-// ─────────────────────────────────────────────────────────────────────────
 void hle_libgpu_FntFlush(recomp_context *ctx) {
   int32_t rawId = static_cast<int32_t>(ctx->r[A0]);
   int id = (rawId < 0) ? g_systemDefault : normaliseId(rawId);
@@ -252,25 +246,21 @@ void hle_libgpu_FntFlush(recomp_context *ctx) {
   ctx->r[V0] = static_cast<uint32_t>(id);
 }
 
-// ─────────────────────────────────────────────────────────────────────────
 //  FntLoad(tx, ty) — would upload the 8x8 1bpp font + CLUT to VRAM at
 //  (tx, ty).  We don't ship the glyph table, so this is bookkeeping only;
 //  warnOnceFor surfaces it in the log if anything actually relies on the
 //  texture being present.
-// ─────────────────────────────────────────────────────────────────────────
 void hle_libgpu_FntLoad(recomp_context *ctx) {
   (void)ctx; // tx/ty intentionally unused
   warnOnceFor("libgpu_FntLoad");
 }
 
-// ─────────────────────────────────────────────────────────────────────────
 //  FntSystem(n) — set the slot id used by FntPrint(-1, ...).
 //  v0 = previous default.
 //
 //  PsyQ exposes this as `SetDumpFnt` on later SDK versions; both names are
 //  registered against this handler so games linking either flavour resolve
 //  through the registry without an extra alias.
-// ─────────────────────────────────────────────────────────────────────────
 void hle_libgpu_FntSystem(recomp_context *ctx) {
   int prev = g_systemDefault;
   int n = static_cast<int>(static_cast<int32_t>(ctx->r[A0]));
@@ -278,7 +268,7 @@ void hle_libgpu_FntSystem(recomp_context *ctx) {
   ctx->r[V0] = static_cast<uint32_t>(prev);
 }
 
-// ─── Test-only state hooks ─────────────────────────────────────────────────
+// Test-only state hooks
 
 void psyq_font_reset_for_tests() {
   for (auto &s : g_slots) s = FntSlot{};
@@ -292,7 +282,7 @@ const char *psyq_font_slot_buffer(int id) {
   return g_slots[id].buffer.c_str();
 }
 
-// ─── Registry wiring ───────────────────────────────────────────────────────
+// Registry wiring
 
 void psyq_register_libgpu_font() {
   psyq_register("libgpu_FntOpen",   &hle_libgpu_FntOpen);

@@ -39,7 +39,7 @@ bool SaveState::save(const std::string &path, const recomp_context &ctx,
   auto headerPos = f.tellp();
   writeBytes(f, &header, sizeof(header));
 
-  // ── CPU Context ──────────────────────────────────
+  // CPU Context
   // GPRs (32 × 4 bytes = 128 bytes)
   writeBytes(f, ctx.r, sizeof(ctx.r));
   // HI, LO, PC
@@ -52,28 +52,28 @@ bool SaveState::save(const std::string &path, const recomp_context &ctx,
   writeBytes(f, ctx.cop2d, sizeof(ctx.cop2d));
   writeBytes(f, ctx.cop2c, sizeof(ctx.cop2c));
 
-  // ── RAM (2MB) ────────────────────────────────────
+  // RAM (2MB)
   writeBytes(f, mem.ramPtr(), Memory::RAM_SIZE);
 
-  // ── Scratchpad (1KB) ─────────────────────────────
+  // Scratchpad (1KB)
   writeBytes(f, mem.scratchpadPtr(), Memory::SCRATCHPAD_SIZE);
 
-  // ── GPU VRAM (1024×512×2 = 1MB) ──────────────────
+  // GPU VRAM (1024×512×2 = 1MB)
   writeBytes(f, gpu.getVRAM(), 1024 * 512 * sizeof(gpu::Color16));
 
-  // ── GPU State ────────────────────────────────────
+  // GPU State
   uint32_t gpustat = gpu.readGPUSTAT();
   writeBytes(f, &gpustat, sizeof(gpustat));
 
-  // ── SPU Sound RAM (512KB) ────────────────────────
+  // SPU Sound RAM (512KB)
   writeBytes(f, spu.soundRamPtr(), 512 * 1024);
 
-  // ── SPU Registers snapshot ───────────────────────
+  // SPU Registers snapshot
   // Save key registers (SPUCNT, master volume, key on/off state)
   uint16_t spuCnt = spu.readRegister(0x1F801DAA);
   writeBytes(f, &spuCnt, sizeof(spuCnt));
 
-  // ── DMA State ────────────────────────────────────
+  // DMA State
   // Save DPCR and DICR
   uint32_t dpcr = dma.readRegister(0x1F8010F0);
   uint32_t dicr = dma.readRegister(0x1F8010F4);
@@ -89,13 +89,13 @@ bool SaveState::save(const std::string &path, const recomp_context &ctx,
     writeBytes(f, &chcr, sizeof(chcr));
   }
 
-  // ── IRQ State ────────────────────────────────────
+  // IRQ State
   uint32_t istat = irq.readIStat();
   uint32_t imask = irq.readIMask();
   writeBytes(f, &istat, sizeof(istat));
   writeBytes(f, &imask, sizeof(imask));
 
-  // ── Update header with checksum ──────────────────
+  // Update header with checksum
   // Compute checksum of RAM only (for speed)
   header.checksum = computeChecksum(mem.ramPtr(), Memory::RAM_SIZE);
   f.seekp(headerPos);
@@ -132,7 +132,7 @@ bool SaveState::load(const std::string &path, recomp_context &ctx, Memory &mem,
     return false;
   }
 
-  // ── CPU Context ──────────────────────────────────
+  // CPU Context
   readBytes(f, ctx.r, sizeof(ctx.r));
   readBytes(f, &ctx.hi, sizeof(ctx.hi));
   readBytes(f, &ctx.lo, sizeof(ctx.lo));
@@ -141,31 +141,31 @@ bool SaveState::load(const std::string &path, recomp_context &ctx, Memory &mem,
   readBytes(f, ctx.cop2d, sizeof(ctx.cop2d));
   readBytes(f, ctx.cop2c, sizeof(ctx.cop2c));
 
-  // ── RAM (2MB) ────────────────────────────────────
+  // RAM (2MB)
   readBytes(f, mem.ramPtr(), Memory::RAM_SIZE);
 
-  // ── Scratchpad (1KB) ─────────────────────────────
+  // Scratchpad (1KB)
   readBytes(f, mem.scratchpadPtr(), Memory::SCRATCHPAD_SIZE);
 
-  // ── GPU VRAM (1024×512×2 = 1MB) ──────────────────
+  // GPU VRAM (1024×512×2 = 1MB)
   std::vector<uint8_t> vramData(1024 * 512 * sizeof(gpu::Color16));
   readBytes(f, vramData.data(), vramData.size());
   gpu.loadVram(vramData.data());
 
-  // ── GPU State ────────────────────────────────────
+  // GPU State
   uint32_t gpustat;
   readBytes(f, &gpustat, sizeof(gpustat));
 
-  // ── SPU Sound RAM (512KB) ────────────────────────
+  // SPU Sound RAM (512KB)
   std::vector<uint8_t> spuRam(spu::SOUND_RAM_SIZE);
   readBytes(f, spuRam.data(), spuRam.size());
   spu.loadSoundRam(spuRam.data());
 
-  // ── SPU Registers ────────────────────────────────
+  // SPU Registers
   uint16_t spuCnt;
   readBytes(f, &spuCnt, sizeof(spuCnt));
 
-  // ── DMA State ────────────────────────────────────
+  // DMA State
   uint32_t dpcr, dicr;
   readBytes(f, &dpcr, sizeof(dpcr));
   readBytes(f, &dicr, sizeof(dicr));
@@ -181,7 +181,7 @@ bool SaveState::load(const std::string &path, recomp_context &ctx, Memory &mem,
     dma.writeRegister(0x1F801088 + ch * 0x10, chcr);
   }
 
-  // ── IRQ State ────────────────────────────────────
+  // IRQ State
   uint32_t istat, imask;
   readBytes(f, &istat, sizeof(istat));
   readBytes(f, &imask, sizeof(imask));

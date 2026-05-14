@@ -12,7 +12,7 @@
 
 namespace ps1::input {
 
-// ─── PS1 Button Bits (active-low: 0 = pressed) ─────────
+// PS1 Button Bits (active-low: 0 = pressed)
 enum Button : uint16_t {
   BTN_SELECT = (1u << 0),
   BTN_L3 = (1u << 1),
@@ -32,7 +32,7 @@ enum Button : uint16_t {
   BTN_SQUARE = (1u << 15),
 };
 
-// ─── Controller Type ────────────────────────────────────
+// Controller Type
 enum class PadType : uint8_t {
   None = 0x00,
   Digital = 0x41,   // Standard digital pad
@@ -40,7 +40,7 @@ enum class PadType : uint8_t {
   DualShock = 0x79, // DualShock with pressure
 };
 
-// ─── Memory Card ────────────────────────────────────────
+// Memory Card
 class MemoryCard {
 public:
   static constexpr uint32_t CARD_SIZE = 128 * 1024; // 128KB
@@ -79,7 +79,7 @@ private:
   uint8_t checksum_ = 0;
 };
 
-// ─── Input Controller ───────────────────────────────────
+// Input Controller
 class InputController {
 public:
   InputController();
@@ -111,7 +111,7 @@ public:
   void clearInterrupt() { irqPending_ = false; }
 
 private:
-  // ─── Port state ─────────────────
+  // Port state
   struct PortState {
     uint16_t buttons = 0xFFFF; // Active low
     uint8_t analogLX = 0x80;
@@ -123,7 +123,7 @@ private:
 
   PortState ports_[2];
 
-  // ─── SIO state ──────────────────
+  // SIO state
   uint32_t joyData_ = 0;
   uint32_t joyStat_ = 0;
   uint16_t joyMode_ = 0;

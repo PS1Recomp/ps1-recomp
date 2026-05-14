@@ -65,7 +65,7 @@ TEST_F(MdecTest, DmaInterfaceSmoke) {
   EXPECT_FALSE(mdec.isBusy());
 }
 
-// ─── Zigzag table sanity ────────────────────────────────
+// Zigzag table sanity
 
 TEST_F(MdecTest, ZigzagTableValid) {
   // The zigzag table should contain each value 0-63 exactly once

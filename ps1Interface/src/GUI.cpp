@@ -13,7 +13,7 @@
 #include <sstream>
 #include <iomanip>
 
-// ── Static editor instances ───────────────────────────────────────────────────
+// Static editor instances
 
 static MemoryEditor s_memEdit;
 static TextEditor   s_codeEditor;
@@ -26,7 +26,7 @@ static size_t       s_lastLogVersion     = 0;
 static bool         s_wantsQuit          = false;
 static bool         s_showSettings       = false;
 
-// ── Hex highlight ─────────────────────────────────────────────────────────────
+// Hex highlight
 
 struct HexHighlight { size_t start, end; ImU32 color; };
 static std::vector<HexHighlight> s_hexHighlights;
@@ -38,7 +38,7 @@ static ImU32 HexBgCallback(const ImU8*, size_t off, void*) {
     return 0;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Helpers
 
 static std::string Hex32(uint32_t v) {
     std::ostringstream ss;
@@ -46,7 +46,7 @@ static std::string Hex32(uint32_t v) {
     return ss.str();
 }
 
-// ── Settings window ───────────────────────────────────────────────────────────
+// Settings window
 
 static void DrawSettingsWindow(StudioState& state) {
     if (!s_showSettings) return;
@@ -98,7 +98,7 @@ static void DrawSettingsWindow(StudioState& state) {
     ImGui::End();
 }
 
-// ── Explorer panel ────────────────────────────────────────────────────────────
+// Explorer panel
 
 static void DrawExplorer(StudioState& state) {
     ImGui::Begin("Explorer");
@@ -190,7 +190,7 @@ static void DrawExplorer(StudioState& state) {
     ImGui::End();
 }
 
-// ── Inspector panel ───────────────────────────────────────────────────────────
+// Inspector panel
 
 static void DrawInspector(StudioState& state) {
     ImGui::Begin("Inspector");
@@ -242,7 +242,7 @@ static void DrawInspector(StudioState& state) {
     ImGui::End();
 }
 
-// ── Workspace panel (tabs) ────────────────────────────────────────────────────
+// Workspace panel (tabs)
 
 static void DrawWorkspace(StudioState& state) {
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.08f, 0.08f, 1.f));
@@ -250,7 +250,7 @@ static void DrawWorkspace(StudioState& state) {
 
     if (ImGui::BeginTabBar("Tabs", ImGuiTabBarFlags_Reorderable)) {
 
-        // ── C++ Preview ───────────────────────────────────────────────────────
+        // C++ Preview
         if (ImGui::BeginTabItem("  C++ Preview  ")) {
             if (ImGui::BeginPopupContextItem("cpp_ctx")) {
                 if (ImGui::MenuItem("Copy All"))
@@ -261,7 +261,7 @@ static void DrawWorkspace(StudioState& state) {
             ImGui::EndTabItem();
         }
 
-        // ── Hex View ──────────────────────────────────────────────────────────
+        // Hex View
         if (ImGui::BeginTabItem("  Hex View  ")) {
             s_hexHighlights.clear();
             if (state.data.isAnalysisComplete && state.selectedFuncIndex >= 0 &&
@@ -283,7 +283,7 @@ static void DrawWorkspace(StudioState& state) {
             ImGui::EndTabItem();
         }
 
-        // ── config.toml ───────────────────────────────────────────────────────
+        // config.toml
         if (ImGui::BeginTabItem("  config.toml  ")) {
             if (s_configNeedsSync) {
                 s_configEditor.SetText(state.data.configTomlContent);
@@ -300,7 +300,7 @@ static void DrawWorkspace(StudioState& state) {
             ImGui::EndTabItem();
         }
 
-        // ── Ghidra CSV ────────────────────────────────────────────────────────
+        // Ghidra CSV
         if (ImGui::BeginTabItem("  Ghidra CSV  ")) {
             if (ImGui::Button("Import CSV...")) {
                 IGFD::FileDialogConfig cfg; cfg.path = ".";
@@ -351,7 +351,7 @@ static void DrawWorkspace(StudioState& state) {
     ImGui::PopStyleColor();
 }
 
-// ── Logs panel ────────────────────────────────────────────────────────────────
+// Logs panel
 
 static void DrawLogs(StudioState& state) {
     ImGui::Begin("Logs");
@@ -407,7 +407,7 @@ static void DrawLogs(StudioState& state) {
     ImGui::End();
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
+// Public API
 
 void GUI::ApplySettings(StudioState& state) {
     StyleManager::SetupFonts(state.settings);
@@ -470,7 +470,7 @@ void GUI::DrawStudio(StudioState& state) {
         ImGui::DockBuilderFinish(dockId);
     }
 
-    // ── File dialogs ──────────────────────────────────────────────────────────
+    // File dialogs
     ImGui::SetNextWindowSize(ImVec2(900, 600), ImGuiCond_FirstUseEver);
 
     if (ImGuiFileDialog::Instance()->Display("OpenFileKey")) {
@@ -497,7 +497,7 @@ void GUI::DrawStudio(StudioState& state) {
         ImGuiFileDialog::Instance()->Close();
     }
 
-    // ── Menu bar ──────────────────────────────────────────────────────────────
+    // Menu bar
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Open...", "Ctrl+O")) {
@@ -551,7 +551,7 @@ void GUI::DrawStudio(StudioState& state) {
         ImGui::EndMainMenuBar();
     }
 
-    // ── Keyboard shortcuts ────────────────────────────────────────────────────
+    // Keyboard shortcuts
     {
         ImGuiIO& io = ImGui::GetIO();
         if (!ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) {
@@ -570,7 +570,7 @@ void GUI::DrawStudio(StudioState& state) {
         }
     }
 
-    // ── Panels ────────────────────────────────────────────────────────────────
+    // Panels
     DrawSettingsWindow(state);
     DrawExplorer(state);
     DrawInspector(state);

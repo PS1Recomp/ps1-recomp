@@ -88,7 +88,7 @@ public:
   // if any.  Must run on the game thread (touches `recomp_context` GPRs).
   void triggerCustomException();
 
-  // ── Generic internal-state accessors (game-agnostic) ──
+  // Generic internal-state accessors (game-agnostic)
   //
   // VBlank waits live in `psyq_state().vsyncCounter` since Phase 2.2.
   // CD sync/ready waits live in `psyq_state().cdSyncByte/cdReadyByte`
@@ -175,7 +175,7 @@ private:
   // triggerCustomException() to avoid cross-thread register clobbering.
   std::atomic<uint8_t> vblankExceptionPending_{0};
 
-  // ── Internal generic state (game-agnostic) ─────────────────────────────
+  // Internal generic state (game-agnostic)
   //
   // VBlank state migrated to `psyq_state().vsyncCounter` in Phase 2.2.
   // CD sync/ready state migrated to `psyq_state().cdSyncByte`/`cdReadyByte`

@@ -45,9 +45,7 @@ protected:
 
 } // namespace
 
-// ──────────────────────────────────────────────────────────
 // Direct HLE behaviour — libapi (BIOS A0/B0/C0 wrappers)
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqLibapiTest, InitHeapInitializesBiosHeap) {
   ctx.r[A0] = 0x80100000u;
@@ -192,9 +190,7 @@ TEST_F(PsyqLibapiTest, GpuCwDispatchesA0_49) {
   EXPECT_EQ(ctx.r[T1], 0x49u);
 }
 
-// ──────────────────────────────────────────────────────────
 // libcd
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqLibapiTest, CdGetSectorReturnsZeroNotReady) {
   ctx.r[A0] = 0x80100000u;
@@ -210,9 +206,7 @@ TEST_F(PsyqLibapiTest, StSetMaskReturnsZero) {
   EXPECT_EQ(ctx.r[V0], 0u);
 }
 
-// ──────────────────────────────────────────────────────────
 // libgte
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqLibapiTest, SetGeomOffsetWritesOFXOFY) {
   ctx.r[A0] = 320;
@@ -234,9 +228,7 @@ TEST_F(PsyqLibapiTest, SetDQAWritesDQA) {
   EXPECT_EQ(ctx.cop2c[GTE_DQA], 0xC000u);
 }
 
-// ──────────────────────────────────────────────────────────
 // libgpu (extras)
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqLibapiTest, GetClutPacksXY) {
   ctx.r[A0] = 0x10; // x = 16
@@ -299,9 +291,7 @@ TEST_F(PsyqLibapiTest, SetSpritesWriteLenAndCode) {
   }
 }
 
-// ──────────────────────────────────────────────────────────
 // Registry coverage
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqLibapiTest, RaymanBootRegistersExpectedNames) {
   psyq_register_rayman_boot();

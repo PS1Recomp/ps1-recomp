@@ -55,7 +55,7 @@ protected:
 
 } // namespace
 
-// ───────────────── SetDispMask ──────────────────────────────
+// SetDispMask
 
 TEST_F(PsyqGpuTest, SetDispMaskEnableSendsGP1_03_With0) {
   ctx.r[A0] = 1; // enable
@@ -71,7 +71,7 @@ TEST_F(PsyqGpuTest, SetDispMaskDisableSendsGP1_03_With1) {
   EXPECT_EQ(gp1[0], 0x03000001u);
 }
 
-// ───────────────── LoadImage ────────────────────────────────
+// LoadImage
 
 TEST_F(PsyqGpuTest, LoadImageEmitsCpuToVramHeaderAndData) {
   // 4×2 pixels = 8 px = 4 words of pixel data.
@@ -118,7 +118,7 @@ TEST_F(PsyqGpuTest, LoadImageZeroSizeIsNoop) {
   EXPECT_TRUE(gp0.empty());
 }
 
-// ───────────────── StoreImage ──────────────────────────────
+// StoreImage
 
 TEST_F(PsyqGpuTest, StoreImageEmitsVramToCpuHeader) {
   uint32_t rectP = 0x80100000u;
@@ -132,7 +132,7 @@ TEST_F(PsyqGpuTest, StoreImageEmitsVramToCpuHeader) {
   EXPECT_EQ(gp0[2], (8u   << 16) | 16u);
 }
 
-// ───────────────── MoveImage ────────────────────────────────
+// MoveImage
 
 TEST_F(PsyqGpuTest, MoveImageEmitsVramToVramSequence) {
   uint32_t rectP = 0x80100000u;
@@ -148,7 +148,7 @@ TEST_F(PsyqGpuTest, MoveImageEmitsVramToVramSequence) {
   EXPECT_EQ(gp0[3], (32u  << 16) | 32u);
 }
 
-// ───────────────── ClearImage ───────────────────────────────
+// ClearImage
 
 TEST_F(PsyqGpuTest, ClearImageEmitsFillRect) {
   uint32_t rectP = 0x80100000u;
@@ -164,7 +164,7 @@ TEST_F(PsyqGpuTest, ClearImageEmitsFillRect) {
   EXPECT_EQ(gp0[2], (240u << 16) | 320u);
 }
 
-// ───────────────── Sync callbacks ────────────────────────────
+// Sync callbacks
 
 TEST_F(PsyqGpuTest, DrawSyncCallbackStoresAndReturnsPrev) {
   ctx.r[A0] = 0x80012340u;
@@ -194,7 +194,7 @@ TEST_F(PsyqGpuTest, VSyncCallbackStoresAndReturnsPrev) {
   EXPECT_EQ(psyq_state().gpuSwapCb, 0u);
 }
 
-// ───────────────── Video mode ───────────────────────────────
+// Video mode
 
 TEST_F(PsyqGpuTest, SetGetVideoModeRoundTrip) {
   ctx.r[A0] = 0; // NTSC
@@ -214,7 +214,7 @@ TEST_F(PsyqGpuTest, SetGetVideoModeRoundTrip) {
   hle_libgpu_SetVideoMode(&ctx);
 }
 
-// ───────────────── libgs stubs ──────────────────────────────
+// libgs stubs
 
 TEST_F(PsyqGpuTest, LibgsStubsAreNoopAndDoNotCrash) {
   ctx.r[A0] = 0; ctx.r[A1] = 0; ctx.r[A2] = 0; ctx.r[A3] = 0;
@@ -226,7 +226,7 @@ TEST_F(PsyqGpuTest, LibgsStubsAreNoopAndDoNotCrash) {
   EXPECT_TRUE(gp1.empty());
 }
 
-// ───────────────── Registry wiring ───────────────────────────
+// Registry wiring
 
 TEST_F(PsyqGpuTest, RegistryDispatchesAllNewNames) {
   psyq_register_libgpu_extras();

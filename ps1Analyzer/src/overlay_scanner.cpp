@@ -6,7 +6,7 @@
 
 namespace ps1recomp {
 
-// ─── Non-code file extensions ───────────────────────────
+// Non-code file extensions
 
 bool OverlayScanner::isNonCodeExtension(const std::string &name) {
   // Common PS1 data-only extensions
@@ -36,7 +36,7 @@ bool OverlayScanner::isNonCodeExtension(const std::string &name) {
   return false;
 }
 
-// ─── PS-X EXE Header ───────────────────────────────────
+// PS-X EXE Header
 
 std::optional<PsxExeHeader>
 OverlayScanner::parsePsxExeHeader(const std::vector<uint8_t> &data) {
@@ -53,7 +53,7 @@ OverlayScanner::parsePsxExeHeader(const std::vector<uint8_t> &data) {
   return hdr;
 }
 
-// ─── MIPS Instruction Validity ──────────────────────────
+// MIPS Instruction Validity
 
 float OverlayScanner::computeMipsScore(const uint8_t *data, size_t size) {
   if (size < 4)
@@ -143,7 +143,7 @@ float OverlayScanner::computeMipsScore(const uint8_t *data, size_t size) {
   return rawScore;
 }
 
-// ─── Function Prologue/Epilogue Detection ───────────────
+// Function Prologue/Epilogue Detection
 
 std::pair<float, std::vector<uint32_t>>
 OverlayScanner::detectFunctions(const uint8_t *data, size_t size,
@@ -193,7 +193,7 @@ OverlayScanner::detectFunctions(const uint8_t *data, size_t size,
   return {score, funcAddrs};
 }
 
-// ─── RAM Base Address Inference ─────────────────────────
+// RAM Base Address Inference
 
 uint32_t OverlayScanner::inferRamBase(const uint8_t *data, size_t size) {
   if (size < 8)
@@ -285,7 +285,7 @@ uint32_t OverlayScanner::inferRamBase(const uint8_t *data, size_t size) {
   return static_cast<uint32_t>(bestUpper) << 16;
 }
 
-// ─── Scan Single File ───────────────────────────────────
+// Scan Single File
 
 OverlayCandidate
 OverlayScanner::scanFile(const std::vector<uint8_t> &data,
@@ -346,7 +346,7 @@ OverlayScanner::scanFile(const std::vector<uint8_t> &data,
   return result;
 }
 
-// ─── Scan Entire Disc ───────────────────────────────────
+// Scan Entire Disc
 
 std::vector<OverlayCandidate>
 OverlayScanner::scanDisc(const DiscReader &reader,
@@ -419,7 +419,7 @@ OverlayScanner::scanDisc(const DiscReader &reader,
   return results;
 }
 
-// ─── Export to TOML ─────────────────────────────────────
+// Export to TOML
 
 std::string
 OverlayScanner::exportToml(const std::vector<OverlayCandidate> &candidates) {

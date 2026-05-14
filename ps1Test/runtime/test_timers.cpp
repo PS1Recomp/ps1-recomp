@@ -3,7 +3,7 @@
 
 using namespace ps1;
 
-// ─── Interrupt Controller Tests ─────────────────────────
+// Interrupt Controller Tests
 
 TEST(InterruptController, InitialState) {
   InterruptController ic;
@@ -52,7 +52,7 @@ TEST(InterruptController, MultipleIRQSources) {
   EXPECT_EQ(ic.readIStat(), (IRQ_TMR0 | IRQ_TMR1 | IRQ_DMA));
 }
 
-// ─── Timer Tests ────────────────────────────────────────
+// Timer Tests
 
 TEST(Timer, InitialState) {
   Timers timers;
@@ -112,7 +112,7 @@ TEST(Timer, ResetOnTarget) {
   EXPECT_EQ(val, 5);
 }
 
-// ─── VBlank IRQ Test ────────────────────────────────────
+// VBlank IRQ Test
 
 TEST(Vblank, IRQRaised) {
   InterruptController ic;

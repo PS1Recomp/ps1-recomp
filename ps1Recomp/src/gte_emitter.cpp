@@ -9,7 +9,7 @@
 
 namespace ps1recomp {
 
-// ─── GTE Data Register Names (cop2d[0..31]) ─────────────
+// GTE Data Register Names (cop2d[0..31])
 
 static constexpr const char* s_gteDataRegs[32] = {
     "VXY0",  "VZ0",   "VXY1",  "VZ1",     // 0-3:  Vectors V0, V1
@@ -27,7 +27,7 @@ std::string_view gteDataRegName(uint8_t reg) {
     return s_gteDataRegs[reg];
 }
 
-// ─── GTE Control Register Names (cop2c[0..31]) ──────────
+// GTE Control Register Names (cop2c[0..31])
 
 static constexpr const char* s_gteControlRegs[32] = {
     "RT11RT12", "RT13RT21", "RT22RT23", "RT31RT32",   // 0-3:   Rotation matrix
@@ -45,7 +45,7 @@ std::string_view gteControlRegName(uint8_t reg) {
     return s_gteControlRegs[reg];
 }
 
-// ─── GTE Command Table ──────────────────────────────────
+// GTE Command Table
 
 static const std::array<GteCommandInfo, 22> s_gteCommands = {{
     { InstrId::GTE_RTPS,   0x01, "RTPS",  "Perspective transform (single)",          15 },
@@ -79,13 +79,13 @@ const GteCommandInfo* getGteCommandInfo(InstrId id) {
     return nullptr;
 }
 
-// ─── Helpers ─────────────────────────────────────────────
+// Helpers
 
 static std::string gteReg(uint8_t r) {
     return fmt::format("ctx->r{}", r);
 }
 
-// ─── GTE Register Moves ─────────────────────────────────
+// GTE Register Moves
 
 std::string GteEmitter::emitRegisterMove(const Instruction& inst) const {
     switch (inst.id) {
@@ -114,7 +114,7 @@ std::string GteEmitter::emitRegisterMove(const Instruction& inst) const {
     }
 }
 
-// ─── GTE MVMVA special handling ─────────────────────────
+// GTE MVMVA special handling
 // MVMVA has flags encoded in the instruction word:
 //   bits 17-18: multiply matrix (0=Rotation, 1=Light, 2=Color, 3=Reserved)
 //   bits 15-16: multiply vector (0=V0, 1=V1, 2=V2, 3=IR)
@@ -136,7 +136,7 @@ std::string GteEmitter::emitMVMVA(uint32_t raw) const {
                        mxNames[mx], mvNames[mv], tvNames[tv]);
 }
 
-// ─── GTE Commands ────────────────────────────────────────
+// GTE Commands
 
 std::string GteEmitter::emitCommand(const Instruction& inst) const {
     // MVMVA gets special treatment due to instruction-encoded parameters
@@ -158,7 +158,7 @@ std::string GteEmitter::emitCommand(const Instruction& inst) const {
                        info->description, info->cycles);
 }
 
-// ─── Main Dispatch ───────────────────────────────────────
+// Main Dispatch
 
 std::string GteEmitter::emit(const Instruction& inst, uint32_t /*pc*/) const {
     if (inst.category != InstrCategory::GTE) {

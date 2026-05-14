@@ -15,9 +15,7 @@ using ps1recomp::HleStub;
 using ps1recomp::emitHleForwardDecl;
 using ps1recomp::emitHleStub;
 
-// ──────────────────────────────────────────
 // Forward declaration emission
-// ──────────────────────────────────────────
 
 TEST(HleEmitter, ForwardDeclIsRegistryDispatcher) {
   // The preamble carries one universal forward-decl for the runtime
@@ -37,9 +35,7 @@ TEST(HleEmitter, ForwardDeclIsStubIndependent) {
   EXPECT_EQ(emitHleForwardDecl(a), emitHleForwardDecl(b));
 }
 
-// ──────────────────────────────────────────
 // Stub body emission
-// ──────────────────────────────────────────
 
 TEST(HleEmitter, StubBodyLibapiVSync) {
   HleStub stub{0x801ABCDE, "func_801ABCDE", "libapi_VSync"};

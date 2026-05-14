@@ -11,7 +11,7 @@
 
 namespace ps1recomp {
 
-// ─── Overlay Section ─────────────────────────────────────
+// Overlay Section
 
 /// Represents a dynamically-loaded code section
 struct OverlaySection {
@@ -22,7 +22,7 @@ struct OverlaySection {
   std::vector<uint32_t> functions; // Function addresses in this overlay
 };
 
-// ─── Overlay Handler ─────────────────────────────────────
+// Overlay Handler
 
 class OverlayHandler {
 public:

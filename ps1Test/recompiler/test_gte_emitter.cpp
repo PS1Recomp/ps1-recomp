@@ -7,9 +7,7 @@
 
 using namespace ps1recomp;
 
-// ──────────────────────────────────────────
 // Encoding helpers
-// ──────────────────────────────────────────
 
 static constexpr uint32_t encCOP2Reg(uint8_t sub, uint8_t rt, uint8_t rd) {
   // COP2 register move: opcode=0x12, sub=MF/MT/CF/CT (bits 25-21), rt, rd
@@ -42,9 +40,7 @@ static constexpr uint32_t encSWC2(uint8_t rt, uint8_t base, int16_t offset) {
          (uint16_t(offset));
 }
 
-// ──────────────────────────────────────────
 // Register Name Tests
-// ──────────────────────────────────────────
 
 TEST(GteEmitter, DataRegNames) {
   EXPECT_EQ(gteDataRegName(0), "VXY0");
@@ -68,9 +64,7 @@ TEST(GteEmitter, ControlRegNames) {
   EXPECT_EQ(gteControlRegName(31), "FLAG");
 }
 
-// ──────────────────────────────────────────
 // Register Move Tests
-// ──────────────────────────────────────────
 
 TEST(GteEmitter, MFC2) {
   GteEmitter emitter;
@@ -130,9 +124,7 @@ TEST(GteEmitter, SWC2) {
   EXPECT_NE(code.find("SXY0"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // GTE Command Tests
-// ──────────────────────────────────────────
 
 TEST(GteEmitter, RTPS) {
   GteEmitter emitter;
@@ -176,9 +168,7 @@ TEST(GteEmitter, AllGteCommandsGenerateOutput) {
   }
 }
 
-// ──────────────────────────────────────────
 // MVMVA Special Handling
-// ──────────────────────────────────────────
 
 TEST(GteEmitter, MVMVA_Flags) {
   GteEmitter emitter;
@@ -202,9 +192,7 @@ TEST(GteEmitter, MVMVA_DifferentFlags) {
   EXPECT_NE(code.find("BK"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // GteCommandInfo Lookup
-// ──────────────────────────────────────────
 
 TEST(GteEmitter, CommandInfoLookup) {
   auto *info = getGteCommandInfo(InstrId::GTE_RTPS);
@@ -221,9 +209,7 @@ TEST(GteEmitter, CommandInfoLookup) {
   EXPECT_EQ(getGteCommandInfo(InstrId::ADD), nullptr);
 }
 
-// ──────────────────────────────────────────
 // sf/lm Flag Extraction
-// ──────────────────────────────────────────
 
 TEST(GteEmitter, SfLmFlags) {
   GteEmitter emitter;
@@ -239,9 +225,7 @@ TEST(GteEmitter, SfLmFlags) {
   EXPECT_NE(code.find("gte_RTPS(ctx, 0, 0)"), std::string::npos);
 }
 
-// ──────────────────────────────────────────
 // Non-GTE Rejection
-// ──────────────────────────────────────────
 
 TEST(GteEmitter, NonGteRejected) {
   GteEmitter emitter;

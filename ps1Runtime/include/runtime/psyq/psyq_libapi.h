@@ -15,7 +15,7 @@
 
 namespace ps1::psyq {
 
-// ── Event manager (B0) ────────────────────────────────────────────────────
+// Event manager (B0)
 void hle_libapi_OpenEvent(recomp_context *ctx);
 void hle_libapi_CloseEvent(recomp_context *ctx);
 void hle_libapi_DeliverEvent(recomp_context *ctx);
@@ -23,16 +23,16 @@ void hle_libapi_EnableEvent(recomp_context *ctx);
 void hle_libapi_DisableEvent(recomp_context *ctx);
 void hle_libapi_TestEvent(recomp_context *ctx);
 
-// ── Critical section (SYSCALL — stubbed) ──────────────────────────────────
+// Critical section (SYSCALL — stubbed)
 void hle_libapi_EnterCriticalSection(recomp_context *ctx);
 void hle_libapi_ExitCriticalSection(recomp_context *ctx);
 
-// ── Exception/IRQ chain ───────────────────────────────────────────────────
+// Exception/IRQ chain
 void hle_libapi_ReturnFromException(recomp_context *ctx);
 void hle_libapi_HookEntryInt(recomp_context *ctx);
 void hle_libapi_ChangeClearRCnt(recomp_context *ctx);
 
-// ── File / Memory Card I/O (B0) ───────────────────────────────────────────
+// File / Memory Card I/O (B0)
 void hle_libapi_open(recomp_context *ctx);
 void hle_libapi_close(recomp_context *ctx);
 void hle_libapi_read(recomp_context *ctx);
@@ -44,16 +44,16 @@ void hle_libapi_firstfile2(recomp_context *ctx);
 void hle_libapi_nextfile(recomp_context *ctx);
 void hle_libapi__96_remove(recomp_context *ctx);
 
-// ── Pad (B0) ──────────────────────────────────────────────────────────────
+// Pad (B0)
 void hle_libapi_InitPAD2(recomp_context *ctx);
 void hle_libapi_StartPAD2(recomp_context *ctx);
 void hle_libapi_StopPAD2(recomp_context *ctx);
 void hle_libapi_ChangeClearPAD(recomp_context *ctx);
 
-// ── Heap (A0) ─────────────────────────────────────────────────────────────
+// Heap (A0)
 void hle_libapi_InitHeap(recomp_context *ctx);
 
-// ── GPU command (A0) ──────────────────────────────────────────────────────
+// GPU command (A0)
 void hle_libapi_GPU_cw(recomp_context *ctx);
 
 /// Register every libapi HLE in this header into the runtime registry.

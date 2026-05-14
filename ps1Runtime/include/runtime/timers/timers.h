@@ -7,7 +7,7 @@
 
 namespace ps1 {
 
-// ─── IRQ Source Bits ────────────────────────────────────
+// IRQ Source Bits
 enum IRQSource : uint32_t {
   IRQ_VBLANK = (1 << 0),
   IRQ_GPU = (1 << 1),
@@ -47,7 +47,7 @@ private:
   uint32_t iMask_ = 0; // 0x1F801074 — Interrupt Mask
 };
 
-// ─── Timer (Root Counter) ───────────────────────────────
+// Timer (Root Counter)
 
 class Timer {
 public:
@@ -89,7 +89,7 @@ private:
   uint8_t clockSource() const { return (mode_ >> 8) & 3; }
 };
 
-// ─── Timers Manager ─────────────────────────────────────
+// Timers Manager
 
 class Timers {
 public:

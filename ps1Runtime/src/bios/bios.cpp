@@ -18,7 +18,7 @@ namespace ps1::bios {
 
 using detail::readString;
 
-// ─── Constructor / Destructor ────────────────────────────
+// Constructor / Destructor
 
 Bios::Bios(recomp_context &ctx, cdrom::VirtualFs &fs, Memory &mem)
     : ctx_(ctx), heap_(mem), eventSystem_(ctx), fileIo_(fs, mem) {
@@ -57,7 +57,7 @@ Bios::Bios(recomp_context &ctx, cdrom::VirtualFs &fs, Memory &mem)
 
 Bios::~Bios() = default;
 
-// ─── Entry Points ────────────────────────────────────────
+// Entry Points
 
 void Bios::executeA0() {
   uint32_t index =
@@ -81,9 +81,9 @@ void Bios::executeC0() {
   handleC0(index);
 }
 
-// ─── Printf Implementation ──────────────────────────────
+// Printf Implementation
 
-// ─── CDROM Event Triggering ──────────────────────────────
+// CDROM Event Triggering
 //
 // The PS1 BIOS CDROM interrupt handler translates CDROM INT types
 // into event system notifications.  In a real PS1 the IRQ handler
@@ -167,7 +167,7 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   BIOS_LOG("[BIOS] triggerCdromEvent: INT{} -> spec 0x{:04X}\n", cdIntType,
            spec);
 
-  // ── HLE PsyQ CDROM interrupt handler variables ────
+  // HLE PsyQ CDROM interrupt handler variables
   //
   // On a real PS1 the BIOS exception handler at 0x80000080 reads the CDROM
   // interrupt flag + response FIFO and stores the results in PsyQ-internal
@@ -182,7 +182,7 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // coverage landed — dropped entirely.
   //
 
-  // ── HLE sector copy for INT1 (DataReady) ──────────────────────
+  // HLE sector copy for INT1 (DataReady)
   //
   // IMPORTANT: Do the sector copy BEFORE writing the ready byte to avoid a
   // race with the game thread's polling loop.  The game thread checks the
@@ -220,7 +220,7 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
 
     auto &state = ps1::psyq::psyq_state();
 
-    // ── HLE register-direct sector copy ─────────────────────────────
+    // HLE register-direct sector copy
     // When the game programs DMA Ch3 directly (no libcd HLE in flight:
     // cdRemaining == 0 and cdDataCb == 0), the channel was previously
     // armed before the sector was ready — `DMA::executeChannel` deferred
@@ -232,7 +232,7 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
       dma_->checkAndRunTransfers();
     }
 
-    // ── HLE libcd sector copy (no callback registered) ──────────────
+    // HLE libcd sector copy (no callback registered)
     // When the game uses libcd HLE `CdRead` (state.cdRemaining > 0,
     // cdDestPtr/cdWordCount stashed) but never registered
     // `CdReadCallback` (cdDataCb == 0), the drainPendingCallbacks pump
@@ -264,7 +264,7 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
     }
   }
 
-  // ── Update PsyQ CD state in psyq_state() singleton ────────────────────
+  // Update PsyQ CD state in psyq_state() singleton
   //
   // PsyQ interrupt handler mapping (as implemented by the game's own IRQ
   // chain):
@@ -309,7 +309,7 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
            psyqSync.load(std::memory_order_relaxed),
            psyqReady.load(std::memory_order_relaxed));
 
-  // ── Dispatch CustomExceptionExit if registered ──
+  // Dispatch CustomExceptionExit if registered
   //
   // CD interrupts fire SYNCHRONOUSLY from the game thread during CDROM
   // register writes.  If we longjmp here, we abort the game's call stack
@@ -348,7 +348,7 @@ void Bios::triggerVBlankEvent() {
   // This entry-point now exists only to deliver event callbacks (below)
   // and defer CustomExceptionExit longjmps onto the game thread.
 
-  // ── Defer CustomExceptionExit on VBlank ──────────────────────────────────
+  // Defer CustomExceptionExit on VBlank
   //
   // On a real PS1, B0:0x19 (SetCustomExitFromException) installs a jmpbuf
   // that is triggered by ANY hardware exception, including VBlank.
@@ -366,7 +366,7 @@ void Bios::triggerVBlankEvent() {
     BIOS_LOG("[VBLANK-HLE] CustomExitFromException deferred\n");
   }
 
-  // ── Deliver ALL standard PsyQ events that should fire each frame ──
+  // Deliver ALL standard PsyQ events that should fire each frame
   //
   // On a real PS1, the BIOS exception handler at 0x80000080 dispatches
   // through the SysEnqIntRP chain.  Root counter handlers call DeliverEvent
@@ -414,7 +414,7 @@ void Bios::triggerVBlankEvent() {
   // the PsyQ CdInit polling loop.  Card events should only be triggered
   // by actual SIO/CDROM hardware activity (i.e. triggerCdromEvent).
 
-  // ── HLE PsyQ display swap callback (SysEnqIntRP replacement) ──────
+  // HLE PsyQ display swap callback (SysEnqIntRP replacement)
   //
   // On a real PS1, the SysEnqIntRP priority chain includes a PsyQ VBlank
   // handler that manages display double-buffering.  This handler calls
@@ -432,7 +432,7 @@ void Bios::triggerVBlankEvent() {
                                       4); // a0 = 4 → "swap done"
   }
 
-  // ── HLE PsyQ DrawSync status (GPU ordering table completion) ──
+  // HLE PsyQ DrawSync status (GPU ordering table completion)
   //
   // Since the runtime GPU is fully synchronous (all GP0 commands process
   // inline), every OT slot is "complete" by the time the next VBlank fires.
@@ -459,7 +459,7 @@ void Bios::drainPendingCallbacks() {
 
   eventSystem_.drainPendingCallbacks();
 
-  // ── Deferred CD customExceptionExit dispatch ──────────────────────
+  // Deferred CD customExceptionExit dispatch
   //
   // When a CD interrupt fires synchronously (during a CDROM register write),
   // triggerCdromEvent queues it here instead of longjmping immediately.
@@ -483,7 +483,7 @@ void Bios::drainPendingCallbacks() {
     }
   }
 
-  // ── Simulate SysEnqIntRP CDROM interrupt handler chain ──────────
+  // Simulate SysEnqIntRP CDROM interrupt handler chain
   //
   // On a real PS1, when a CDROM interrupt fires the BIOS exception handler
   // at 0x80000080 dispatches through the SysEnqIntRP chain.  The PsyQ CD
@@ -551,7 +551,7 @@ void Bios::drainPendingCallbacks() {
     // Restore registers
     static_cast<ps1::CPUContext &>(ctx_) = saved;
 
-    // ── Pump: try to advance the CDROM so the next sector is ready ──
+    // Pump: try to advance the CDROM so the next sector is ready
     //
     // Only pump if the game still has sectors remaining to read.
     // When remaining <= 0, the read is complete — stop feeding cycles
@@ -666,7 +666,7 @@ void Bios::stub_printf() {
   fmt::print("{}", output);
 }
 
-// ─── Pad Buffer Update (called each VBlank) ─────────────
+// Pad Buffer Update (called each VBlank)
 
 void Bios::updatePadBuffers() {
   if (!padActive_ || !input_)

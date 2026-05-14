@@ -8,7 +8,7 @@
 
 namespace ps1recomp {
 
-// ─── Main Entry Point ────────────────────────────────────
+// Main Entry Point
 
 void FunctionFinder::findFunctions(const ElfParser& elf) {
     m_functions.clear();
@@ -33,13 +33,13 @@ void FunctionFinder::findFunctions(const ElfParser& elf) {
     }
 }
 
-// ─── Pass 1: Entry Point ─────────────────────────────────
+// Pass 1: Entry Point
 
 void FunctionFinder::addEntryPoint(const ElfParser& elf) {
     addFunction(elf.getEntryPoint(), "__start", FunctionSource::EntryPoint);
 }
 
-// ─── Pass 2: ELF Symbols ─────────────────────────────────
+// Pass 2: ELF Symbols
 
 void FunctionFinder::addSymbolFunctions(const ElfParser& elf) {
     for (const auto& sym : elf.getSymbols()) {
@@ -49,7 +49,7 @@ void FunctionFinder::addSymbolFunctions(const ElfParser& elf) {
     }
 }
 
-// ─── Pass 3: JAL Target Scan ─────────────────────────────
+// Pass 3: JAL Target Scan
 
 void FunctionFinder::scanJALTargets(const Section& text) {
     const uint32_t numInstructions = text.size / 4;
@@ -75,7 +75,7 @@ void FunctionFinder::scanJALTargets(const Section& text) {
     }
 }
 
-// ─── Pass 4: Prologue Pattern Scan ───────────────────────
+// Pass 4: Prologue Pattern Scan
 
 void FunctionFinder::scanPrologues(const Section& text) {
     const uint32_t numInstructions = text.size / 4;
@@ -117,7 +117,7 @@ void FunctionFinder::scanPrologues(const Section& text) {
     }
 }
 
-// ─── Pass 5: Compute Boundaries ──────────────────────────
+// Pass 5: Compute Boundaries
 
 void FunctionFinder::computeBoundaries(const Section& text) {
     // Sort functions by address
@@ -166,7 +166,7 @@ void FunctionFinder::computeBoundaries(const Section& text) {
     }
 }
 
-// ─── Queries ─────────────────────────────────────────────
+// Queries
 
 const FunctionInfo* FunctionFinder::findByAddress(uint32_t addr) const {
     // Binary search (m_functions is sorted)
@@ -200,7 +200,7 @@ const FunctionInfo* FunctionFinder::findContaining(uint32_t addr) const {
     return nullptr;
 }
 
-// ─── Helpers ─────────────────────────────────────────────
+// Helpers
 
 void FunctionFinder::addFunction(uint32_t addr, const std::string& name, FunctionSource source) {
     // Don't add if already exists (prefer earlier source — higher priority)

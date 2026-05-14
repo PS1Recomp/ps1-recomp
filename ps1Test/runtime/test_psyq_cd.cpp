@@ -55,9 +55,7 @@ protected:
 
 } // namespace
 
-// ──────────────────────────────────────────────────────────
 // CdInit
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqCdTest, CdInitReturnsSuccessAndDrivesStateAndController) {
   // Pre-mutate so we can prove CdInit zeroes them.
@@ -92,9 +90,7 @@ TEST_F(PsyqCdTest, CdInitToleratesMissingBiosGracefully) {
   EXPECT_EQ(ctx.r[V0], 0u); // hard failure when bios is unwired
 }
 
-// ──────────────────────────────────────────────────────────
 // CdRead
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqCdTest, CdReadWritesReadStateAndIssuesCommands) {
   ctx.r[A0] = 8;             // sectors
@@ -192,9 +188,7 @@ TEST_F(PsyqCdTest, CdReadWithZeroSectorsDoesNotResetCurrentLba) {
   EXPECT_EQ(psyq::psyq_state().cdRemaining, 1u);
 }
 
-// ──────────────────────────────────────────────────────────
 // CdSync / CdReady
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqCdTest, CdSyncPollReturnsCompleteUnconditionally) {
   // mode != 0 (poll): synchronous CD command dispatch guarantees the prior
@@ -270,9 +264,7 @@ TEST_F(PsyqCdTest, TriggerCdromEventInt5WritesBothAtomicsToError) {
   EXPECT_EQ(psyq::psyq_state().cdReadyByte.load(), 5u);
 }
 
-// ──────────────────────────────────────────────────────────
 // CdControl / CdControlF
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqCdTest, CdControlPushesParamsAndIssuesCommand) {
   // CdlSetloc(0x02) — 3 BCD bytes M:S:F.
@@ -325,9 +317,7 @@ TEST_F(PsyqCdTest, CdControlFIsFireAndForget) {
   EXPECT_EQ(cdrom.getMode(), 0x80u);
 }
 
-// ──────────────────────────────────────────────────────────
 // CdGetSector
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqCdTest, CdGetSectorReturnsZero) {
   ctx.r[V0] = 0xCAFEu;
@@ -335,9 +325,7 @@ TEST_F(PsyqCdTest, CdGetSectorReturnsZero) {
   EXPECT_EQ(ctx.r[V0], 0u);
 }
 
-// ──────────────────────────────────────────────────────────
 // Callbacks
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqCdTest, CdReadCallbackStoresAndReturnsPrev) {
   psyq::psyq_state().cdDataCb = 0xDEADBEEFu;
@@ -362,9 +350,7 @@ TEST_F(PsyqCdTest, CdDataCallbackIsAliasForCdReadyCallback) {
   EXPECT_EQ(psyq::psyq_state().cdDataCb, 0x80057000u);
 }
 
-// ──────────────────────────────────────────────────────────
 // CdMix / CdReadBreak
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqCdTest, CdMixIsNopReturnsOne) {
   ctx.r[V0] = 0;
@@ -389,9 +375,7 @@ TEST_F(PsyqCdTest, CdReadBreakStopsControllerAndZeroesState) {
   EXPECT_EQ(psyq::psyq_state().cdWordCount, 0u);
 }
 
-// ──────────────────────────────────────────────────────────
 // Phase 2.4 — direct PsyqState integration
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqCdTest, TriggerVBlankStampsDrawSyncAllSlotsComplete) {
   // PsyQ DrawSync polls status == 2 for "drawing complete".  triggerVBlankEvent
@@ -415,9 +399,7 @@ TEST_F(PsyqCdTest, TriggerVBlankSkipsSwapCbWhenZero) {
   EXPECT_NO_FATAL_FAILURE(bios->triggerVBlankEvent());
 }
 
-// ──────────────────────────────────────────────────────────
 // Phase 3.3 — cross-thread CDROM event queue
-// ──────────────────────────────────────────────────────────
 
 // queueCdromEvent must NOT touch psyq_state or the event system itself —
 // those side effects only run when the game thread later drains the queue.
@@ -496,9 +478,7 @@ TEST_F(PsyqCdTest, QueuePreservesFifoOrderOnDrain) {
   EXPECT_EQ(psyq::psyq_state().cdReadyByte.load(), 4u);
 }
 
-// ──────────────────────────────────────────────────────────
 // Registry coverage
-// ──────────────────────────────────────────────────────────
 
 TEST_F(PsyqCdTest, RegisterLibcdExposesAll12FunctionsViaDispatch) {
   psyq_register_libcd();

@@ -13,9 +13,7 @@
 
 using namespace ps1recomp;
 
-// ──────────────────────────────────────────
 // Helper: Create test ELF with known content
-// ──────────────────────────────────────────
 
 static std::string createTestElf(
     const std::string& path,
@@ -97,9 +95,7 @@ static void cleanupFile(const std::string& path) {
     std::remove(path.c_str());
 }
 
-// ──────────────────────────────────────────
 // Basic Generation Tests
-// ──────────────────────────────────────────
 
 TEST(ConfigGenerator, GeneratesValidTOML) {
     const std::string path = "/tmp/ps1recomp_test_config_basic.elf";
@@ -195,9 +191,7 @@ TEST(ConfigGenerator, ContainsStatsSection) {
     cleanupFile(path);
 }
 
-// ──────────────────────────────────────────
 // Function List Tests
-// ──────────────────────────────────────────
 
 TEST(ConfigGenerator, ListsGameFunctions) {
     const std::string path = "/tmp/ps1recomp_test_config_funcs.elf";
@@ -237,9 +231,7 @@ TEST(ConfigGenerator, ListsGameFunctions) {
     cleanupFile(path);
 }
 
-// ──────────────────────────────────────────
 // PsyQ Classification Tests
-// ──────────────────────────────────────────
 
 TEST(ConfigGenerator, SeparatesPsyQFunctions) {
     const std::string path = "/tmp/ps1recomp_test_config_psyq.elf";
@@ -309,9 +301,7 @@ TEST(ConfigGenerator, SeparatesPsyQFunctions) {
     cleanupFile(path);
 }
 
-// ──────────────────────────────────────────
 // File Write Test
-// ──────────────────────────────────────────
 
 TEST(ConfigGenerator, WritesToFile) {
     const std::string elfPath = "/tmp/ps1recomp_test_config_file.elf";
@@ -364,9 +354,7 @@ TEST(ConfigGenerator, ReportsFileError) {
     cleanupFile(elfPath);
 }
 
-// ──────────────────────────────────────────
 // Empty Input Test
-// ──────────────────────────────────────────
 
 TEST(ConfigGenerator, HandleEmptyAnalysis) {
     const std::string path = "/tmp/ps1recomp_test_config_empty.elf";

@@ -13,7 +13,7 @@
 #include <iostream>
 #include <sstream>
 
-// ── Constructor / Destructor ──────────────────────────────────────────────────
+// Constructor / Destructor
 
 StudioState::StudioState() {
     redirector_ = std::make_unique<StreamRedirector>(logs, stateMutex, logVersion);
@@ -37,7 +37,7 @@ StudioState::~StudioState() {
     SaveSettings();
 }
 
-// ── LoadELF ───────────────────────────────────────────────────────────────────
+// LoadELF
 
 void StudioState::LoadELF(const std::string& path) {
     data.elfPath = path;
@@ -60,7 +60,7 @@ void StudioState::LoadELF(const std::string& path) {
     Log("File loaded: " + path);
 }
 
-// ── StartAnalysis ─────────────────────────────────────────────────────────────
+// StartAnalysis
 
 void StudioState::StartAnalysis() {
     if (isBusy || data.elfPath.empty()) return;
@@ -149,7 +149,7 @@ void StudioState::StartAnalysis() {
     });
 }
 
-// ── Config TOML ───────────────────────────────────────────────────────────────
+// Config TOML
 
 void StudioState::LoadConfigToml() {
     std::vector<std::string> candidates;
@@ -224,7 +224,7 @@ void StudioState::SaveConfigTomlFromEditor(const std::string& content) {
     }
 }
 
-// ── Ghidra CSV ────────────────────────────────────────────────────────────────
+// Ghidra CSV
 
 void StudioState::ImportGhidraCSV(const std::string& csvPath) {
     data.ghidraCSVPath = csvPath;
@@ -262,7 +262,7 @@ void StudioState::ImportGhidraCSV(const std::string& csvPath) {
     Log(fmt::format("Ghidra CSV imported: {} symbols applied", count));
 }
 
-// ── Output dir ────────────────────────────────────────────────────────────────
+// Output dir
 
 void StudioState::SetOutputDir(const std::string& path) {
     if (path.empty()) return;
@@ -276,7 +276,7 @@ void StudioState::SetOutputDir(const std::string& path) {
     }
 }
 
-// ── Fonts ─────────────────────────────────────────────────────────────────────
+// Fonts
 
 void StudioState::ScanFonts() {
     availableFonts.clear();
@@ -296,7 +296,7 @@ void StudioState::ScanFonts() {
         availableFonts.push_back("Default");
 }
 
-// ── Settings ──────────────────────────────────────────────────────────────────
+// Settings
 
 void StudioState::LoadSettings() {
     try {

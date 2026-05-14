@@ -27,7 +27,7 @@ void hle_libgpu_SetSprt(recomp_context *ctx);
 void hle_libgpu_SetSprt8(recomp_context *ctx);
 void hle_libgpu_SetSprt16(recomp_context *ctx);
 
-// ── Group 1.A — display-area / VRAM-transfer / video-mode HLEs ─────────────
+// Group 1.A — display-area / VRAM-transfer / video-mode HLEs
 
 /// SetDispMask(mask): GP1(0x03, mask) — enable (1) / disable (0) display.
 void hle_libgpu_SetDispMask(recomp_context *ctx);
@@ -61,7 +61,7 @@ void hle_libgpu_SetVideoMode(recomp_context *ctx);
 /// GetVideoMode(): returns current video mode (0=NTSC, 1=PAL).
 void hle_libgpu_GetVideoMode(recomp_context *ctx);
 
-// ── Group 1.A — libgs scene-graph wrappers (NOP stubs) ─────────────────────
+// Group 1.A — libgs scene-graph wrappers (NOP stubs)
 //
 // Both Rayman and Crash bypass libgs and drive libgpu directly. These stubs
 // keep the build linkable for games that *do* link libgs (e.g. Tomba) and

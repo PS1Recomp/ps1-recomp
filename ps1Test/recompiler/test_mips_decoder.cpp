@@ -6,9 +6,7 @@
 
 using namespace ps1recomp;
 
-// ──────────────────────────────────────────
 // MIPS Instruction Encoding Helpers
-// ──────────────────────────────────────────
 
 // R-type: opcode(6) | rs(5) | rt(5) | rd(5) | shamt(5) | funct(6)
 static constexpr uint32_t encR(uint8_t op, uint8_t rs, uint8_t rt, uint8_t rd, uint8_t shamt, uint8_t funct) {
@@ -33,9 +31,7 @@ static constexpr uint32_t encJ(uint8_t op, uint32_t target) {
     return (static_cast<uint32_t>(op) << 26) | (target & 0x03FFFFFF);
 }
 
-// ──────────────────────────────────────────
 // NOP
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, NOP) {
     auto inst = MipsDecoder::decode(0x00000000);
@@ -45,9 +41,7 @@ TEST(MipsDecoder, NOP) {
     EXPECT_EQ(MipsDecoder::instrName(inst.id), "NOP");
 }
 
-// ──────────────────────────────────────────
 // ALU R-type
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, ALU_R_Type) {
     // ADDU $v0, $a0, $a1 — funct=0x21
@@ -98,9 +92,7 @@ TEST(MipsDecoder, ALU_R_Type) {
     EXPECT_EQ(inst.id, InstrId::SUB);
 }
 
-// ──────────────────────────────────────────
 // Shifts
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, Shifts) {
     // SLL $v0, $a0, 4
@@ -132,9 +124,7 @@ TEST(MipsDecoder, Shifts) {
     EXPECT_EQ(inst.id, InstrId::SRAV);
 }
 
-// ──────────────────────────────────────────
 // Multiply / Divide
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, MulDiv) {
     // MULT $a0, $a1
@@ -169,9 +159,7 @@ TEST(MipsDecoder, MulDiv) {
     EXPECT_EQ(inst.id, InstrId::MTLO);
 }
 
-// ──────────────────────────────────────────
 // I-type ALU
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, ALU_I_Type) {
     // ADDIU $v0, $a0, -16
@@ -214,9 +202,7 @@ TEST(MipsDecoder, ALU_I_Type) {
     EXPECT_EQ(inst.rt, 2);
 }
 
-// ──────────────────────────────────────────
 // Loads
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, Loads) {
     // LW $v0, 16($sp) — opcode 0x23
@@ -255,9 +241,7 @@ TEST(MipsDecoder, Loads) {
     EXPECT_EQ(inst.id, InstrId::LWR);
 }
 
-// ──────────────────────────────────────────
 // Stores
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, Stores) {
     // SW $v0, 16($sp) — opcode 0x2B
@@ -285,9 +269,7 @@ TEST(MipsDecoder, Stores) {
     EXPECT_EQ(inst.id, InstrId::SWR);
 }
 
-// ──────────────────────────────────────────
 // Branches
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, Branches) {
     // BEQ $a0, $a1, +16
@@ -334,9 +316,7 @@ TEST(MipsDecoder, Branches_REGIMM) {
     EXPECT_EQ(inst.id, InstrId::BGEZAL);
 }
 
-// ──────────────────────────────────────────
 // Jumps
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, Jumps) {
     // J 0x00004000 (target in word units)
@@ -366,9 +346,7 @@ TEST(MipsDecoder, Jumps) {
     EXPECT_EQ(inst.rd, 31); // $ra
 }
 
-// ──────────────────────────────────────────
 // System
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, System) {
     // SYSCALL — funct=0x0C
@@ -381,9 +359,7 @@ TEST(MipsDecoder, System) {
     EXPECT_EQ(inst.id, InstrId::BREAK);
 }
 
-// ──────────────────────────────────────────
 // COP0
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, COP0) {
     // MFC0 $v0, SR(12) — opcode=0x10, rs=0x00, rt=2, rd=12
@@ -402,9 +378,7 @@ TEST(MipsDecoder, COP0) {
     EXPECT_EQ(inst.id, InstrId::RFE);
 }
 
-// ──────────────────────────────────────────
 // COP2 / GTE Register Moves
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, GTE_RegisterMoves) {
     // MFC2 $v0, r0 — opcode=0x12, rs=0x00, rt=2, rd=0
@@ -434,9 +408,7 @@ TEST(MipsDecoder, GTE_RegisterMoves) {
     EXPECT_EQ(inst.id, InstrId::SWC2);
 }
 
-// ──────────────────────────────────────────
 // COP2 / GTE Commands
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, GTE_Commands) {
     // GTE command encoding: opcode=0x12, bit25=1, cmd in bits 0-5
@@ -512,9 +484,7 @@ TEST(MipsDecoder, GTE_Commands) {
     EXPECT_EQ(inst.id, InstrId::GTE_NCCT);
 }
 
-// ──────────────────────────────────────────
 // Instruction Helpers
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, BranchTarget) {
     // BEQ with imm16 = 10 → target = PC + 4 + 40
@@ -547,9 +517,7 @@ TEST(MipsDecoder, DelaySlotDetection) {
     EXPECT_FALSE(MipsDecoder::decode(encR(0, 4, 5, 2, 0, 0x21)).hasBranchDelaySlot());
 }
 
-// ──────────────────────────────────────────
 // Register Names
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, RegisterNames) {
     EXPECT_EQ(gprName(0),  "$zero");
@@ -567,9 +535,7 @@ TEST(MipsDecoder, RegisterNames) {
     EXPECT_EQ(cop0Name(14), "EPC");
 }
 
-// ──────────────────────────────────────────
 // Name Tables
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, InstrNames) {
     EXPECT_EQ(MipsDecoder::instrName(InstrId::ADDU), "ADDU");
@@ -584,9 +550,7 @@ TEST(MipsDecoder, InstrNames) {
     EXPECT_EQ(MipsDecoder::categoryName(InstrCategory::Branch), "Branch");
 }
 
-// ──────────────────────────────────────────
 // Invalid Instructions
-// ──────────────────────────────────────────
 
 TEST(MipsDecoder, InvalidInstructions) {
     // Unknown primary opcode (0x3F is unused in MIPS I)

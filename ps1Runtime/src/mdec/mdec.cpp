@@ -7,21 +7,21 @@
 
 namespace ps1::mdec {
 
-// ─── Zigzag Scan Order ──────────────────────────────────
+// Zigzag Scan Order
 const uint8_t MDEC::ZIGZAG[64] = {
     0,  1,  5,  6,  14, 15, 27, 28, 2,  4,  7,  13, 16, 26, 29, 42,
     3,  8,  12, 17, 25, 30, 41, 43, 9,  11, 18, 24, 31, 40, 44, 53,
     10, 19, 23, 32, 39, 45, 52, 54, 20, 22, 33, 38, 46, 51, 55, 60,
     21, 34, 37, 47, 50, 56, 59, 61, 35, 36, 48, 49, 57, 58, 62, 63};
 
-// ─── Default Quantization Table ─────────────────────────
+// Default Quantization Table
 const uint8_t MDEC::DEFAULT_QUANT_TABLE[64] = {
     2,  16, 19, 22, 26, 27, 29, 34, 16, 16, 22, 24, 27, 29, 34, 37,
     19, 22, 26, 27, 29, 34, 34, 38, 22, 22, 26, 27, 29, 34, 37, 40,
     22, 26, 27, 29, 32, 35, 40, 48, 26, 27, 29, 32, 35, 40, 48, 58,
     26, 27, 29, 34, 38, 46, 56, 69, 27, 29, 35, 38, 46, 56, 69, 83};
 
-// ─── Constructor / Reset ────────────────────────────────
+// Constructor / Reset
 
 MDEC::MDEC() {
   reset();
@@ -43,7 +43,7 @@ void MDEC::reset() {
   std::memset(block_, 0, sizeof(block_));
 }
 
-// ─── Cosine Table ───────────────────────────────────────
+// Cosine Table
 
 void MDEC::initCosineTable() {
   if (cosineTableReady_)
@@ -58,7 +58,7 @@ void MDEC::initCosineTable() {
   cosineTableReady_ = true;
 }
 
-// ─── Register I/O ───────────────────────────────────────
+// Register I/O
 
 void MDEC::writeCommand(uint32_t val) {
   if (state_ == State::Idle) {
@@ -112,7 +112,7 @@ uint32_t MDEC::readStatus() const {
   return status;
 }
 
-// ─── DMA Interface ──────────────────────────────────────
+// DMA Interface
 
 void MDEC::dmaIn(const uint32_t *data, uint32_t wordCount) {
   for (uint32_t i = 0; i < wordCount; i++) {
@@ -122,7 +122,7 @@ void MDEC::dmaIn(const uint32_t *data, uint32_t wordCount) {
 
 uint32_t MDEC::dmaOutRead() { return readData(); }
 
-// ─── Command Processing ─────────────────────────────────
+// Command Processing
 
 void MDEC::processCommand(uint32_t cmd) {
   uint8_t opcode = (cmd >> 29) & 0x7;
@@ -166,7 +166,7 @@ void MDEC::processCommand(uint32_t cmd) {
   }
 }
 
-// ─── RLE Decode ─────────────────────────────────────────
+// RLE Decode
 
 bool MDEC::rleDecode(const uint16_t *&src, const uint16_t *end, int16_t *block,
                      const uint8_t *quantTable) {
@@ -204,7 +204,7 @@ bool MDEC::rleDecode(const uint16_t *&src, const uint16_t *end, int16_t *block,
   return true;
 }
 
-// ─── iDCT ───────────────────────────────────────────────
+// iDCT
 
 void MDEC::idct(int16_t *block) {
   int32_t temp[64];
@@ -233,7 +233,7 @@ void MDEC::idct(int16_t *block) {
   }
 }
 
-// ─── YCbCr → RGB ────────────────────────────────────────
+// YCbCr → RGB
 
 int32_t MDEC::clampS(int32_t val, int32_t lo, int32_t hi) {
   return std::clamp(val, lo, hi);
@@ -327,12 +327,12 @@ void MDEC::yuvToRgb24(const int16_t *cr, const int16_t *cb, const int16_t *y1,
     outputBuffer_.push_back(accum);
 }
 
-// ─── Decode Slice ───────────────────────────────────────
+// Decode Slice
 
 void MDEC::decodeSlice() {
   uint8_t opcode = (currentCommand_ >> 29) & 0x7;
 
-  // ── MDEC diagnostics ─────────────────────────────────────────────────────
+  // MDEC diagnostics
   // Enabled by env var PS1_MDEC_DEBUG=1. Logs macroblock counts so failures
   // in rleDecode() (invalid VLC IDs, misaligned RLE data) are visible.
   // Expected output per FMV frame: "N macroblocks decoded" where

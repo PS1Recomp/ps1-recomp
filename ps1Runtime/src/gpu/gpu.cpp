@@ -511,7 +511,7 @@ void GPU::executeGP0Command() {
     executeFillRect();
     break;
 
-  // ─── Polygons ──────────────────────────────────────────
+  // Polygons
   // Opcode bits: [27:25] = type, [24] = gouraud, [23] unused
   // Bit 0 = raw texture, Bit 1 = semi-transparent, Bit 2 = textured
 
@@ -573,7 +573,7 @@ void GPU::executeGP0Command() {
     executeGouraudTexturedPoly4();
     break;
 
-  // ─── Lines ─────────────────────────────────────────────
+  // Lines
   case 0x40:
   case 0x41:
   case 0x42:
@@ -609,7 +609,7 @@ void GPU::executeGP0Command() {
     executeLine();
     break;
 
-  // ─── Rectangles ────────────────────────────────────────
+  // Rectangles
   case 0x60:
   case 0x61:
   case 0x62:
@@ -645,7 +645,7 @@ void GPU::executeGP0Command() {
     executeRect();
     break;
 
-  // ─── VRAM Transfers ────────────────────────────────────
+  // VRAM Transfers
   case 0x80:
   case 0x81:
   case 0x82:
@@ -749,7 +749,7 @@ void GPU::executeGP0Command() {
     executeVRAMToCPU();
     break;
 
-  // ─── GPU Environment Commands ──────────────────────────
+  // GPU Environment Commands
   case 0xE1: // Draw Mode / Texpage
     ditherEnable_ = (cmd & (1 << 9)) != 0;
     blendMode_ = (cmd >> 5) & 3;
@@ -1371,7 +1371,7 @@ void GPU::executeVRAMToCPU() {
   vramTransfer_.isReadingFromVRAM = true;
 }
 
-// ─── Gouraud Shading Polygons ───────────────────────────────────────────────
+// Gouraud Shading Polygons
 
 static Color24 extractColor24(uint32_t word) {
   Color24 c;

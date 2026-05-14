@@ -37,7 +37,7 @@ public:
   static const uint8_t ZIGZAG[64];
 
 private:
-  // ─── Command state ──────────────
+  // Command state
   enum class State : uint8_t { Idle, ReceivingData, Decoding };
   State state_ = State::Idle;
   bool busy_ = false;
@@ -48,7 +48,7 @@ private:
   bool outputSigned_ = false;
   uint32_t remainingWords_ = 0;
 
-  // ─── Quantization tables ────────
+  // Quantization tables
   std::array<uint8_t, 64> lumaQuantTable_;
   std::array<uint8_t, 64> chromaQuantTable_;
   bool hasCustomQuantTable_ = false;
@@ -57,14 +57,14 @@ private:
   std::array<int32_t, 64 * 64> cosineTable_;
   bool cosineTableReady_ = false;
 
-  // ─── Data buffers ───────────────
+  // Data buffers
   std::vector<uint16_t> inputBuffer_;
   std::vector<uint32_t> outputBuffer_;
 
-  // ─── 8×8 block scratch ──────────
+  // 8×8 block scratch
   int16_t block_[64]; // current 8×8 block
 
-  // ─── Internal methods ───────────
+  // Internal methods
   void processCommand(uint32_t cmd);
   void decodeSlice();
 

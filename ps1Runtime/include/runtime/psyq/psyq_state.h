@@ -64,7 +64,7 @@ struct GpuDrawSync {
  */
 class PsyqState {
 public:
-  // ── VBlank ────────────────────────────────────────────────────────────
+  // VBlank
   /// Tick counter incremented by `main_host.cpp`'s VBlank thread at 60 Hz.
   /// `hle_VSync` reads this to compute the wait target.  Replaces the
   /// per-game `vsync_counter` BSS address.
@@ -81,7 +81,7 @@ public:
   /// drop user-visible state.
   std::atomic<bool> vblankPending{false};
 
-  // ── CDROM sync flags ─────────────────────────────────────────────────
+  // CDROM sync flags
   /// Set by `Bios::triggerCdromEvent(CdlComplete)` to signal CdSync
   /// completion.  Replaces `cd_sync_byte` BSS slot.
   std::atomic<uint8_t> cdSyncByte{0};
@@ -90,7 +90,7 @@ public:
   /// CdReady completion.  Replaces `cd_ready_byte` BSS slot.
   std::atomic<uint8_t> cdReadyByte{0};
 
-  // ── CDROM read bookkeeping ───────────────────────────────────────────
+  // CDROM read bookkeeping
   // Touched only from the game thread (libcd HLE entries) and the
   // CDROM IRQ handler running on the same thread (synchronous host
   // model).  Plain integers — no atomic semantics required yet.
@@ -98,24 +98,24 @@ public:
   uint32_t cdDestPtr   = 0; ///< PS1 RAM addr where the next sector lands.
   uint32_t cdWordCount = 0; ///< Words per sector (512 raw, 585 with subhdr).
 
-  // ── CDROM async callbacks ────────────────────────────────────────────
+  // CDROM async callbacks
   /// Game-side callback registered by `CdReadCallback` / `CdReadyCallback`.
   /// `bios.cpp` INT1/INT4 dispatch will invoke this once Phase 2.4 lands.
   uint32_t cdDataCb   = 0;
   /// Notify-side callback (`CdDataCallback` legacy alias).
   uint32_t cdNotifyCb = 0;
 
-  // ── GPU async callback ───────────────────────────────────────────────
+  // GPU async callback
   /// Display-swap callback registered by `VSyncCallback`.  Replaces
   /// `gpu_swap_cb` BSS slot.
   uint32_t gpuSwapCb = 0;
 
-  // ── GPU DrawSync OT slots ────────────────────────────────────────────
+  // GPU DrawSync OT slots
   /// Replaces the BSS triplet `gpu_drawsync_base` /
   /// `gpu_drawsync_index_addr` / `gpu_drawsync_count`.
   GpuDrawSync drawSync;
 
-  // ── Test helpers ─────────────────────────────────────────────────────
+  // Test helpers
   /// Reset every field to its default-constructed value.  Tests call
   /// this in `SetUp()` to isolate cases sharing the singleton.
   void reset();

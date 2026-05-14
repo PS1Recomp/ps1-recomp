@@ -11,14 +11,14 @@
 
 namespace ps1recomp {
 
-// ─── Constants ──────────────────────────────────────────
+// Constants
 
 constexpr uint32_t SECTOR_SIZE_RAW = 2352;  // Raw CD sector
 constexpr uint32_t SECTOR_SIZE_DATA = 2048; // ISO9660 data payload
 constexpr uint32_t SECTOR_HEADER_SIZE =
     24; // Mode 2 Form 1 header (sync + header + subheader)
 
-// ─── Disc File Entry ────────────────────────────────────
+// Disc File Entry
 
 struct DiscFile {
   std::string name; // Filename (e.g. "SCUS_949.00;1")
@@ -28,7 +28,7 @@ struct DiscFile {
   bool isDirectory;
 };
 
-// ─── Disc Reader ────────────────────────────────────────
+// Disc Reader
 
 class DiscReader {
 public:

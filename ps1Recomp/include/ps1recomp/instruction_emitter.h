@@ -11,7 +11,7 @@
 
 namespace ps1recomp {
 
-// ─── Function context for emission ──────────────────────
+// Function context for emission
 
 /// Detected jump table for an indirect JR instruction.
 /// When a JR $rx (rx != $ra) is preceded by the canonical
@@ -37,12 +37,12 @@ struct RecompFunction {
   std::vector<JumpTableEntry> jumpTables;
 };
 
-// ─── Function call resolver ─────────────────────────────
+// Function call resolver
 
 /// Callback to resolve JAL target address to function name
 using FuncResolver = std::function<std::string(uint32_t address)>;
 
-// ─── Instruction Emitter ─────────────────────────────────
+// Instruction Emitter
 
 class InstructionEmitter {
 public:
@@ -62,7 +62,7 @@ public:
   /// @return Complete C++ function body
   std::string emitFunction(const RecompFunction &func) const;
 
-  // ── Individual emitters (public for testing) ──
+  // Individual emitters (public for testing)
 
   std::string emitALU(const Instruction &inst) const;
   std::string emitShift(const Instruction &inst) const;
@@ -75,7 +75,7 @@ public:
   std::string emitGTEMove(const Instruction &inst) const;
   std::string emitSystem(const Instruction &inst) const;
 
-  // ── Helpers ──
+  // Helpers
 
   /// Format a GPR reference: ctx->r{N}
   static std::string reg(uint8_t r);

@@ -16,7 +16,7 @@ class ElfParser;
 class FunctionFinder;
 struct FunctionInfo;
 
-// ─── PsyQ Subsystems ────────────────────────────────────
+// PsyQ Subsystems
 
 enum class PsyQSubsystem {
     Graphics,    // Gs*, GPU_*, Draw*, Set*, Clear*
@@ -31,7 +31,7 @@ enum class PsyQSubsystem {
     Other        // Unclassified PsyQ functions
 };
 
-// ─── Stub Types ─────────────────────────────────────────
+// Stub Types
 
 enum class StubType {
     Stub,         // Needs runtime implementation (GPU, SPU, etc.)
@@ -40,7 +40,7 @@ enum class StubType {
     Recompile     // Should be recompiled normally (not a known PsyQ func)
 };
 
-// ─── PsyQ Function Definition ──────────────────────────
+// PsyQ Function Definition
 
 struct PsyQFunction {
     std::string    name;
@@ -49,7 +49,7 @@ struct PsyQFunction {
     std::string    description;
 };
 
-// ─── PsyQ Match Result ──────────────────────────────────
+// PsyQ Match Result
 
 struct PsyQMatch {
     uint32_t       address;     // Function address in binary
@@ -60,7 +60,7 @@ struct PsyQMatch {
     bool           exactMatch;  // true = symbol/hash, false = prefix heuristic
 };
 
-// ─── PsyQ Matcher ───────────────────────────────────────
+// PsyQ Matcher
 
 class PsyQMatcher {
 public:
@@ -107,7 +107,7 @@ public:
     static const char* subsystemName(PsyQSubsystem sub);
     static const char* stubTypeName(StubType type);
 
-    // ─── Hash primitives (public for testing) ────────────────────────
+    // Hash primitives (public for testing)
 
     /// Zero immediate fields in a 32-bit MIPS instruction. Mirrors the
     /// Python reference implementation in tools/extract_psyq_signatures.py.

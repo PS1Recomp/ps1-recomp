@@ -15,7 +15,7 @@
 
 namespace ps1 {
 
-// ─── Overlay Entry ──────────────────────────────────────
+// Overlay Entry
 
 struct OverlayEntry {
   std::string name;       // "battle", "menu", etc.
@@ -25,7 +25,7 @@ struct OverlayEntry {
   bool active = false;    // Currently loaded in RAM?
 };
 
-// ─── Overlay dispatch hook ──────────────────────────────
+// Overlay dispatch hook
 
 /// Callback type to add/remove functions from dispatch table
 /// When setActive is true: register all overlay functions for this region
@@ -33,7 +33,7 @@ struct OverlayEntry {
 using OverlayDispatchHook =
     std::function<void(int overlayIndex, bool setActive)>;
 
-// ─── Overlay Manager ────────────────────────────────────
+// Overlay Manager
 
 class OverlayManager {
 public:
