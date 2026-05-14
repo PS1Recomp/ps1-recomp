@@ -11,6 +11,9 @@ add_library(ps1Runtime_lib STATIC
     src/cdrom/virtual_fs.cpp
     src/cdrom/cdrom_controller.cpp
     src/bios/bios.cpp
+    src/bios/syscall_a.cpp
+    src/bios/syscall_b.cpp
+    src/bios/syscall_c.cpp
     src/bios/heap.cpp
     src/bios/event_system.cpp
     src/bios/file_io.cpp
