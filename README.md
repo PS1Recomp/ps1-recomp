@@ -10,13 +10,10 @@ PS1Recomp converts PS1 game binaries into native PC executables through static r
 PS1 ISO/BIN
     │
     ▼
-ps1Analyzer  →  game_config.toml   (function boundaries, PsyQ addresses)
+ps1Analyzer  →  game_config.toml   (function boundaries, PsyQ signatures)
     │
     ▼
 ps1Recomp    →  recompiled_out.cpp  (MIPS → C++, ~150k lines per game)
-    │
-    ▼
-patch_rayman.py → recompiled_out.cpp (HLE patches for middleware functions)
     │
     ▼
 ps1Runtime   →  Native PC executable (SDL2 + OpenGL)
@@ -30,7 +27,7 @@ ps1Runtime   →  Native PC executable (SDL2 + OpenGL)
 | **ps1Recomp** | `ps1Recomp/` | Decodes MIPS R3000A instructions and emits literal C++ translation (1:1 per instruction), handles GTE coprocessor and jump tables |
 | **ps1Runtime** | `ps1Runtime/` | Simulates PS1 hardware: BIOS HLE, GPU (OpenGL 3.3), SPU (SDL2 audio), CD-ROM, DMA, GTE, MDEC, Timers, Input |
 | **ps1Interface** | `ps1Interface/` | GUI studio for loading ELFs, exploring functions, editing configs, and previewing recompiled C++ (ImGui + SDL2) |
-| **ps1Test** | `ps1Test/` | 386 unit + integration tests covering all runtime subsystems |
+| **ps1Test** | `ps1Test/` | 555 unit + integration tests covering all runtime subsystems |
 
 ## Project Structure
 
@@ -63,15 +60,17 @@ ps1-recomp/
 ├── ps1Test/           Unit tests (GTest): 386 tests across all subsystems
 ├── third_party/       External dependencies: ELFIO, toml11, fmt, googletest
 ├── tools/
-│   ├── patch_rayman.py        Game-specific HLE patches (applied after recompilation)
-│   ├── ps1_mcp_server.py      MCP server for AI-assisted debugging (13 tools)
-│   ├── run_and_report.py      Automated game diagnostics (VRAM, frame rate, logs)
-│   ├── demo_build.sh          Quick-start demo script
-│   ├── ghidra/                Ghidra integration scripts
+│   ├── extract_psyq_signatures.py   Build the PsyQ signature DB from PsyQ SDK .LIB files
+│   ├── psyq_lib_extract.py          Split SN Systems .LIB archives into per-function .OBJ
+│   ├── ps1_mcp_server.py            MCP server for AI-assisted debugging
+│   ├── run_and_report.py            Automated game diagnostics (VRAM, frame rate, logs)
+│   ├── validate_game.py             Pixel-content validation against a frame budget
+│   ├── demo_build.sh                Quick-start demo script
+│   ├── ghidra/                      Ghidra integration scripts
 │   │   ├── ExportPS1Functions.py    Export function list from Ghidra to CSV
 │   │   ├── ExportPS1Functions.java  Same, Java version (headless mode)
 │   │   └── start_ghidra_mcp.sh      Launch Ghidra with GhidraMCP on port 8080
-│   └── pcsx_redux_mcp/        PCSX-Redux emulator integration (MCP server)
+│   └── pcsx_redux_mcp/              PCSX-Redux emulator integration (MCP server)
 ├── .github/workflows/ci.yml   CI/CD: build + test on every push
 ├── CMakeLists.txt             C++20 / CMake 3.20+ build system
 └── LICENSE                    GPLv3
@@ -142,12 +141,7 @@ ctest --test-dir build --output-on-failure -j$(nproc)
    ./build/ps1Recomp/ps1Recomp rayman_config.toml ps1Runtime/src/recompiled_out.cpp
    ```
 
-5. Apply HLE patches:
-   ```bash
-   python3 tools/patch_rayman.py
-   ```
-
-6. Build and run:
+5. Build and run:
    ```bash
    cmake --build build -j$(nproc)
    ./build/ps1Runtime/ps1Runtime --config rayman_config.toml
@@ -191,9 +185,9 @@ ctest --test-dir build --output-on-failure -j$(nproc)
 
 **HLE over LLE**: BIOS and PsyQ middleware are implemented as High-Level Emulation (HLE) stubs rather than running the original ROM code. This avoids legal issues and simplifies the runtime.
 
-**Game-specific patches**: `tools/patch_rayman.py` applies targeted patches to the generated C++ for Rayman-specific quirks (timing-sensitive VSync loops, FMV skipping, dispatch table overrides).
+**Hash-based PsyQ detection**: `ps1Analyzer` matches each function body against a SHA-256 database of PsyQ SDK functions extracted from 14 SDK versions (3463 signatures, 1943 unique after collision filtering). Detected functions are routed to native HLE implementations at runtime instead of being recompiled. This avoids per-game imperative patches and is the project's main divergence from prior PS1 recompilers.
 
-**Double-buffered framebuffer**: Rayman uses vertical double-buffering in PS1 VRAM — Buffer A at (0,0) is rendered while Buffer B at (0,256) is displayed, swapping each VBlank at 60Hz.
+**Double-buffered framebuffer**: PS1 games typically use double-buffering in VRAM (e.g. Buffer A at (0,0) rendered while Buffer B at (0,256) is displayed, swapping each VBlank at 60Hz). The runtime infers the active display window from the GPU command stream.
 
 ## Tooling
 
@@ -236,6 +230,27 @@ Runs the game for N seconds and outputs a JSON report with frame rate, VRAM pixe
 - [psxrecomp](https://1379.tech/i-built-a-ps1-static-recompiler-with-no-prior-experience-and-claude-code/) — PS1 static recompiler reference implementation
 - [Nocash PSX Specs](https://problemkaputt.de/psx-spx.htm) — definitive PS1 hardware reference
 - [ps1-bare-metal](https://github.com/spicyjpeg/ps1-bare-metal) — PS1 hardware programming examples
+
+## Status
+
+The project is the subject of an ongoing undergraduate thesis. **It is not a finished
+emulator** — it is a recompiler whose architecture works end-to-end, plus a runtime that
+covers enough of the PS1 hardware to boot real games. The current state, honestly:
+
+- **Pipeline**: stable. Analyzer → recompiler → runtime → native binary works for any PS1
+  ELF/EXE. Stub-mode build (no ROM) is the CI baseline (555/555 tests green).
+- **Rayman (USA)**: was the primary validation target through Phases 0–3. With prior
+  imperative HLE patches it ran at ~59fps with correct VRAM content. Those patches were
+  retired during open-source preparation; the regen-fresh path now relies entirely on the
+  PsyQ hash-based HLE coverage and has not been re-validated end-to-end since the patch
+  removal.
+- **Crash Bandicoot 1 (USA)**: experimental. Boots through PsyQ init, then stalls in a
+  game-side hash table walk; a signature-matcher bug for short libcd wrappers is the next
+  known blocker (see `PLANNING.md` Phase 4 notes).
+- **Other games**: not exercised yet. The architecture is meant to be game-agnostic; adding
+  a new title is mostly a matter of providing a TOML config and running the analyzer.
+
+For an honest, gap-by-gap account of what works and what does not, see `ARCHITECTURE.md`.
 
 ## License
 

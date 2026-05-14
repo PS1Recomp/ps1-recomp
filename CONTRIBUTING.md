@@ -105,13 +105,7 @@ config.
 ./build/ps1Recomp/ps1Recomp configs/rayman.toml ps1Runtime/src/recompiled_out.cpp
 ```
 
-### Step 4 — Apply game-specific patches (Rayman only)
-
-```bash
-python3 tools/patch_rayman.py ps1Runtime/src/recompiled_out.cpp
-```
-
-### Step 5 — Rebuild the runtime and run
+### Step 4 — Rebuild the runtime and run
 
 ```bash
 cmake --build build -j$(nproc)
@@ -145,13 +139,13 @@ ps1Analyzer/    ELF parsing, function detection, PsyQ signature matching
 ps1Recomp/      MIPS R3000A → C++ translation, jump table detection, GTE emission
 ps1Runtime/     PS1 hardware simulation (GPU, BIOS HLE, SPU, DMA, CD-ROM, GTE, MDEC…)
 ps1Interface/   Optional GUI studio (ImGui) — build with -DPS1RECOMP_BUILD_INTERFACE=ON
-ps1Test/        Google Test suite (56 files, 386+ tests)
-tools/          Python automation: game-specific patching, diagnostics, Ghidra integration
+ps1Test/        Google Test suite (63 files, 555 tests)
+tools/          Python automation: PsyQ signature extraction, diagnostics, Ghidra integration
 configs/        Per-game TOML configs (gitignored except examples)
 third_party/    Git submodules (ELFIO, toml11, fmt, googletest)
 ```
 
-The pipeline flows: `ps1Analyzer` → `ps1Recomp` → `patch_*.py` → `ps1Runtime`.
+The pipeline flows: `ps1Analyzer` → `ps1Recomp` → `ps1Runtime`.
 
 ---
 
@@ -164,7 +158,7 @@ ps1Test/
 ├── analyzer/       tests for ps1Analyzer
 ├── pipeline/       end-to-end pipeline tests
 ├── recompiler/     tests for ps1Recomp
-└── runtime/        tests for ps1Runtime subsystems (44 files)
+└── runtime/        tests for ps1Runtime subsystems
 ```
 
 Every new hardware behavior or HLE function must have a test. A minimal example:
@@ -235,3 +229,91 @@ Register your file in `ps1Test/CMakeLists.txt` under the appropriate target.
 
 For large changes (new subsystems, API changes), open an issue first to discuss the approach
 before writing code.
+
+### Commit message convention
+
+Commits follow `type(scope): subject`, where:
+
+- **type** is one of `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `perf`.
+- **scope** is the affected module — usually the immediate subdirectory of `ps1Runtime/src/`
+  or the binary touched (`analyzer`, `recomp`, `runtime`, `bios`, `gpu`, `cdrom`, `dma`,
+  `libcd`, `libgpu`, `psyq`, `tools`, `docs`, `ci`, etc.).
+- **subject** is imperative, lowercase, no trailing period.
+
+Examples from `git log`:
+
+```
+feat(psyq): add Crash Bandicoot boot HLE stubs
+fix(libcd): skip CdlReadN re-emission when CdRead is called with sectors=0
+refactor(bios): split handleA0/B0/C0 into syscall_{a,b,c}.cpp
+chore(runtime): remove dead stub headers and orphan smoke test
+```
+
+Body lines (after a blank line) describe *why* the change is needed. If the commit fixes
+an issue, reference it with `Fixes #N`.
+
+---
+
+## Adding Support for a New Game
+
+The recompiler is meant to be game-agnostic — the goal is that a new title needs only a
+config file, not new C++ code. The PsyQ signature database (in `ps1Analyzer/data/`) carries
+3463 hashes covering 14 PsyQ SDK versions, so most middleware calls are detected
+automatically.
+
+### Workflow
+
+1. **Extract the PS1 executable from the disc image**:
+
+   ```bash
+   ./build/ps1Analyzer/ps1Analyzer --extract-exe \
+       --disc "path/to/Game (Region).cue" \
+       --out test_roms/Game/boot.exe
+   ```
+
+2. **Run the analyzer** to detect function boundaries and PsyQ signatures:
+
+   ```bash
+   ./build/ps1Analyzer/ps1Analyzer \
+       --disc "path/to/Game (Region).cue" \
+       --out configs/game.toml
+   ```
+
+   The generated TOML lists every function (`[[functions]]`), every PsyQ HLE match
+   (`[[hle_functions]]`), and the overlay layout (`[[overlays]]`).
+
+3. **Recompile** with the generated config:
+
+   ```bash
+   ./build/ps1Recomp/ps1Recomp configs/game.toml ps1Runtime/src/recompiled_out.cpp
+   ```
+
+4. **Rebuild and run**:
+
+   ```bash
+   cmake --build build -j$(nproc)
+   ./build/ps1Runtime/ps1Runtime --config configs/game.toml
+   ```
+
+### When the game does not boot
+
+Most boot-time issues fall into one of three categories — diagnose in this order:
+
+1. **Missing PsyQ HLE stub**. The runtime logs `[PSYQ] unregistered: <name>@0x...` when an
+   identified PsyQ function has no registered implementation. Add the implementation in
+   `ps1Runtime/src/psyq/psyq_<library>.cpp` and register it in `psyq_registry.cpp`.
+
+2. **Signature collision**. Two PsyQ functions that share a hash (typically short libcd
+   wrappers) can route to the wrong stub. Look for warnings about hash collisions during
+   analysis. The signature DB schema requires the full opcode hash for short functions to
+   disambiguate.
+
+3. **Missing function detection**. The analyzer's prologue-scan may miss a function. Add
+   it via `--add-func 0x80<address>` and re-run.
+
+### Adding more PsyQ SDK versions
+
+If a game is from a SDK release not yet in the database, drop the `.LIB` archives
+into a local `CONSOLIDATED/<version>/lib/` tree, point `PSYQ_SDK_ROOT` at it, and re-run
+`tools/extract_psyq_signatures.py`. The schema in `ps1Analyzer/data/psyq_signatures.toml`
+is the source of truth.

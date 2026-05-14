@@ -99,13 +99,12 @@ def test_rejects_non_lib(tmp_path: Path):
 
 def test_real_libgpu_extracts_without_warnings(tmp_path: Path, capsys):
     """Regression test: the v3.5 LIBGPU.LIB must extract without LNK\\x02
-    warnings (the bug we fixed in Session 0.2). Skipped if the SDK is not
-    available locally — CI will set PSYQ_SDK_ROOT or skip."""
+    warnings (the bug we fixed in Session 0.2). Skipped unless PSYQ_SDK_ROOT
+    points at a local CONSOLIDATED SDK tree."""
     import os
-    sdk = os.environ.get(
-        "PSYQ_SDK_ROOT",
-        "/home/dellareti/psyq_sdks/CONSOLIDATED",
-    )
+    sdk = os.environ.get("PSYQ_SDK_ROOT")
+    if not sdk:
+        pytest.skip("PSYQ_SDK_ROOT not set — skipping local SDK regression")
     libfile = Path(sdk) / "v3.5" / "lib" / "LIBGPU.LIB"
     if not libfile.exists():
         pytest.skip(f"PsyQ SDK not present at {sdk}")
