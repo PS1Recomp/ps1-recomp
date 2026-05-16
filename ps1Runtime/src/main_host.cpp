@@ -249,7 +249,7 @@ int main(int argc, char *argv[]) {
 
   // Initialize renderer (creates window + OpenGL context)
   ps1::gpu::RendererOpenGL renderer(gpu);
-  if (!renderer.init("ps1Recomp Full System")) {
+  if (!renderer.init("ps1Recomp")) {
     fmt::print(stderr, "Failed to initialize OpenGL renderer!\n");
     SDL_Quit();
     return 1;
@@ -397,7 +397,16 @@ int main(int argc, char *argv[]) {
     }
   }
   std::atomic<bool> gameRunning{true};
+  // `gameFinished` = "shutdown requested" (set by main or game thread)
+  // `gameThreadDone` = "game thread lambda has returned" (set only by game
+  // thread). Splitting these avoids the UAF in shutdown: previously the
+  // cleanup code set `gameFinished` to request shutdown, then waited
+  // `while (!gameFinished)` — which already returned true the instant after
+  // the request — so the wait exited immediately and the still-running
+  // game thread was detach()ed, leaving it racing with `Bios::~Bios()`
+  // destructing `cdEventQueue_`.  See ISSUES.md #1.
   std::atomic<bool> gameFinished{false};
+  std::atomic<bool> gameThreadDone{false};
   uint64_t frameCount = 0;
 
   // Initialize dispatch table before starting the game
@@ -511,6 +520,7 @@ int main(int argc, char *argv[]) {
       fmt::print("[Game] Unknown exception\n");
     }
     gameFinished.store(true, std::memory_order_release);
+    gameThreadDone.store(true, std::memory_order_release);
   });
 
   bool running = true;
@@ -607,15 +617,25 @@ int main(int argc, char *argv[]) {
 
   // Wait for game thread (with timeout)
   if (gameThread.joinable()) {
-    gameFinished.store(true, std::memory_order_release);
+    gameFinished.store(true, std::memory_order_release); // shutdown signal
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (!gameFinished.load(std::memory_order_acquire) &&
+    while (!gameThreadDone.load(std::memory_order_acquire) &&
            std::chrono::steady_clock::now() < deadline) {
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    if (gameThread.joinable()) {
-      gameThread.detach(); // Don't block forever
-      fmt::print("[Main] Game thread detached (still running)\n");
+    if (gameThreadDone.load(std::memory_order_acquire)) {
+      gameThread.join(); // lambda returned — safe to join
+    } else {
+      // Game thread is still inside `recomp_dispatch` (recompiled MIPS is a
+      // tight polling loop that does not check `gameFinished`).  Detaching
+      // and letting destructors run is UB — the thread will be reading
+      // `Bios::cdEventQueue_` etc. while we destruct them.  Skip C++
+      // destructors entirely and exit immediately; the OS will reclaim
+      // memory and SDL/audio handles.
+      fmt::print("[Main] Game thread did not finish in 2s — forcing exit "
+                 "(skipping destructors to avoid UAF race)\n");
+      fmt::print("Simulation ended after {} frames.\n", frameCount);
+      std::_Exit(0);
     }
   }
 
