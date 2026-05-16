@@ -13,6 +13,10 @@ void PsyqState::reset() {
   cdDataCb    = 0;
   cdNotifyCb  = 0;
   gpuSwapCb   = 0;
+  intrMask    = 0;
+  for (auto &cb : intrCallback) cb = 0;
+  for (auto &cb : dmaCallback)  cb = 0;
+  callbacksEnabled = true;
   drawSync = GpuDrawSync{};
 }
 

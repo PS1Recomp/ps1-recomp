@@ -31,6 +31,7 @@ add_library(ps1Runtime_lib STATIC
     src/psyq/psyq_registry.cpp
     src/psyq/psyq_libapi.cpp
     src/psyq/psyq_libcd.cpp
+    src/psyq/psyq_libetc.cpp
     src/psyq/psyq_libgte.cpp
     src/psyq/psyq_libgpu.cpp
     src/psyq/psyq_font.cpp

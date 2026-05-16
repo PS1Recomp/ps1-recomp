@@ -110,6 +110,31 @@ public:
   /// `gpu_swap_cb` BSS slot.
   uint32_t gpuSwapCb = 0;
 
+  // Interrupt / callback management (libetc + libapi).  PSY-Q's libetc
+  // routes everything through an indirection struct (psyz/decomp/src/libetc/
+  // intr.c — `struct intr* D_800B7080`); we collapse the same surface to
+  // these slots since the runtime models interrupts cooperatively, not via
+  // real CPU IRQs.
+  /// Mirror of hardware I_MASK (0x1F801074).  Real silicon decides which
+  /// IRQs the CPU sees; we keep a software copy so PSY-Q SetIntrMask/
+  /// GetIntrMask round-trip the same value.  No effect on dispatch — host
+  /// callbacks are drained at cooperative yield points regardless.
+  uint16_t intrMask = 0;
+  /// Per-IRQ-line user callback registered via `InterruptCallback(n, fn)`.
+  /// Slot 0..6 follow the PSY-Q convention (VBlank, GPU, CDROM, DMA, RTC0,
+  /// RTC1, RTC2); slot 7 reserved.  Never invoked today — the only callback
+  /// the runtime actually fires is `gpuSwapCb`, queued by
+  /// `Bios::triggerVBlankEvent`.  Storing it keeps the round-trip honest so
+  /// PSY-Q's read-back-and-restore patterns work.
+  static constexpr std::size_t kIntrSlots = 8;
+  uint32_t intrCallback[kIntrSlots] = {};
+  /// Per-channel DMA callback registered via `DMACallback(n, fn)`.  Same
+  /// shape and reasoning as `intrCallback`.
+  uint32_t dmaCallback[kIntrSlots] = {};
+  /// Master enable toggled by `StopCallback` / `RestartCallback`.  Read by
+  /// `CheckCallback` only; does not gate dispatch.
+  bool callbacksEnabled = true;
+
   // GPU DrawSync OT slots
   /// Replaces the BSS triplet `gpu_drawsync_base` /
   /// `gpu_drawsync_index_addr` / `gpu_drawsync_count`.

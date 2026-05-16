@@ -4,6 +4,7 @@
 #include "runtime/psyq/psyq_libapi.h"
 #include "runtime/psyq/psyq_libcd.h"
 #include "runtime/psyq/psyq_libc.h"
+#include "runtime/psyq/psyq_libetc.h"
 #include "runtime/psyq/psyq_libgpu.h"
 #include "runtime/psyq/psyq_libgte.h"
 #include "runtime/psyq/psyq_pad.h"
@@ -125,5 +126,6 @@ void psyq_register_rayman_boot() {
   ps1::psyq::psyq_register_libgpu_extras();
   ps1::psyq::psyq_register_libgpu_font();
   ps1::psyq::psyq_register_libetc_pad();
+  ps1::psyq::psyq_register_libetc_intr();
   ps1::psyq::psyq_register_libc();
 }
