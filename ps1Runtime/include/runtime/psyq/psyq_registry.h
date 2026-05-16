@@ -12,7 +12,7 @@
  *
  * Resolution happens at runtime via this registry instead of via linker
  * symbols, so the build does not break when the analyzer detects PsyQ
- * functions for which no C++ implementation exists yet — those calls fail
+ * functions for which no C++ implementation exists yet -- those calls fail
  * loudly at runtime with the function name and return address.
  *
  * Names follow the canonical `<library>_<basename>` convention from
@@ -34,7 +34,7 @@ void psyq_register(const char *name, PsyqHleFn fn);
 void psyq_dispatch(const char *name, recomp_context *ctx);
 
 /// Register the built-in HLE implementations that ship with ps1Runtime.
-/// Idempotent — repeated calls are no-ops after the first.
+/// Idempotent -- repeated calls are no-ops after the first.
 /// Call once from `main_host.cpp` after `ps1::psyq::configure(...)`.
 void psyq_registry_init_defaults();
 

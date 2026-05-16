@@ -1,4 +1,4 @@
-// ps1Analyzer — ELF Parser Implementation
+// ps1Analyzer -- ELF Parser Implementation
 // Loads PS1 ELF binaries using ELFIO and extracts sections/symbols
 
 #include "ps1recomp/elf_parser.h"
@@ -325,7 +325,7 @@ SectionType ElfParser::classifySectionType(const std::string &name,
     return SectionType::Data;
   }
 
-  // Fallback: writable → data, otherwise other
+  // Fallback: writable -> data, otherwise other
   if (flags & ELFIO::SHF_ALLOC) {
     return (flags & ELFIO::SHF_WRITE) ? SectionType::Data : SectionType::Other;
   }

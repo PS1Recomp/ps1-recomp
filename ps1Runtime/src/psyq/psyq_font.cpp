@@ -41,7 +41,7 @@ void warnOnceFor(const char *name) {
   static std::unordered_set<std::string> seen;
   if (seen.insert(name).second)
     fmt::print(stderr,
-               "[PSYQ] {} stubbed (no glyph rasterisation) — buffered text "
+               "[PSYQ] {} stubbed (no glyph rasterisation) -- buffered text "
                "only\n",
                name);
 }
@@ -62,7 +62,7 @@ std::string readCString(recomp_context *ctx, uint32_t addr, size_t cap = 1024) {
 }
 
 // Pull the i-th printf argument according to the o32 calling convention.
-//   i=0 → $a2, i=1 → $a3, i>=2 → caller's stack spill (sp + 0x10 + (i-2)*4).
+//   i=0 -> $a2, i=1 -> $a3, i>=2 -> caller's stack spill (sp + 0x10 + (i-2)*4).
 // FntPrint's $a0=id, $a1=fmt are already consumed by the caller, so the
 // "first variadic" lives at $a2.
 uint32_t fetchArg(recomp_context *ctx, unsigned i) {
@@ -75,7 +75,7 @@ uint32_t fetchArg(recomp_context *ctx, unsigned i) {
 // Tiny printf subset: %s, %d, %u, %x, %X, %c, %%.  Everything else is
 // passed through verbatim (so unknown specifiers still produce *something*
 // in the buffer rather than silently truncating).  Width/precision flags
-// are ignored — keeps the implementation dependency-free.
+// are ignored -- keeps the implementation dependency-free.
 std::string formatFnt(recomp_context *ctx, const std::string &fmt) {
   std::string out;
   out.reserve(fmt.size() + 16);
@@ -126,7 +126,7 @@ std::string formatFnt(recomp_context *ctx, const std::string &fmt) {
       break;
     }
     default:
-      // Unknown specifier — keep the raw bytes so the user can tell.
+      // Unknown specifier -- keep the raw bytes so the user can tell.
       out.push_back('%');
       out.push_back(spec);
       break;
@@ -231,7 +231,7 @@ void hle_libgpu_FntFlush(recomp_context *ctx) {
 
   FntSlot &s = g_slots[id];
   if (s.isbg && s.w > 0 && s.h > 0) {
-    // GP0(0x02): monochrome FillRect — black with full alpha.  Fast-path
+    // GP0(0x02): monochrome FillRect -- black with full alpha.  Fast-path
     // background draw matches what FntFlush does on real hardware before
     // it lays down glyphs.
     writeGP0(0x02000000u);
@@ -246,7 +246,7 @@ void hle_libgpu_FntFlush(recomp_context *ctx) {
   ctx->r[V0] = static_cast<uint32_t>(id);
 }
 
-//  FntLoad(tx, ty) — would upload the 8x8 1bpp font + CLUT to VRAM at
+//  FntLoad(tx, ty) -- would upload the 8x8 1bpp font + CLUT to VRAM at
 //  (tx, ty).  We don't ship the glyph table, so this is bookkeeping only;
 //  warnOnceFor surfaces it in the log if anything actually relies on the
 //  texture being present.
@@ -255,7 +255,7 @@ void hle_libgpu_FntLoad(recomp_context *ctx) {
   warnOnceFor("libgpu_FntLoad");
 }
 
-//  FntSystem(n) — set the slot id used by FntPrint(-1, ...).
+//  FntSystem(n) -- set the slot id used by FntPrint(-1, ...).
 //  v0 = previous default.
 //
 //  PsyQ exposes this as `SetDumpFnt` on later SDK versions; both names are

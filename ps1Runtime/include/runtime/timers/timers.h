@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1Runtime — Interrupt Controller
+// ps1Runtime -- Interrupt Controller
 // PS1 I_STAT / I_MASK interrupt handling
 
 #include <cstdint>
@@ -43,8 +43,8 @@ public:
   bool shouldSignalCPU() const { return hasPendingInterrupt(); }
 
 private:
-  uint32_t iStat_ = 0; // 0x1F801070 — Interrupt Status (R/W: write 0 to ack)
-  uint32_t iMask_ = 0; // 0x1F801074 — Interrupt Mask
+  uint32_t iStat_ = 0; // 0x1F801070 -- Interrupt Status (R/W: write 0 to ack)
+  uint32_t iMask_ = 0; // 0x1F801074 -- Interrupt Mask
 };
 
 // Timer (Root Counter)

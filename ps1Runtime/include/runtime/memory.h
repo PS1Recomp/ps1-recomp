@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file memory.h
- * @brief PS1 memory subsystem — 2 MB RAM, scratchpad, BIOS ROM and I/O routing.
+ * @brief PS1 memory subsystem -- 2 MB RAM, scratchpad, BIOS ROM and I/O routing.
  *
  * `ps1::Memory` maps the full PS1 address space and routes reads/writes to the
  * correct hardware device. All three KSEG mirrors (KUSEG/KSEG0/KSEG1) resolve
@@ -10,12 +10,12 @@
  * ## Memory Map
  * | Range | Size | Description |
  * |-------|------|-------------|
- * | 0x00000000 – 0x001FFFFF | 2 MB | Main RAM (KUSEG) |
- * | 0x1F800000 – 0x1F8003FF | 1 KB | Scratchpad (data cache) |
- * | 0x1F801000 – 0x1F802FFF | 8 KB | I/O ports (hardware registers) |
- * | 0x1FC00000 – 0x1FC7FFFF | 512 KB | BIOS ROM |
- * | 0x80000000 – 0x801FFFFF | 2 MB | Main RAM mirror — KSEG0 (cached) |
- * | 0xA0000000 – 0xA01FFFFF | 2 MB | Main RAM mirror — KSEG1 (uncached) |
+ * | 0x00000000 - 0x001FFFFF | 2 MB | Main RAM (KUSEG) |
+ * | 0x1F800000 - 0x1F8003FF | 1 KB | Scratchpad (data cache) |
+ * | 0x1F801000 - 0x1F802FFF | 8 KB | I/O ports (hardware registers) |
+ * | 0x1FC00000 - 0x1FC7FFFF | 512 KB | BIOS ROM |
+ * | 0x80000000 - 0x801FFFFF | 2 MB | Main RAM mirror -- KSEG0 (cached) |
+ * | 0xA0000000 - 0xA01FFFFF | 2 MB | Main RAM mirror -- KSEG1 (uncached) |
  *
  * **Thread safety:** RAM reads/writes use `atomic_thread_fence` acquire/release
  * so the VBlank counter is visible across the game thread and VBlank thread.
@@ -39,12 +39,12 @@ namespace ps1 {
 
 // PS1 Memory Map
 //
-// 0x00000000 - 0x001FFFFF  Main RAM (2MB) — KUSEG
+// 0x00000000 - 0x001FFFFF  Main RAM (2MB) -- KUSEG
 // 0x1F800000 - 0x1F8003FF  Scratchpad (1KB data cache)
 // 0x1F801000 - 0x1F802FFF  I/O Ports (hardware registers)
 // 0x1FC00000 - 0x1FC7FFFF  BIOS ROM (512KB)
-// 0x80000000 - 0x801FFFFF  Main RAM mirror — KSEG0 (cached)
-// 0xA0000000 - 0xA01FFFFF  Main RAM mirror — KSEG1 (uncached)
+// 0x80000000 - 0x801FFFFF  Main RAM mirror -- KSEG0 (cached)
+// 0xA0000000 - 0xA01FFFFF  Main RAM mirror -- KSEG1 (uncached)
 //
 
 class Memory {
@@ -91,7 +91,7 @@ public:
         return cdrom_->readRegister(phys);
       return 0;
     }
-    // I/O ports — return 0 for byte reads not explicitly handled
+    // I/O ports -- return 0 for byte reads not explicitly handled
     return 0;
   }
 
@@ -139,7 +139,7 @@ public:
   uint32_t read32(uint32_t addr) const {
     uint32_t phys = toPhysical(addr);
 
-    // RAM fast-path (most common, avoids 4× read8 calls)
+    // RAM fast-path (most common, avoids 4x read8 calls)
     if (phys < RAM_SIZE) {
       std::atomic_thread_fence(std::memory_order_acquire);
       uint32_t val;
@@ -249,8 +249,8 @@ public:
       return;
     }
 
-    // BIOS is ROM — writes are ignored
-    // Other I/O ports — ignored at byte level
+    // BIOS is ROM -- writes are ignored
+    // Other I/O ports -- ignored at byte level
   }
 
   void write16(uint32_t addr, uint16_t val) {
@@ -365,7 +365,7 @@ public:
       return;
     }
 
-    // SPU (32-bit → two 16-bit writes)
+    // SPU (32-bit -> two 16-bit writes)
     if (phys >= 0x1F801C00 && phys < 0x1F802000) {
       if (spu_) {
         spu_->writeRegister(phys, val & 0xFFFF);
@@ -455,15 +455,15 @@ public:
   /// PS1 also mirrors 2MB RAM across the first 8MB of physical address space.
   static uint32_t toPhysical(uint32_t addr) {
     // Strip KSEG0/KSEG1 bits
-    // KSEG0: 0x80000000-0x9FFFFFFF → mask off bit 31
-    // KSEG1: 0xA0000000-0xBFFFFFFF → mask off bits 31,29
+    // KSEG0: 0x80000000-0x9FFFFFFF -> mask off bit 31
+    // KSEG1: 0xA0000000-0xBFFFFFFF -> mask off bits 31,29
     uint32_t phys;
     if (addr >= 0xA0000000) {
       phys = addr & 0x1FFFFFFF;
     } else if (addr >= 0x80000000) {
       phys = addr & 0x1FFFFFFF;
     } else {
-      phys = addr; // KUSEG — already physical
+      phys = addr; // KUSEG -- already physical
     }
 
     // PS1 RAM mirroring: 2MB is mirrored across the first 8MB

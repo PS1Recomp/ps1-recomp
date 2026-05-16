@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <runtime/cpu_context.h>
 
-// Stub recomp_dispatch — called by EventSystem and Bios drainPendingCallbacks.
+// Stub recomp_dispatch -- called by EventSystem and Bios drainPendingCallbacks.
 // In tests we simply do nothing.
 void recomp_dispatch(uint8_t * /*rdram*/, recomp_context * /*ctx*/,
                      uint32_t /*addr*/) {

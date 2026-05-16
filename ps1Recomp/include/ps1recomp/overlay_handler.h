@@ -1,7 +1,7 @@
 #pragma once
 
-// ps1Recomp — Overlay Handler
-// Manages PS1 overlay sections — code blocks dynamically loaded from CD
+// ps1Recomp -- Overlay Handler
+// Manages PS1 overlay sections -- code blocks dynamically loaded from CD
 // into fixed RAM addresses. Handles address conflicts when multiple
 // overlays share the same RAM region.
 
@@ -41,7 +41,7 @@ public:
   const OverlaySection *findOverlay(uint32_t addr) const;
 
   /// Find all overlays whose RAM region contains this address
-  /// (used to detect conflicts — multiple overlays at same address)
+  /// (used to detect conflicts -- multiple overlays at same address)
   std::vector<const OverlaySection *> findConflicts(uint32_t addr) const;
 
   /// Generate a qualified function name: "overlay_{name}__func_{addr:08X}"

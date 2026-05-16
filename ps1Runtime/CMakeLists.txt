@@ -70,12 +70,12 @@ option(PS1RECOMP_USE_STUB "Use stub recompiled_out instead of real game" OFF)
 
 if(PS1RECOMP_USE_STUB)
     set(RECOMP_SRC src/recompiled_out_stub.cpp)
-    message(STATUS "PS1RECOMP_USE_STUB=ON — using stub (no ROM required)")
+    message(STATUS "PS1RECOMP_USE_STUB=ON -- using stub (no ROM required)")
 elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/recompiled_out.cpp")
     set(RECOMP_SRC src/recompiled_out.cpp)
 else()
     set(RECOMP_SRC src/recompiled_out_stub.cpp)
-    message(STATUS "recompiled_out.cpp not found — using stub (CI/test build)")
+    message(STATUS "recompiled_out.cpp not found -- using stub (CI/test build)")
 endif()
 
 add_executable(ps1Runtime

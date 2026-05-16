@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1Runtime — SPU (Sound Processing Unit)
+// ps1Runtime -- SPU (Sound Processing Unit)
 // 24 voice channels, ADPCM decoding, ADSR envelopes, reverb, 512KB Sound RAM
 
 #include <array>
@@ -78,7 +78,7 @@ public:
 
   void reset();
 
-  // Register I/O — called by Memory I/O routing
+  // Register I/O -- called by Memory I/O routing
   void writeRegister(uint32_t addr, uint16_t val);
   uint16_t readRegister(uint32_t addr) const;
 

@@ -24,20 +24,20 @@ static inline void drainOnce() {
 // VSync
 //
 // PsyQ VSync(n):
-//   n == 0 → sync to next VBlank (wait for counter to change)
-//   n  > 0 → wait until n more VBlanks have elapsed
+//   n == 0 -> sync to next VBlank (wait for counter to change)
+//   n  > 0 -> wait until n more VBlanks have elapsed
 //   Returns the total VBlank counter value.
 //
 // Reads psyq_state().vsyncCounter, the C++-side singleton incremented by
 // the host VBlank thread (~60 Hz, ~16.6 ms period).  Each iteration:
 // drainOnce() pumps the BIOS callback queue (no-op fast path when empty),
-// then sleep 100 µs to yield CPU before the next atomic poll.  A 1 s
+// then sleep 100 us to yield CPU before the next atomic poll.  A 1 s
 // wall-clock deadline (~60 frames at 60 Hz) guards against deadlock when
 // the VBlank thread is not running.
 //
 // Phase 3.2: after the wait loop, exchange `psyq_state().vblankPending`
 // to false.  When the flag was observed `true`, run `deliverVBlankEvent`
-// on this (game) thread — that is what now performs the actual PsyQ
+// on this (game) thread -- that is what now performs the actual PsyQ
 // VBlank work (event-system triggers, queued swap callback, drawSync
 // stamping) which used to run on the IRQ-context VBlank thread.  The
 // exchange both observes and clears the flag atomically, so two
@@ -69,8 +69,8 @@ void hle_VSync(recomp_context *ctx) {
 // DrawSync
 //
 // PsyQ DrawSync(mode):
-//   mode 0 → wait until GPU drawing is complete, return 0
-//   mode 1 → return number of primitives remaining (non-blocking)
+//   mode 0 -> wait until GPU drawing is complete, return 0
+//   mode 1 -> return number of primitives remaining (non-blocking)
 //
 // Since the runtime GPU processes GP0 commands synchronously, drawing is
 // always "complete".  Return 0 for both modes.
@@ -84,8 +84,8 @@ void hle_DrawSync(recomp_context *ctx) {
 // ResetGraph
 //
 // PsyQ ResetGraph(mode):
-//   mode 0 → reset + flush + clear display list
-//   mode 3 → flush only
+//   mode 0 -> reset + flush + clear display list
+//   mode 3 -> flush only
 //
 // The runtime GPU has no queued command list to flush, so this is a NOP.
 //
@@ -122,7 +122,7 @@ void hle_ClearOTag(recomp_context *ctx) {
 
 // ClearOTagR
 //
-// Same as ClearOTag but fills in reverse order — entries are linked
+// Same as ClearOTag but fills in reverse order -- entries are linked
 // high-to-low so GPU traverses them from ot[n-1] down to ot[0].
 //
 void hle_ClearOTagR(recomp_context *ctx) {
@@ -220,10 +220,10 @@ void hle_SetDefDispEnv(recomp_context *ctx) {
 //
 // PsyQ PutDispEnv(env):
 //   Applies a DispEnv to the GPU by sending GP1 commands:
-//     GP1(0x05) — set display start (VRAM X/Y)
-//     GP1(0x06) — set horizontal display range
-//     GP1(0x07) — set vertical   display range
-//     GP1(0x08) — set display mode (width, height, interlace)
+//     GP1(0x05) -- set display start (VRAM X/Y)
+//     GP1(0x06) -- set horizontal display range
+//     GP1(0x07) -- set vertical   display range
+//     GP1(0x08) -- set display mode (width, height, interlace)
 //
 void hle_PutDispEnv(recomp_context *ctx) {
   if (!g_cfg.writeGP1) {
@@ -313,11 +313,11 @@ void hle_SetDefDrawEnv(recomp_context *ctx) {
 //
 // PsyQ PutDrawEnv(env):
 //   Applies a DrawEnv to the GPU by sending GP0 commands:
-//     GP0(0xE1) — texture page (tpage)
-//     GP0(0xE2) — texture window
-//     GP0(0xE3) — drawing area top-left
-//     GP0(0xE4) — drawing area bottom-right
-//     GP0(0xE5) — drawing offset
+//     GP0(0xE1) -- texture page (tpage)
+//     GP0(0xE2) -- texture window
+//     GP0(0xE3) -- drawing area top-left
+//     GP0(0xE4) -- drawing area bottom-right
+//     GP0(0xE5) -- drawing offset
 //
 void hle_PutDrawEnv(recomp_context *ctx) {
   if (!g_cfg.writeGP0) {

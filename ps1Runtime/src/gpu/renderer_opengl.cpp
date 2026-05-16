@@ -207,7 +207,7 @@ void RendererOpenGL::renderFrame() {
   // actual framebuffer.
 
   // Derive width/height from GPUSTAT only when the game explicitly set
-  // GP1(0x08). Otherwise keep the 320x240 default — many games render 320px
+  // GP1(0x08). Otherwise keep the 320x240 default -- many games render 320px
   // wide without ever sending GP1(0x08) (the GPUSTAT reset value of hres=0
   // means "256px" but those bits are meaningless until the game configures them).
   uint32_t stat = gpu_.readGPUSTAT();

@@ -2,16 +2,16 @@
 
 An MCP (Model Context Protocol) server that lets Claude Code query a live PCSX-Redux instance
 during debugging. Claude can read PS1 RAM, VRAM, registers, inject button presses, and execute
-arbitrary Lua — all against a real PS1 running the game, as ground truth for comparing behavior
+arbitrary Lua -- all against a real PS1 running the game, as ground truth for comparing behavior
 against PSXRecomp.
 
 ## How it works
 
-- `server.py` — Python MCP server (SSE transport, port 8078). Exposes tools to Claude Code.
-- `startup.lua` — Lua script loaded into PCSX-Redux. Polls a temp file each frame and executes
+- `server.py` -- Python MCP server (SSE transport, port 8078). Exposes tools to Claude Code.
+- `startup.lua` -- Lua script loaded into PCSX-Redux. Polls a temp file each frame and executes
   any Lua code written to it, returning results. This is the IPC bridge between the Python server
   and PCSX-Redux's Lua runtime.
-- `navigate_to_gameplay.lua` — Helper script that auto-navigates from boot to gameplay and saves
+- `navigate_to_gameplay.lua` -- Helper script that auto-navigates from boot to gameplay and saves
   a checkpoint state. Useful for getting to a known position quickly.
 
 ## Requirements
@@ -24,11 +24,11 @@ against PSXRecomp.
 
 ### 1. Enable PCSX-Redux web server
 
-In PCSX-Redux: **Configuration → Emulation → Web Server**, set port to `8079` and enable it.
+In PCSX-Redux: **Configuration -> Emulation -> Web Server**, set port to `8079` and enable it.
 
 ### 2. Load your game and open the Lua console
 
-Start your game in PCSX-Redux. Open the Lua console via **Debug → Lua Console**.
+Start your game in PCSX-Redux. Open the Lua console via **Debug -> Lua Console**.
 
 ### 3. Load the startup script
 
@@ -40,7 +40,7 @@ loadfile("path/to/tools/pcsx_redux_mcp/startup.lua")()
 
 Replace the path with the actual path on your machine. You should see:
 ```
-[psxrecomp-mcp] ready — listener stored as _psxrecomp_listener
+[psxrecomp-mcp] ready -- listener stored as _psxrecomp_listener
 ```
 
 ### 4. Start the MCP server
@@ -99,11 +99,11 @@ loadfile("path/to/tools/pcsx_redux_mcp/navigate_to_gameplay.lua")()
 
 ## Caveats
 
-- **Paths are hardcoded** — `startup.lua` and `navigate_to_gameplay.lua` contain hardcoded paths
+- **Paths are hardcoded** -- `startup.lua` and `navigate_to_gameplay.lua` contain hardcoded paths
   (`F:/Projects/psxrecomp-v2/...`). Update these to match your setup before use.
-- **Save state load is unreliable** — `pcsx_load_state` works inconsistently. Starting PCSX-Redux
+- **Save state load is unreliable** -- `pcsx_load_state` works inconsistently. Starting PCSX-Redux
   fresh and navigating manually is more reliable for reaching specific game states.
-- **Emulation must be running** — most tools require active emulation. Paused is fine for RAM/VRAM
+- **Emulation must be running** -- most tools require active emulation. Paused is fine for RAM/VRAM
   reads; fully stopped will not work.
-- **IPC latency** — the Lua bridge fires once per frame (GPU::Vsync). Commands are processed with
+- **IPC latency** -- the Lua bridge fires once per frame (GPU::Vsync). Commands are processed with
   up to one frame of latency (~16ms at 60Hz).

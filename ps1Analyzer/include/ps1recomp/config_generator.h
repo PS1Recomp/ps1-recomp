@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1Analyzer — Config Generator
+// ps1Analyzer -- Config Generator
 // Generates TOML config files for ps1Recomp from analysis results
 
 #include <cstdint>

@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1Runtime — Save State System
+// ps1Runtime -- Save State System
 // Serializes/deserializes complete PS1 hardware state to/from file
 
 #include "runtime/cdrom/cdrom_controller.h"

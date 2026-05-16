@@ -1,4 +1,4 @@
-# ps1-recomp — Architecture
+# ps1-recomp -- Architecture
 
 This document describes how the recompiler is put together: what each module
 owns, what data crosses module boundaries, and which decisions are deliberate.
@@ -31,23 +31,23 @@ PS2Recomp's model; the in-tree runtime + TOML configs follow both.
 ## Three-phase pipeline
 
 ```
-        ┌─────────────┐
-disc →  │ ps1Analyzer │ → game.toml ─┐
-        └─────────────┘              │
-                                     ▼
-                              ┌─────────────┐
-                              │  ps1Recomp  │ → recompiled_out.cpp
-                              └─────────────┘              │
-                                                           ▼
-                                                  ┌────────────────┐
-                                                  │   ps1Runtime   │ → ./game (native binary)
-                                                  └────────────────┘
+        +-------------+
+disc ->  | ps1Analyzer | -> game.toml -+
+        +-------------+              |
+                                     v
+                              +-------------+
+                              |  ps1Recomp  | -> recompiled_out.cpp
+                              +-------------+              |
+                                                           v
+                                                  +----------------+
+                                                  |   ps1Runtime   | -> ./game (native binary)
+                                                  +----------------+
 ```
 
 Each binary has one job. They communicate via files (TOML config, generated
 C++ source), not shared memory or IPC. Each phase can be re-run independently.
 
-### Phase 1 — `ps1Analyzer/`
+### Phase 1 -- `ps1Analyzer/`
 
 **Input:** a PS1 disc image (CUE/BIN or ISO 9660) and a region tag.
 **Output:** a TOML config describing every function in the executable.
@@ -55,7 +55,7 @@ C++ source), not shared memory or IPC. Each phase can be re-run independently.
 The analyzer reads the disc, extracts the boot executable, parses its ELF
 sections, and walks the `.text` segment looking for function prologues
 (`addiu $sp, -N` and friends). Detected functions are matched against the
-PsyQ signature database in `ps1Analyzer/data/psyq_signatures.toml` — 3463
+PsyQ signature database in `ps1Analyzer/data/psyq_signatures.toml` -- 3463
 SHA-256 hashes covering 14 PsyQ SDK releases and the five core libraries
 (libapi, libgpu, libcd, libgte, libetc). Matches are emitted as
 `[[hle_functions]]` entries so the recompiler can skip them and the runtime
@@ -71,10 +71,10 @@ Generation, hashing and collision handling all live in `tools/`:
 | Hash every function body | `tools/extract_psyq_signatures.py` |
 | Match at analysis time | `ps1Analyzer/src/psyq_signatures.cpp` |
 
-### Phase 2 — `ps1Recomp/`
+### Phase 2 -- `ps1Recomp/`
 
 **Input:** `game.toml`.
-**Output:** `recompiled_out.cpp` — one C++ function per MIPS function.
+**Output:** `recompiled_out.cpp` -- one C++ function per MIPS function.
 
 The recompiler decodes each MIPS instruction (`mips_decoder.cpp`) and emits a
 1:1 C++ translation (`instruction_emitter.cpp`). Every recompiled function
@@ -87,11 +87,11 @@ Jump tables are detected by the canonical MIPS pattern
 flagged `hle_functions` in the config are replaced by a call to the
 corresponding `ps1::psyq::hle_*` runtime stub.
 
-`recompiled_out.cpp` is **gitignored** — it is regenerated per game from the
+`recompiled_out.cpp` is **gitignored** -- it is regenerated per game from the
 TOML config. CI builds use `recompiled_out_stub.cpp` (a no-op placeholder) so
 the build is green without any ROM present.
 
-### Phase 3 — `ps1Runtime/`
+### Phase 3 -- `ps1Runtime/`
 
 **Input:** `recompiled_out.cpp` and a game TOML.
 **Output:** the running native binary.
@@ -151,7 +151,7 @@ N64Recomp publishes its runtime in a separate repo (`N64ModernRuntime`); we
 deliberately avoid that split for a one-author project.
 
 ### Single `recomp_context` passed by pointer
-All recompiled functions receive `(uint8_t* rdram, recomp_context* ctx)` —
+All recompiled functions receive `(uint8_t* rdram, recomp_context* ctx)` --
 explicit, not global. This pattern is N64Recomp's and is preserved so that a
 future multi-threaded recompilation harness has a clean handoff. Do not move
 the context to a thread-local global without rethinking that.
@@ -181,32 +181,32 @@ Phase 5.
 ## Data flow at a glance
 
 ```
-                                ┌────────────────────────┐
-disc (CUE/BIN) ──ISO9660───────►│  cdrom::VirtualFs      │
-                                └───────────┬────────────┘
-                                            │ extract boot.exe
-                                            ▼
-ELFIO ────parse────►   .text / .data / .bss in rdram[]
-                                            │
-                                            ▼
-                          ┌─────────────────────────┐
-                          │  recomp_dispatch(addr)  │  ◄── runtime entry
-                          └────────────┬────────────┘
-                                       │ jumps into
-                                       ▼
-              func_801XXXXX(rdram, ctx)  ◄── generated C++
-                                       │
-              ┌────────────────────────┼────────────────────────┐
-              │                        │                        │
-              ▼                        ▼                        ▼
+                                +------------------------+
+disc (CUE/BIN) --ISO9660------->|  cdrom::VirtualFs      |
+                                +-----------+------------+
+                                            | extract boot.exe
+                                            v
+ELFIO ----parse---->   .text / .data / .bss in rdram[]
+                                            |
+                                            v
+                          +-------------------------+
+                          |  recomp_dispatch(addr)  |  <-- runtime entry
+                          +------------+------------+
+                                       | jumps into
+                                       v
+              func_801XXXXX(rdram, ctx)  <-- generated C++
+                                       |
+              +------------------------+------------------------+
+              |                        |                        |
+              v                        v                        v
        BIOS::executeA0()       ps1::psyq::hle_VSync()     GPU::writeGP0(...)
        (syscall_a.cpp)         (psyq_libgpu.cpp)          (gpu/gpu.cpp)
-              │                        │                        │
-              └─────────── mutate recomp_context + hardware ─────┘
+              |                        |                        |
+              +----------- mutate recomp_context + hardware -----+
 ```
 
 VBlank, CD-ROM IRQs and audio callbacks all run on separate threads and
-publish to `recomp_context` through `psyq_state()` atomics — never via direct
+publish to `recomp_context` through `psyq_state()` atomics -- never via direct
 shared variables. See `ps1Runtime/include/runtime/psyq/psyq_state.h`.
 
 ---
@@ -223,7 +223,7 @@ The project is honest about its scope. As of this writing:
 - **Crash Bandicoot 1**: experimental. Boots through PsyQ init, then stalls
   in a game-side hash table walk before the title screen. A signature
   collision in short libcd wrappers is the next known blocker.
-- **MDEC / FMV**: the decoder stubs out — full-motion video is skipped, not
+- **MDEC / FMV**: the decoder stubs out -- full-motion video is skipped, not
   decoded.
 - **SPU accuracy**: ADPCM envelope, reverb and pitch modulation are
   approximations. Most music plays; precise effects do not.
@@ -241,39 +241,39 @@ For active follow-up items, see `PLANNING.md` in the working tree.
 
 ```
 ps1-recomp/
-├── ps1Analyzer/        ELF + disc parsing, function detection, PsyQ matching
-│   ├── data/           psyq_signatures.toml, psyq_metadata.toml
-│   ├── include/
-│   └── src/
-├── ps1Recomp/          MIPS → C++ translation
-│   ├── include/
-│   └── src/            mips_decoder, instruction_emitter, gte_emitter,
-│                       overlay_handler, hle_emitter, main
-├── ps1Runtime/         PS1 hardware simulation + SDL2/OpenGL host
-│   ├── include/runtime/   public headers
-│   └── src/
-│       ├── bios/       syscall_a/b/c, heap, event_system, file_io, bios
-│       ├── cdrom/      cue_parser, bin_reader, iso9660, virtual_fs,
-│                       cdrom_controller, exe_extractor
-│       ├── gpu/        gpu (state machine + primitives), renderer_opengl
-│       ├── spu/        spu (24-voice ADPCM)
-│       ├── dma/        dma (7 channels)
-│       ├── mdec/       mdec (currently stubbed)
-│       ├── timers/     timers (root counters)
-│       ├── input/      input (controller + SIO)
-│       ├── psyq/       psyq_state, psyq_registry, hle_VSync etc.
-│       ├── interrupts/ interrupt controller
-│       ├── gte.cpp     geometry transform engine
-│       ├── main_host.cpp   game loop, VBlank thread, SDL2 host
-│       └── recompiled_out{,_stub}.cpp   generated game code
-├── ps1Interface/       optional ImGui studio (off by default)
-├── ps1Test/            557 Google Test cases
-│   ├── analyzer/
-│   ├── recompiler/
-│   ├── runtime/
-│   └── pipeline/
-├── third_party/        ELFIO, toml11, fmt, googletest (git submodules)
-├── tools/              PsyQ signature extraction, diagnostics, MCP server
-├── .github/workflows/  CI: stub-mode build + ctest on Ubuntu
-└── configs/            per-game TOMLs (gitignored except example_game.toml)
++-- ps1Analyzer/        ELF + disc parsing, function detection, PsyQ matching
+|   +-- data/           psyq_signatures.toml, psyq_metadata.toml
+|   +-- include/
+|   +-- src/
++-- ps1Recomp/          MIPS -> C++ translation
+|   +-- include/
+|   +-- src/            mips_decoder, instruction_emitter, gte_emitter,
+|                       overlay_handler, hle_emitter, main
++-- ps1Runtime/         PS1 hardware simulation + SDL2/OpenGL host
+|   +-- include/runtime/   public headers
+|   +-- src/
+|       +-- bios/       syscall_a/b/c, heap, event_system, file_io, bios
+|       +-- cdrom/      cue_parser, bin_reader, iso9660, virtual_fs,
+|                       cdrom_controller, exe_extractor
+|       +-- gpu/        gpu (state machine + primitives), renderer_opengl
+|       +-- spu/        spu (24-voice ADPCM)
+|       +-- dma/        dma (7 channels)
+|       +-- mdec/       mdec (currently stubbed)
+|       +-- timers/     timers (root counters)
+|       +-- input/      input (controller + SIO)
+|       +-- psyq/       psyq_state, psyq_registry, hle_VSync etc.
+|       +-- interrupts/ interrupt controller
+|       +-- gte.cpp     geometry transform engine
+|       +-- main_host.cpp   game loop, VBlank thread, SDL2 host
+|       +-- recompiled_out{,_stub}.cpp   generated game code
++-- ps1Interface/       optional ImGui studio (off by default)
++-- ps1Test/            557 Google Test cases
+|   +-- analyzer/
+|   +-- recompiler/
+|   +-- runtime/
+|   +-- pipeline/
++-- third_party/        ELFIO, toml11, fmt, googletest (git submodules)
++-- tools/              PsyQ signature extraction, diagnostics, MCP server
++-- .github/workflows/  CI: stub-mode build + ctest on Ubuntu
++-- configs/            per-game TOMLs (gitignored except example_game.toml)
 ```

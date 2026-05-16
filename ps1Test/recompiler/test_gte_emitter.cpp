@@ -1,5 +1,5 @@
-// Tests for ps1Recomp — GTE Emitter
-// Validates COP2/GTE → C++ translation
+// Tests for ps1Recomp -- GTE Emitter
+// Validates COP2/GTE -> C++ translation
 
 #include <gtest/gtest.h>
 #include <ps1recomp/gte_emitter.h>
@@ -106,7 +106,7 @@ TEST(GteEmitter, CTC2) {
 
 TEST(GteEmitter, LWC2) {
   GteEmitter emitter;
-  // LWC2 cop2d[9], 16($sp) → load word to GTE data reg IR1
+  // LWC2 cop2d[9], 16($sp) -> load word to GTE data reg IR1
   auto inst = MipsDecoder::decode(encLWC2(9, 29, 16));
   auto code = emitter.emit(inst, 0);
   EXPECT_NE(code.find("gte_write_data"), std::string::npos);
@@ -116,7 +116,7 @@ TEST(GteEmitter, LWC2) {
 
 TEST(GteEmitter, SWC2) {
   GteEmitter emitter;
-  // SWC2 cop2d[12], 0($a0) → store GTE SXY0 to memory
+  // SWC2 cop2d[12], 0($a0) -> store GTE SXY0 to memory
   auto inst = MipsDecoder::decode(encSWC2(12, 4, 0));
   auto code = emitter.emit(inst, 0);
   EXPECT_NE(code.find("gte_read_data"), std::string::npos);
@@ -229,7 +229,7 @@ TEST(GteEmitter, SfLmFlags) {
 
 TEST(GteEmitter, NonGteRejected) {
   GteEmitter emitter;
-  // ADDU — not a GTE instruction
+  // ADDU -- not a GTE instruction
   uint32_t raw = (0u << 26) | (4u << 21) | (5u << 16) | (2u << 11) | 0x21u;
   auto inst = MipsDecoder::decode(raw);
   auto code = emitter.emit(inst, 0);

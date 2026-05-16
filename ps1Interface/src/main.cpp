@@ -1,4 +1,4 @@
-// ps1Interface — PS1 Recompiler Studio
+// ps1Interface -- PS1 Recompiler Studio
 // GUI front-end for ps1Analyzer built with ImGui + SDL2 + OpenGL3
 
 #include "GUI.hpp"
@@ -40,7 +40,7 @@ int main(int /*argc*/, char** /*argv*/) {
         SDL_WINDOW_MAXIMIZED);
 
     SDL_Window* window = SDL_CreateWindow(
-        "ps1Interface — PS1 Recompiler Studio",
+        "ps1Interface -- PS1 Recompiler Studio",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         1280, 720, windowFlags);
     if (!window) {

@@ -129,7 +129,7 @@ void CdromController::writeRegister(uint32_t addr, uint8_t val) {
     break;
   case 1:
     switch (port) {
-    case 3: // Interrupt flag (ack by writing bits) — Index 1
+    case 3: // Interrupt flag (ack by writing bits) -- Index 1
       interruptFlag_ &= ~(val & 0x1F);
       // When the game clears interrupt bits, it has finished processing
       // the interrupt (including reading the response and calling any
@@ -150,7 +150,7 @@ void CdromController::writeRegister(uint32_t addr, uint8_t val) {
     case 2: // Interrupt enable
       interruptEnable_ = val & 0x1F;
       break;
-    case 3: // Interrupt flag (ack by writing bits) — Index 2
+    case 3: // Interrupt flag (ack by writing bits) -- Index 2
       // Some docs say index 2/3 port 3 also ACKs IF.
       // PsyQ CdInit writes port3.idx2 = 0x00 (no-op clear).
       interruptFlag_ &= ~(val & 0x1F);
@@ -167,7 +167,7 @@ void CdromController::writeRegister(uint32_t addr, uint8_t val) {
     switch (port) {
     case 1: // Volume apply
       break;
-    case 3: // Interrupt flag (ack by writing bits) — Index 3
+    case 3: // Interrupt flag (ack by writing bits) -- Index 3
       // PS1 CDROM: port 3 with ODD index (1 or 3) = write to IF ACK.
       // PsyQ CdInit writes port3.idx3 = 0x20 to clear param FIFO.
       interruptFlag_ &= ~(val & 0x1F);
@@ -265,7 +265,7 @@ void CdromController::tick(uint32_t cycles) {
     }
   }
 
-  // Process ongoing reads — deliver one sector at a time, wait for ACK
+  // Process ongoing reads -- deliver one sector at a time, wait for ACK
   if (state_ == CdromState::ReadingData && !waitingForAck_) {
     readCycleCounter_ += static_cast<int32_t>(cycles);
     if (readCycleCounter_ >= static_cast<int32_t>(cyclesPerSector_)) {
@@ -428,7 +428,7 @@ void CdromController::cmdReadN() {
   // handles INT1 sequentially: triggerCdromEvent queues the callback,
   // drainPendingCallbacks runs it (DMA copies the sector), THEN clears the
   // gate.  If a new ReadN is issued from inside the callback (queue
-  // processing), it happens BEFORE the gate is cleared, which is correct —
+  // processing), it happens BEFORE the gate is cleared, which is correct --
   // drainPendingCallbacks clears it afterwards, enabling the first sector
   // of the new read.
   pushResponse(INT_ACKNOWLEDGE, {buildStatusByte()});
@@ -440,7 +440,7 @@ void CdromController::cmdReadN() {
   cyclesPerSector_ = (mode_ & 0x80) ? (33868800 / 150) : (33868800 / 75);
   // Small startup delay: prevents first sector from being delivered in the
   // same tick as ReadN, giving the game thread time to set remaining/destPtr.
-  // Half a sector's worth of cycles — enough for the game thread to finish
+  // Half a sector's worth of cycles -- enough for the game thread to finish
   // its writes, but not so long that the game sees a timeout.
   readCycleCounter_ = -(static_cast<int32_t>(cyclesPerSector_) / 2);
 }
@@ -497,7 +497,7 @@ void CdromController::cmdInit() {
   // when the game reads it, allowing the success condition to pass.
   //
   // On real hardware INT2 arrives ~300-400ms after INT3, but our HLE fires
-  // it synchronously.  hasSecondaryResponse_ is intentionally NOT set here —
+  // it synchronously.  hasSecondaryResponse_ is intentionally NOT set here --
   // using the deferred secondary (via watchpoint) caused INT2 to fire
   // BEFORE CdlInit was sent, leaving interruptFlag_=3 (INT3) when the game
   // checked, which caused the 5-retry "CdInit: Init failed" loop.
@@ -506,7 +506,7 @@ void CdromController::cmdInit() {
   interruptFlag_ = static_cast<uint8_t>(INT_COMPLETE);
   if (interruptCallback_)
     interruptCallback_(static_cast<uint8_t>(INT_COMPLETE));
-  // hasSecondaryResponse_ = false (default) — no deferred INT2 needed.
+  // hasSecondaryResponse_ = false (default) -- no deferred INT2 needed.
 }
 
 void CdromController::cmdMute() {

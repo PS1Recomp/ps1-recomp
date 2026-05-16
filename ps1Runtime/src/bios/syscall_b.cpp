@@ -6,7 +6,7 @@ namespace ps1::bios {
 
 using detail::readString;
 
-// PS1 BIOS Table B (0xB0) — event system, pad init, file I/O, memory card,
+// PS1 BIOS Table B (0xB0) -- event system, pad init, file I/O, memory card,
 // table accessors, exception bookkeeping. Dispatched from Bios::executeB0()
 // in bios.cpp.
 
@@ -49,7 +49,7 @@ void Bios::handleB0(uint32_t index) {
   case 0x0D: // disableEvent
     ctx_.r[V0] = eventSystem_.disableEvent(ctx_.r[A0]);
     break;
-  case 0x12: { // InitPAD — store pad buffer addresses for VBlank polling
+  case 0x12: { // InitPAD -- store pad buffer addresses for VBlank polling
     padBuf1Addr_ = ctx_.r[A0];
     padBuf1Size_ = ctx_.r[A1];
     padBuf2Addr_ = ctx_.r[A2];
@@ -73,11 +73,11 @@ void Bios::handleB0(uint32_t index) {
     initBuf(padBuf2Addr_, padBuf2Size_);
     break;
   }
-  case 0x13: // StartPAD — begin controller polling during VBlank
+  case 0x13: // StartPAD -- begin controller polling during VBlank
     padActive_ = true;
-    BIOS_LOG("[BIOS] StartPAD() — polling active\n");
+    BIOS_LOG("[BIOS] StartPAD() -- polling active\n");
     break;
-  case 0x14: // StopPAD — stop controller polling
+  case 0x14: // StopPAD -- stop controller polling
     padActive_ = false;
     BIOS_LOG("[BIOS] StopPAD()\n");
     break;
@@ -121,7 +121,7 @@ void Bios::handleB0(uint32_t index) {
   case 0x34: // read
     ctx_.r[V0] = fileIo_.read(ctx_.r[A0], ctx_.r[A1], ctx_.r[A2]);
     break;
-  case 0x35: // write — stub (stdout)
+  case 0x35: // write -- stub (stdout)
     BIOS_LOG("[BIOS] write(fd: {}, src: 0x{:08X}, len: {}) [STUB]\n",
                ctx_.r[A0], ctx_.r[A1], ctx_.r[A2]);
     if (ctx_.r[A0] == 1) { // stdout
@@ -164,22 +164,22 @@ void Bios::handleB0(uint32_t index) {
   case 0x4C: // StopCARD
     BIOS_LOG("[BIOS] StopCARD()\n");
     break;
-  case 0x56: // GetC0Table — return pointer to C0 jump table
+  case 0x56: // GetC0Table -- return pointer to C0 jump table
     BIOS_LOG("[BIOS] GetC0Table() -> 0x{:08X}\n", ctx_.r[K1]);
     ctx_.r[V0] = ctx_.r[K1];
     break;
-  case 0x57: // GetB0Table — return pointer to B0 jump table
+  case 0x57: // GetB0Table -- return pointer to B0 jump table
     BIOS_LOG("[BIOS] GetB0Table() -> 0x{:08X}\n", ctx_.r[K0]);
     ctx_.r[V0] = ctx_.r[K0];
     break;
-  case 0x42: // B0:42 — internal PsyQ CdInit verification (SetConf/cdioctl-like)
+  case 0x42: // B0:42 -- internal PsyQ CdInit verification (SetConf/cdioctl-like)
     // Called by CdInit after 2 rounds of _96_CdInitSubFunc+testEvent+GetStat.
     // Return value: 1 = success (CdInit succeeds), 0 = failure (enters 5-retry
     // hardware loop then prints "CdInit: Init failed").
     // Returning 1 here skips the retry loop and lets CdInit succeed.
     BIOS_LOG("[BIOS] B0:42 [STUB] (a0=0x{:08X}, a1=0x{:08X}, a2={})\n",
                ctx_.r[A0], ctx_.r[A1], ctx_.r[A2]);
-    ctx_.r[V0] = 1; // success — skip retry loop
+    ctx_.r[V0] = 1; // success -- skip retry loop
     break;
   case 0x5B: // ChangeClearPad
     BIOS_LOG("[BIOS] ChangeClearPad({}) [STUB]\n", ctx_.r[A0]);

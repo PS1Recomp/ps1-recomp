@@ -1,5 +1,5 @@
 #!/bin/bash
-# PS1Recomp — Demo Build Script
+# PS1Recomp -- Demo Build Script
 # Builds the full project for demonstration/presentation
 
 set -e
@@ -8,7 +8,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
 
 echo "============================================"
-echo "  PS1Recomp — Demo Build"
+echo "  PS1Recomp -- Demo Build"
 echo "============================================"
 echo "Project: $PROJECT_DIR"
 echo "Build:   $BUILD_DIR"

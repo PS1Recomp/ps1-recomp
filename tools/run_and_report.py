@@ -101,7 +101,7 @@ def parse_log(stdout: str, stderr: str) -> dict:
             result["dma3_count"] += 1
 
     for line in lines_err:
-        if "LinkedList #" in line or "FillRect #" in line or "CPU→VRAM #" in line:
+        if "LinkedList #" in line or "FillRect #" in line or "CPU->VRAM #" in line:
             result["gpu_commands"].append(line.strip())
         if "NULL function pointer" in line:
             result["dispatch_nulls"] += 1
@@ -229,7 +229,7 @@ def _summarise(log: dict, vram: dict, rc: int) -> str:
     if gpu:
         lines.append(f"Init GPU commands ({len(gpu)} in init window): last={gpu[-1]}")
     elif dma2 == 0:
-        lines.append("NO GPU activity detected — game may be stuck in loading/wait loop.")
+        lines.append("NO GPU activity detected -- game may be stuck in loading/wait loop.")
 
     if log["dma3_count"] > 0:
         lines.append(f"CDROM DMA transfers: {log['dma3_count']} sectors loaded from disc.")

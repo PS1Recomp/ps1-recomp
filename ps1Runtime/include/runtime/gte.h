@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file gte.h
- * @brief PS1 GTE (Geometry Transform Engine) — 3D coprocessor on COP2.
+ * @brief PS1 GTE (Geometry Transform Engine) -- 3D coprocessor on COP2.
  *
  * Implements all 22 GTE commands with PS1-accurate fixed-point math.
  * Recompiled MIPS reaches the GTE through `cop2` register reads/writes and
@@ -11,8 +11,8 @@
  * Key conventions:
  *   - Matrices/vectors are 1.3.12 fixed-point (signed 16-bit).
  *   - Translation vectors are 1.31.0 (signed 32-bit).
- *   - MAC0–MAC3 are 32-bit accumulators with no clamp on overflow.
- *   - IR0–IR3 are 16-bit intermediate results, clamped.
+ *   - MAC0-MAC3 are 32-bit accumulators with no clamp on overflow.
+ *   - IR0-IR3 are 16-bit intermediate results, clamped.
  *   - FLAG (`cop2c[31]`) carries overflow / underflow / divide bits.
  *   - `sf` bit: shift-fraction (`>> 12` when set).
  *   - `lm` bit: saturate negative IR values to 0 when set.
@@ -200,7 +200,7 @@ private:
   /// GTE unsigned Newton-Raphson division
   static uint32_t divide(CPUContext *ctx, uint16_t h, uint16_t sz3);
 
-  /// Internal: matrix × vector + translation → MAC/IR
+  /// Internal: matrix x vector + translation -> MAC/IR
   static void doMVMVA(CPUContext *ctx, uint8_t mx, uint8_t mv, uint8_t tv,
                       bool sf, bool lm);
 

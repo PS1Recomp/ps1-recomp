@@ -5,7 +5,7 @@
  *
  * `ps1::gpu::GPU` ingests the GP0 (rendering) and GP1 (display control)
  * command streams written by the game (directly or via DMA channel 2), keeps
- * the 1024×512 VRAM in sync, and exposes the active display region for the
+ * the 1024x512 VRAM in sync, and exposes the active display region for the
  * SDL2/OpenGL host to upload as a texture.
  *
  * Threading: the game thread writes GP0/GP1 and DMA; the SDL render thread
@@ -45,7 +45,7 @@ struct TexCoord {
 };
 
 /**
- * @brief PS1 GPU state machine + 1024×512 VRAM + draw/display environment.
+ * @brief PS1 GPU state machine + 1024x512 VRAM + draw/display environment.
  *
  * Owns the entire GPU side of the system: GP0/GP1 command parsing, primitive
  * rasterisation into VRAM, drawing-area and texture-window registers, and
@@ -74,10 +74,10 @@ public:
   // Read GPU Status Register (GPUSTAT)
   uint32_t readGPUSTAT() const;
 
-  // Get a pointer to the 1024x512 VRAM framebuffer (live — game thread writes here)
+  // Get a pointer to the 1024x512 VRAM framebuffer (live -- game thread writes here)
   const Color16 *getVRAM() const { return vram_.data(); }
 
-  // Load 1024×512×2 bytes of VRAM from a save-state buffer.
+  // Load 1024x512x2 bytes of VRAM from a save-state buffer.
   void loadVram(const uint8_t *data);
 
   // Get the display-safe snapshot (captured at VBlank)
@@ -120,7 +120,7 @@ public:
   Color16 applyBlend(Color16 fg, Color16 bg);
 
 private:
-  // VRAM buffer (live — game thread writes here)
+  // VRAM buffer (live -- game thread writes here)
   std::vector<Color16> vram_;
 
   // Display snapshot buffer (read by renderer at frame time)

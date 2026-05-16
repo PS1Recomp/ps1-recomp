@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  # Primary job: build + run full test suite (stub mode — no ROM required)
+  # Primary job: build + run full test suite (stub mode -- no ROM required)
   build-and-test:
     name: Build & Test (stub mode)
     runs-on: ubuntu-latest

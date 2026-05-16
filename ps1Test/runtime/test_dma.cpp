@@ -37,7 +37,7 @@ TEST_F(DmaTest, DpcrForceEnablesGpuAndOtc) {
 }
 
 TEST_F(DmaTest, DpcrForceEnablesGpuAndOtcPreservesOtherBits) {
-  // Other channel bits must not be force-set — only GPU and OTC.
+  // Other channel bits must not be force-set -- only GPU and OTC.
   // Write with Ch0 (MDECin, bit 3) and Ch4 (SPU, bit 19) enabled.
   uint32_t written = (1u << 3) | (1u << 19);
   dma.writeRegister(0x1F8010F0, written);

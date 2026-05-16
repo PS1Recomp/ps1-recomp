@@ -1,4 +1,4 @@
-// Tests for the libc HLE family (Group 1.F — memory/string/printf subset).
+// Tests for the libc HLE family (Group 1.F -- memory/string/printf subset).
 //
 // Strategy:
 //   - For BIOS-delegating HLEs (memcpy/memset/.../strcpy/.../abs/rand): build
@@ -64,7 +64,7 @@ protected:
 
 } // namespace
 
-// Memory routines — delegate to bios A0:0x2A..0x2D
+// Memory routines -- delegate to bios A0:0x2A..0x2D
 
 TEST_F(PsyqLibcTest, MemcpyDispatchesA0_2A) {
   writeString(0x80100000u, "abcdef");
@@ -88,7 +88,7 @@ TEST_F(PsyqLibcTest, MemsetDispatchesA0_2B) {
 }
 
 TEST_F(PsyqLibcTest, MemmoveDispatchesA0_2C) {
-  // Overlapping forward-shift: dst > src, so naïve memcpy would corrupt.
+  // Overlapping forward-shift: dst > src, so naive memcpy would corrupt.
   writeString(0x80100000u, "ABCDEF");
   ctx.r[A0] = 0x80100002u;
   ctx.r[A1] = 0x80100000u;
@@ -109,7 +109,7 @@ TEST_F(PsyqLibcTest, MemcmpDispatchesA0_2D) {
   EXPECT_NE(ctx.r[V0], 0u); // strings differ at byte 3
 }
 
-// String routines — delegate to bios A0:0x15..0x1A
+// String routines -- delegate to bios A0:0x15..0x1A
 
 TEST_F(PsyqLibcTest, StrcpyDispatchesA0_15) {
   writeString(0x80100000u, "hello");
@@ -171,7 +171,7 @@ TEST_F(PsyqLibcTest, StrncmpDispatchesA0_1A) {
   EXPECT_EQ(ctx.r[V0], 0u); // first 3 bytes equal
 }
 
-// Math / RNG — delegate to bios A0:0x10/0x11/0x1E/0x1F
+// Math / RNG -- delegate to bios A0:0x10/0x11/0x1E/0x1F
 
 TEST_F(PsyqLibcTest, AbsDispatchesA0_10) {
   ctx.r[A0] = static_cast<uint32_t>(-42);
@@ -189,14 +189,14 @@ TEST_F(PsyqLibcTest, RandIsDeterministicAfterSrand) {
   EXPECT_EQ(ctx.r[T1], 0x1Eu);
   uint32_t r1 = ctx.r[V0];
 
-  // Re-seed and re-roll — same seed must produce the same first sample.
+  // Re-seed and re-roll -- same seed must produce the same first sample.
   ctx.r[A0] = 12345u;
   hle_libc_srand(&ctx);
   hle_libc_rand(&ctx);
   EXPECT_EQ(ctx.r[V0], r1);
 }
 
-// atoi — standalone parse
+// atoi -- standalone parse
 
 TEST_F(PsyqLibcTest, AtoiParsesDecimal) {
   writeString(0x80100000u, "42");
@@ -225,7 +225,7 @@ TEST_F(PsyqLibcTest, AtoiReturnsZeroForNullPointer) {
   EXPECT_EQ(ctx.r[V0], 0u);
 }
 
-// printf — standalone, gated on PS1_BIOS_DEBUG
+// printf -- standalone, gated on PS1_BIOS_DEBUG
 
 TEST_F(PsyqLibcTest, PrintfReturnsCharCountEvenWhenSilent) {
   // PS1_BIOS_DEBUG is unset in the gtest harness by default, so stdout
@@ -235,7 +235,7 @@ TEST_F(PsyqLibcTest, PrintfReturnsCharCountEvenWhenSilent) {
   ctx.r[A1] = 7;
   ctx.r[A2] = static_cast<uint32_t>(-3);
   hle_libc_printf(&ctx);
-  // "x=7 y=-3" — 8 characters.
+  // "x=7 y=-3" -- 8 characters.
   EXPECT_EQ(ctx.r[V0], 8u);
 }
 
@@ -245,19 +245,19 @@ TEST_F(PsyqLibcTest, PrintfHandlesPercentS) {
   ctx.r[A0] = 0x80100000u;
   ctx.r[A1] = 0x80100020u;
   hle_libc_printf(&ctx);
-  // "hello world!" — 12 chars.
+  // "hello world!" -- 12 chars.
   EXPECT_EQ(ctx.r[V0], 12u);
 }
 
 TEST_F(PsyqLibcTest, PrintfTreatsNullStringAsLiteralNull) {
   writeString(0x80100000u, "v=%s");
   ctx.r[A0] = 0x80100000u;
-  ctx.r[A1] = 0; // NULL pointer → "(null)"
+  ctx.r[A1] = 0; // NULL pointer -> "(null)"
   hle_libc_printf(&ctx);
-  EXPECT_EQ(ctx.r[V0], 8u); // "v=(null)" — 8 chars
+  EXPECT_EQ(ctx.r[V0], 8u); // "v=(null)" -- 8 chars
 }
 
-// sprintf — writes formatted result to PS1 RAM
+// sprintf -- writes formatted result to PS1 RAM
 
 TEST_F(PsyqLibcTest, SprintfWritesIntoBuffer) {
   writeString(0x80100020u, "x=%d hex=%x");
@@ -279,7 +279,7 @@ TEST_F(PsyqLibcTest, SprintfHandlesNullBuffer) {
   ctx.r[A1] = 0x80100020u;
   ctx.r[A2] = 5;
   hle_libc_sprintf(&ctx);
-  EXPECT_EQ(ctx.r[V0], 3u); // "n=5" — 3 chars
+  EXPECT_EQ(ctx.r[V0], 3u); // "n=5" -- 3 chars
 }
 
 TEST_F(PsyqLibcTest, SprintfPercentPercentPassthrough) {
@@ -290,26 +290,26 @@ TEST_F(PsyqLibcTest, SprintfPercentPercentPassthrough) {
   EXPECT_EQ(readString(0x80100100u), "100%");
 }
 
-// Registry coverage — canonical + aliased prefixes
+// Registry coverage -- canonical + aliased prefixes
 
 TEST_F(PsyqLibcTest, RegistryDispatchesCanonicalAndAliases) {
   psyq_register_libc();
 
-  // Canonical (libc_) — must be defined for every entry.
+  // Canonical (libc_) -- must be defined for every entry.
   ctx.r[A0] = 0x80100100u;
   ctx.r[A1] = 0x55;
   ctx.r[A2] = 1;
   EXPECT_NO_FATAL_FAILURE(psyq_dispatch("libc_memset", &ctx));
   EXPECT_EQ(mem.read8(0x80100100u), 0x55);
 
-  // libgpu_memset — the alias actually emitted in Crash's recompiled_out.
+  // libgpu_memset -- the alias actually emitted in Crash's recompiled_out.
   ctx.r[A0] = 0x80100101u;
   ctx.r[A1] = 0xAA;
   ctx.r[A2] = 1;
   EXPECT_NO_FATAL_FAILURE(psyq_dispatch("libgpu_memset", &ctx));
   EXPECT_EQ(mem.read8(0x80100101u), 0xAA);
 
-  // libcd_memcpy — the alias actually emitted by the matcher.
+  // libcd_memcpy -- the alias actually emitted by the matcher.
   writeString(0x80100200u, "yo");
   ctx.r[A0] = 0x80100210u;
   ctx.r[A1] = 0x80100200u;
@@ -317,7 +317,7 @@ TEST_F(PsyqLibcTest, RegistryDispatchesCanonicalAndAliases) {
   EXPECT_NO_FATAL_FAILURE(psyq_dispatch("libcd_memcpy", &ctx));
   EXPECT_EQ(readString(0x80100210u), "yo");
 
-  // libapi__memmove — underscore-prefixed PsyQ alias.
+  // libapi__memmove -- underscore-prefixed PsyQ alias.
   writeString(0x80100300u, "abc");
   ctx.r[A0] = 0x80100310u;
   ctx.r[A1] = 0x80100300u;

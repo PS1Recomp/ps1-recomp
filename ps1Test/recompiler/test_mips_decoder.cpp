@@ -1,4 +1,4 @@
-// Tests for ps1Recomp — MIPS I Decoder
+// Tests for ps1Recomp -- MIPS I Decoder
 // Validates R3000A instruction decoding (MIPS I + COP0 + COP2/GTE)
 
 #include <gtest/gtest.h>
@@ -44,7 +44,7 @@ TEST(MipsDecoder, NOP) {
 // ALU R-type
 
 TEST(MipsDecoder, ALU_R_Type) {
-    // ADDU $v0, $a0, $a1 — funct=0x21
+    // ADDU $v0, $a0, $a1 -- funct=0x21
     auto inst = MipsDecoder::decode(encR(0, 4, 5, 2, 0, 0x21));
     EXPECT_EQ(inst.id, InstrId::ADDU);
     EXPECT_EQ(inst.category, InstrCategory::ALU);
@@ -52,7 +52,7 @@ TEST(MipsDecoder, ALU_R_Type) {
     EXPECT_EQ(inst.rt, 5);
     EXPECT_EQ(inst.rd, 2);
 
-    // SUBU $t0, $s0, $s1 — funct=0x23
+    // SUBU $t0, $s0, $s1 -- funct=0x23
     inst = MipsDecoder::decode(encR(0, 16, 17, 8, 0, 0x23));
     EXPECT_EQ(inst.id, InstrId::SUBU);
     EXPECT_EQ(inst.rs, 16);
@@ -205,7 +205,7 @@ TEST(MipsDecoder, ALU_I_Type) {
 // Loads
 
 TEST(MipsDecoder, Loads) {
-    // LW $v0, 16($sp) — opcode 0x23
+    // LW $v0, 16($sp) -- opcode 0x23
     auto inst = MipsDecoder::decode(encI(0x23, 29, 2, 16));
     EXPECT_EQ(inst.id, InstrId::LW);
     EXPECT_EQ(inst.category, InstrCategory::Memory);
@@ -244,7 +244,7 @@ TEST(MipsDecoder, Loads) {
 // Stores
 
 TEST(MipsDecoder, Stores) {
-    // SW $v0, 16($sp) — opcode 0x2B
+    // SW $v0, 16($sp) -- opcode 0x2B
     auto inst = MipsDecoder::decode(encI(0x2B, 29, 2, 16));
     EXPECT_EQ(inst.id, InstrId::SW);
     EXPECT_EQ(inst.category, InstrCategory::Memory);
@@ -298,20 +298,20 @@ TEST(MipsDecoder, Branches) {
 }
 
 TEST(MipsDecoder, Branches_REGIMM) {
-    // BLTZ $a0, +8 — opcode=1, rt=0
+    // BLTZ $a0, +8 -- opcode=1, rt=0
     auto inst = MipsDecoder::decode(encI(0x01, 4, 0x00, 2));
     EXPECT_EQ(inst.id, InstrId::BLTZ);
     EXPECT_EQ(inst.category, InstrCategory::Branch);
 
-    // BGEZ — rt=1
+    // BGEZ -- rt=1
     inst = MipsDecoder::decode(encI(0x01, 4, 0x01, 2));
     EXPECT_EQ(inst.id, InstrId::BGEZ);
 
-    // BLTZAL — rt=0x10
+    // BLTZAL -- rt=0x10
     inst = MipsDecoder::decode(encI(0x01, 4, 0x10, 2));
     EXPECT_EQ(inst.id, InstrId::BLTZAL);
 
-    // BGEZAL — rt=0x11
+    // BGEZAL -- rt=0x11
     inst = MipsDecoder::decode(encI(0x01, 4, 0x11, 2));
     EXPECT_EQ(inst.id, InstrId::BGEZAL);
 }
@@ -334,12 +334,12 @@ TEST(MipsDecoder, Jumps) {
     EXPECT_EQ(inst.id, InstrId::JAL);
     EXPECT_EQ(inst.jumpTarget(0x80000000), 0x80010400u);
 
-    // JR $ra — funct=0x08, rs=31
+    // JR $ra -- funct=0x08, rs=31
     inst = MipsDecoder::decode(encR(0, 31, 0, 0, 0, 0x08));
     EXPECT_EQ(inst.id, InstrId::JR);
     EXPECT_EQ(inst.rs, 31); // $ra
 
-    // JALR $t9 — funct=0x09, rs=25, rd=31
+    // JALR $t9 -- funct=0x09, rs=25, rd=31
     inst = MipsDecoder::decode(encR(0, 25, 0, 31, 0, 0x09));
     EXPECT_EQ(inst.id, InstrId::JALR);
     EXPECT_EQ(inst.rs, 25); // $t9
@@ -349,12 +349,12 @@ TEST(MipsDecoder, Jumps) {
 // System
 
 TEST(MipsDecoder, System) {
-    // SYSCALL — funct=0x0C
+    // SYSCALL -- funct=0x0C
     auto inst = MipsDecoder::decode(encR(0, 0, 0, 0, 0, 0x0C));
     EXPECT_EQ(inst.id, InstrId::SYSCALL);
     EXPECT_EQ(inst.category, InstrCategory::System);
 
-    // BREAK — funct=0x0D
+    // BREAK -- funct=0x0D
     inst = MipsDecoder::decode(encR(0, 0, 0, 0, 0, 0x0D));
     EXPECT_EQ(inst.id, InstrId::BREAK);
 }
@@ -362,18 +362,18 @@ TEST(MipsDecoder, System) {
 // COP0
 
 TEST(MipsDecoder, COP0) {
-    // MFC0 $v0, SR(12) — opcode=0x10, rs=0x00, rt=2, rd=12
+    // MFC0 $v0, SR(12) -- opcode=0x10, rs=0x00, rt=2, rd=12
     auto inst = MipsDecoder::decode(encR(0x10, 0x00, 2, 12, 0, 0));
     EXPECT_EQ(inst.id, InstrId::MFC0);
     EXPECT_EQ(inst.category, InstrCategory::COP0);
     EXPECT_EQ(inst.rt, 2);
     EXPECT_EQ(inst.rd, 12);
 
-    // MTC0 $v0, SR(12) — rs=0x04
+    // MTC0 $v0, SR(12) -- rs=0x04
     inst = MipsDecoder::decode(encR(0x10, 0x04, 2, 12, 0, 0));
     EXPECT_EQ(inst.id, InstrId::MTC0);
 
-    // RFE — opcode=0x10, rs=0x10, funct=0x10
+    // RFE -- opcode=0x10, rs=0x10, funct=0x10
     inst = MipsDecoder::decode(encR(0x10, 0x10, 0, 0, 0, 0x10));
     EXPECT_EQ(inst.id, InstrId::RFE);
 }
@@ -381,29 +381,29 @@ TEST(MipsDecoder, COP0) {
 // COP2 / GTE Register Moves
 
 TEST(MipsDecoder, GTE_RegisterMoves) {
-    // MFC2 $v0, r0 — opcode=0x12, rs=0x00, rt=2, rd=0
+    // MFC2 $v0, r0 -- opcode=0x12, rs=0x00, rt=2, rd=0
     auto inst = MipsDecoder::decode(encR(0x12, 0x00, 2, 0, 0, 0));
     EXPECT_EQ(inst.id, InstrId::MFC2);
     EXPECT_EQ(inst.category, InstrCategory::GTE);
 
-    // MTC2 $v0, r1 — rs=0x04
+    // MTC2 $v0, r1 -- rs=0x04
     inst = MipsDecoder::decode(encR(0x12, 0x04, 2, 1, 0, 0));
     EXPECT_EQ(inst.id, InstrId::MTC2);
 
-    // CFC2 $v0, cr0 — rs=0x02
+    // CFC2 $v0, cr0 -- rs=0x02
     inst = MipsDecoder::decode(encR(0x12, 0x02, 2, 0, 0, 0));
     EXPECT_EQ(inst.id, InstrId::CFC2);
 
-    // CTC2 $v0, cr0 — rs=0x06
+    // CTC2 $v0, cr0 -- rs=0x06
     inst = MipsDecoder::decode(encR(0x12, 0x06, 2, 0, 0, 0));
     EXPECT_EQ(inst.id, InstrId::CTC2);
 
-    // LWC2 rt, offset(base) — opcode=0x32
+    // LWC2 rt, offset(base) -- opcode=0x32
     inst = MipsDecoder::decode(encI(0x32, 4, 2, 100));
     EXPECT_EQ(inst.id, InstrId::LWC2);
     EXPECT_EQ(inst.category, InstrCategory::GTE);
 
-    // SWC2 — opcode=0x3A
+    // SWC2 -- opcode=0x3A
     inst = MipsDecoder::decode(encI(0x3A, 4, 2, 100));
     EXPECT_EQ(inst.id, InstrId::SWC2);
 }
@@ -487,17 +487,17 @@ TEST(MipsDecoder, GTE_Commands) {
 // Instruction Helpers
 
 TEST(MipsDecoder, BranchTarget) {
-    // BEQ with imm16 = 10 → target = PC + 4 + 40
+    // BEQ with imm16 = 10 -> target = PC + 4 + 40
     auto inst = MipsDecoder::decode(encI(0x04, 4, 5, 10));
     EXPECT_EQ(inst.branchTarget(0x80010000), 0x8001002Cu);
 
-    // Negative offset: imm16 = -4 → target = PC + 4 + (-4 << 2) = PC + 4 - 16
+    // Negative offset: imm16 = -4 -> target = PC + 4 + (-4 << 2) = PC + 4 - 16
     inst = MipsDecoder::decode(encI(0x04, 4, 5, static_cast<uint16_t>(-4)));
     EXPECT_EQ(inst.branchTarget(0x80010000), 0x8000FFF4u); // 0x80010000 + 4 - 16
 }
 
 TEST(MipsDecoder, JumpTarget) {
-    // J target=0x00020400 → full = (PC & 0xF0000000) | (0x00020400 << 2)
+    // J target=0x00020400 -> full = (PC & 0xF0000000) | (0x00020400 << 2)
     auto inst = MipsDecoder::decode(encJ(0x02, 0x00020400));
     EXPECT_EQ(inst.jumpTarget(0x80000000), 0x80081000u);
 }

@@ -40,15 +40,15 @@ bool SaveState::save(const std::string &path, const recomp_context &ctx,
   writeBytes(f, &header, sizeof(header));
 
   // CPU Context
-  // GPRs (32 × 4 bytes = 128 bytes)
+  // GPRs (32 x 4 bytes = 128 bytes)
   writeBytes(f, ctx.r, sizeof(ctx.r));
   // HI, LO, PC
   writeBytes(f, &ctx.hi, sizeof(ctx.hi));
   writeBytes(f, &ctx.lo, sizeof(ctx.lo));
   writeBytes(f, &ctx.pc, sizeof(ctx.pc));
-  // COP0 (16 × 4 bytes)
+  // COP0 (16 x 4 bytes)
   writeBytes(f, ctx.cop0, sizeof(ctx.cop0));
-  // COP2 data + control (64 × 4 bytes)
+  // COP2 data + control (64 x 4 bytes)
   writeBytes(f, ctx.cop2d, sizeof(ctx.cop2d));
   writeBytes(f, ctx.cop2c, sizeof(ctx.cop2c));
 
@@ -58,7 +58,7 @@ bool SaveState::save(const std::string &path, const recomp_context &ctx,
   // Scratchpad (1KB)
   writeBytes(f, mem.scratchpadPtr(), Memory::SCRATCHPAD_SIZE);
 
-  // GPU VRAM (1024×512×2 = 1MB)
+  // GPU VRAM (1024x512x2 = 1MB)
   writeBytes(f, gpu.getVRAM(), 1024 * 512 * sizeof(gpu::Color16));
 
   // GPU State
@@ -147,7 +147,7 @@ bool SaveState::load(const std::string &path, recomp_context &ctx, Memory &mem,
   // Scratchpad (1KB)
   readBytes(f, mem.scratchpadPtr(), Memory::SCRATCHPAD_SIZE);
 
-  // GPU VRAM (1024×512×2 = 1MB)
+  // GPU VRAM (1024x512x2 = 1MB)
   std::vector<uint8_t> vramData(1024 * 512 * sizeof(gpu::Color16));
   readBytes(f, vramData.data(), vramData.size());
   gpu.loadVram(vramData.data());

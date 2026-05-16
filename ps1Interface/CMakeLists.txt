@@ -1,4 +1,4 @@
-# ps1Interface — PS1 Recompiler Studio GUI
+# ps1Interface -- PS1 Recompiler Studio GUI
 
 cmake_minimum_required(VERSION 3.20)
 

@@ -1,4 +1,4 @@
-// ps1Analyzer — Config Generator Implementation
+// ps1Analyzer -- Config Generator Implementation
 // Generates TOML config file from analyzer results for ps1Recomp
 
 #include "ps1recomp/config_generator.h"
@@ -97,7 +97,7 @@ static toml::value buildConfig(const ElfParser& elf,
         root["functions"] = std::move(funcs);
     }
 
-    // [[stubs]] array — PsyQ functions needing runtime stubs
+    // [[stubs]] array -- PsyQ functions needing runtime stubs
     {
         toml::array stubs;
         for (const auto* m : matcher.getStubs()) {
@@ -111,7 +111,7 @@ static toml::value buildConfig(const ElfParser& elf,
         root["stubs"] = std::move(stubs);
     }
 
-    // [[skips]] array — debug/profiling functions to skip
+    // [[skips]] array -- debug/profiling functions to skip
     {
         toml::array skips;
         for (const auto* m : matcher.getSkips()) {
@@ -124,7 +124,7 @@ static toml::value buildConfig(const ElfParser& elf,
         root["skips"] = std::move(skips);
     }
 
-    // [[passthroughs]] array — host-equivalent functions
+    // [[passthroughs]] array -- host-equivalent functions
     {
         toml::array pass;
         for (const auto* m : matcher.getPassthroughs()) {
@@ -137,7 +137,7 @@ static toml::value buildConfig(const ElfParser& elf,
         root["passthroughs"] = std::move(pass);
     }
 
-    // [[hle_functions]] — forward-compat schema for ps1Recomp Sessao 0.5
+    // [[hle_functions]] -- forward-compat schema for ps1Recomp Sessao 0.5
     // Every match (any stub_type) shows up here with the canonical
     // `<library>_<basename>` identifier the recompiler will use to look up
     // the C++ HLE stub. Only emitted when the `library` field is filled

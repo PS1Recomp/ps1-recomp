@@ -24,7 +24,7 @@ inline std::size_t clampSlot(uint32_t n) {
 // ResetCallback: re-initialises the interrupt subsystem.  Real PSY-Q
 // allocates state, installs entry-point handlers and returns the address
 // of an internal sentinel ("non-zero == initialised").  We have no IRQs
-// to install — callbacks are drained cooperatively from `hle_VSync` — so
+// to install -- callbacks are drained cooperatively from `hle_VSync` -- so
 // reset the soft state and hand back a non-zero token.  A non-zero return
 // is load-bearing: PSY-Q boilerplate checks it to detect init failure and
 // aborts the main loop when it sees zero.
@@ -37,7 +37,7 @@ void hle_libetc_ResetCallback(recomp_context *ctx) {
 }
 
 // StopCallback / RestartCallback: gate the cooperative callback path.
-// We honour the flag for `CheckCallback` but the runtime drains anyway —
+// We honour the flag for `CheckCallback` but the runtime drains anyway --
 // real IRQ masking would suppress dispatch, which we cannot model without
 // a full COP0 emulation.  Returning the previous state matches PSY-Q.
 void hle_libetc_StopCallback(recomp_context *ctx) {
@@ -65,7 +65,7 @@ void hle_libetc_CheckCallback(recomp_context *ctx) {
 
 // InterruptCallback(n, fn): store the per-IRQ-line callback, return prev.
 // Slot 0..7 follow the PSY-Q convention (VBlank, GPU, CDROM, DMA, RTC0/1/2,
-// reserved).  Not actually dispatched today — see note in psyq_state.h.
+// reserved).  Not actually dispatched today -- see note in psyq_state.h.
 void hle_libetc_InterruptCallback(recomp_context *ctx) {
   std::size_t n = clampSlot(ctx->r[A0]);
   auto &s = psyq_state();

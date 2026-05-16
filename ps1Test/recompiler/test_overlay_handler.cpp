@@ -1,4 +1,4 @@
-// Tests for ps1Recomp — Overlay Handler
+// Tests for ps1Recomp -- Overlay Handler
 // Validates overlay section management, address lookup, and dispatch table
 
 #include <filesystem>
@@ -82,13 +82,13 @@ TEST(OverlayHandler, AddressBoundaries) {
   OverlayHandler handler;
   handler.addOverlay({"test", 0, 0x80040000, 0x1000, {}});
 
-  // Exact start — inside
+  // Exact start -- inside
   EXPECT_TRUE(handler.isOverlayAddress(0x80040000));
-  // Last byte — inside
+  // Last byte -- inside
   EXPECT_TRUE(handler.isOverlayAddress(0x80040FFF));
-  // One past end — outside
+  // One past end -- outside
   EXPECT_FALSE(handler.isOverlayAddress(0x80041000));
-  // One before start — outside
+  // One before start -- outside
   EXPECT_FALSE(handler.isOverlayAddress(0x8003FFFF));
 }
 
@@ -121,7 +121,7 @@ TEST(OverlayHandler, QualifiedName) {
   OverlayHandler handler;
   handler.addOverlay({"battle", 0x10000, 0x80040000, 0x8000, {}});
 
-  // Address in overlay → prefixed name
+  // Address in overlay -> prefixed name
   auto name = handler.qualifiedName(0x80040100);
   EXPECT_NE(name.find("overlay_battle"), std::string::npos);
   EXPECT_NE(name.find("80040100"), std::string::npos);
@@ -130,7 +130,7 @@ TEST(OverlayHandler, QualifiedName) {
 TEST(OverlayHandler, QualifiedNameNoOverlay) {
   OverlayHandler handler;
 
-  // Address not in any overlay → fallback
+  // Address not in any overlay -> fallback
   auto name = handler.qualifiedName(0x80010000);
   EXPECT_EQ(name, "func_80010000");
 }

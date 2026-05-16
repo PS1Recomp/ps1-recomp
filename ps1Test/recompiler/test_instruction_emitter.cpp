@@ -1,5 +1,5 @@
-// Tests for ps1Recomp — Instruction Emitter
-// Validates MIPS I → C++ translation
+// Tests for ps1Recomp -- Instruction Emitter
+// Validates MIPS I -> C++ translation
 
 #include <gtest/gtest.h>
 #include <ps1recomp/instruction_emitter.h>
@@ -91,12 +91,12 @@ TEST(InstructionEmitter, ALU_BitwiseOps) {
 TEST(InstructionEmitter, SkipsWritesToZero) {
   auto emitter = makeEmitter();
 
-  // ADDU $zero, $a0, $a1 — should be optimized away
+  // ADDU $zero, $a0, $a1 -- should be optimized away
   auto inst = MipsDecoder::decode(encR(0, 4, 5, 0, 0, 0x21));
   auto code = emitter.emitInstruction(inst, 0x80010000);
   EXPECT_NE(code.find("NOP"), std::string::npos);
 
-  // LW $zero, 0($sp) — load into $zero, optimized away
+  // LW $zero, 0($sp) -- load into $zero, optimized away
   inst = MipsDecoder::decode(encI(0x23, 29, 0, 0));
   code = emitter.emitInstruction(inst, 0x80010000);
   EXPECT_NE(code.find("NOP"), std::string::npos);
@@ -136,7 +136,7 @@ TEST(InstructionEmitter, MulDiv) {
   EXPECT_NE(code.find("ctx->r2"), std::string::npos);
   EXPECT_NE(code.find("ctx->lo"), std::string::npos);
 
-  // DIV — should check for zero
+  // DIV -- should check for zero
   code = emitter.emitInstruction(MipsDecoder::decode(encR(0, 4, 5, 0, 0, 0x1A)),
                                  0);
   EXPECT_NE(code.find("!= 0"), std::string::npos);
@@ -235,7 +235,7 @@ TEST(InstructionEmitter, Jump_JAL) {
 
 TEST(InstructionEmitter, Jump_JR_RA) {
   auto emitter = makeEmitter();
-  // JR $ra — should emit return
+  // JR $ra -- should emit return
   auto inst = MipsDecoder::decode(encR(0, 31, 0, 0, 0, 0x08));
   auto code = emitter.emitInstruction(inst, 0x80010000);
   EXPECT_NE(code.find("return"), std::string::npos);
@@ -243,7 +243,7 @@ TEST(InstructionEmitter, Jump_JR_RA) {
 
 TEST(InstructionEmitter, Jump_JR_NonRA) {
   auto emitter = makeEmitter();
-  // JR $t0 — indirect jump (not return)
+  // JR $t0 -- indirect jump (not return)
   auto inst = MipsDecoder::decode(encR(0, 8, 0, 0, 0, 0x08));
   auto code = emitter.emitInstruction(inst, 0x80010000);
   EXPECT_NE(code.find("JUMP_INDIRECT"), std::string::npos);

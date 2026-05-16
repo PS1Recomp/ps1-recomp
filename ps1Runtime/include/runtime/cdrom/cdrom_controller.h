@@ -88,7 +88,7 @@ public:
   using XaCallback = std::function<void(const int16_t *, uint32_t)>;
   void setXaCallback(XaCallback cb) { xaCallback_ = std::move(cb); }
 
-  // Interrupt callback — fired immediately when pushResponse sets the interrupt flag
+  // Interrupt callback -- fired immediately when pushResponse sets the interrupt flag
   // Used to trigger BIOS events before the game thread can acknowledge the HW interrupt
   using InterruptCallback = std::function<void(uint8_t intType)>;
   void setInterruptCallback(InterruptCallback cb) { interruptCallback_ = std::move(cb); }
@@ -170,7 +170,7 @@ private:
   // Status byte
   uint8_t buildStatusByte() const;
 
-  // (fireSecondaryNow is now public — see above)
+  // (fireSecondaryNow is now public -- see above)
 
   // Command processing
   uint8_t pendingCommand_ = 0;

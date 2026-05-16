@@ -353,7 +353,7 @@ void GPU::writeGP1(uint32_t val) {
   switch (opcode) {
   case 0x00: // Reset GPU
     // Full hardware reset, but preserve display enable and area so we always
-    // get a picture. On real hardware the BIOS re-sends GP1(0x03/0x05/…) after
+    // get a picture. On real hardware the BIOS re-sends GP1(0x03/0x05/...) after
     // reset; our HLE BIOS skips that, so the screen would go black otherwise.
     {
       uint32_t savedStat    = gpuStat_;
@@ -1287,7 +1287,7 @@ void GPU::executeCPUToVRAM() {
 
   static int cpuVramCount = 0;
   if (++cpuVramCount <= 20) {
-    fmt::print(stderr, "[GPU] CPU→VRAM #{}: dest=({},{}) size={}x{} (opcode=0x{:02X})\n",
+    fmt::print(stderr, "[GPU] CPU->VRAM #{}: dest=({},{}) size={}x{} (opcode=0x{:02X})\n",
                cpuVramCount, pos & 0x3FF, (pos >> 16) & 0x1FF,
                size & 0xFFFF, (size >> 16) & 0xFFFF,
                commandQueue_[0] >> 24);

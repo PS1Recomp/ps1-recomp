@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Game-bring-up smoke test — boot, capture VRAM, diff against reference.
+"""Game-bring-up smoke test -- boot, capture VRAM, diff against reference.
 
 Workflow:
   1. Launch `ps1Runtime` with a config for N seconds.
@@ -133,7 +133,7 @@ def run_game(runtime: Path, config: Path, duration: int,
         return rc
     capture_out.parent.mkdir(parents=True, exist_ok=True)
     capture_out.write_bytes(src.read_bytes())
-    print(f"[smoke] captured VRAM → {capture_out}")
+    print(f"[smoke] captured VRAM -> {capture_out}")
     return rc
 
 
@@ -177,7 +177,7 @@ def main() -> int:
 
     if not args.skip_run:
         if not args.runtime.exists():
-            print(f"[smoke] FAIL: runtime {args.runtime} not built — "
+            print(f"[smoke] FAIL: runtime {args.runtime} not built -- "
                   "`cmake --build build`", file=sys.stderr)
             return 2
         if not args.config.exists():
@@ -214,7 +214,7 @@ def main() -> int:
     if mean_diff <= args.tolerance:
         print(f"[smoke] PASS")
         return 0
-    print(f"[smoke] FAIL — diff {mean_diff:.2f} > tolerance {args.tolerance}")
+    print(f"[smoke] FAIL -- diff {mean_diff:.2f} > tolerance {args.tolerance}")
     return 1
 
 

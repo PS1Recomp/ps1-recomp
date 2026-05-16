@@ -1,4 +1,4 @@
-// ps1Runtime — GTE Runtime Implementation
+// ps1Runtime -- GTE Runtime Implementation
 // PS1-accurate fixed-point math for all 22 GTE commands
 
 #include <algorithm>
@@ -375,7 +375,7 @@ void GTE::doMVMVA(CPUContext *ctx, uint8_t mx, uint8_t mv, uint8_t tv, bool sf,
 
 void GTE::doRTPS(CPUContext *ctx, uint8_t vecIdx, bool sf, bool lm,
                  bool lastVertex) {
-  // Rotation × Vector + Translation
+  // Rotation x Vector + Translation
   doMVMVA(ctx, 0, vecIdx, 0, sf, lm);
 
   // Push SZ FIFO
@@ -424,10 +424,10 @@ static uint8_t clampColor(CPUContext *ctx, int32_t val, uint32_t satFlag) {
 // NCS core (single vertex)
 
 void GTE::doNCS(CPUContext *ctx, uint8_t vecIdx, bool sf, bool lm) {
-  // Light matrix × normal → IR
-  doMVMVA(ctx, 1, vecIdx, 1, sf, lm); // L×V + BK
-  // Light color matrix × IR → IR
-  doMVMVA(ctx, 2, 3, 1, sf, lm); // LC×IR + BK
+  // Light matrix x normal -> IR
+  doMVMVA(ctx, 1, vecIdx, 1, sf, lm); // LxV + BK
+  // Light color matrix x IR -> IR
+  doMVMVA(ctx, 2, 3, 1, sf, lm); // LCxIR + BK
   // Color FIFO push
   uint8_t cd = static_cast<uint8_t>(ctx->cop2d[GTE_RGBC] >> 24);
   uint8_t r = clampColor(ctx, static_cast<int32_t>(ctx->cop2d[GTE_MAC1]) >> 4,
@@ -480,9 +480,9 @@ void GTE::doNCDS(CPUContext *ctx, uint8_t vecIdx, bool sf, bool lm) {
 // NCCS core
 
 void GTE::doNCCS(CPUContext *ctx, uint8_t vecIdx, bool sf, bool lm) {
-  // Light matrix × normal → IR
+  // Light matrix x normal -> IR
   doMVMVA(ctx, 1, vecIdx, 1, sf, lm);
-  // Color matrix × IR + BK → IR
+  // Color matrix x IR + BK -> IR
   doMVMVA(ctx, 2, 3, 1, sf, lm);
   // Multiply by RGBC
   uint8_t rgbc_r = ctx->cop2d[GTE_RGBC] & 0xFF;
@@ -674,7 +674,7 @@ void GTE::NCDT(CPUContext *ctx, bool sf, bool lm) {
 
 void GTE::CDP(CPUContext *ctx, bool sf, bool lm) {
   ctx->cop2c[GTE_FLAG] = 0;
-  // Color matrix × IR + BK
+  // Color matrix x IR + BK
   doMVMVA(ctx, 2, 3, 1, sf, lm);
   // Depth cue interpolation
   int32_t ir0 = static_cast<int32_t>(static_cast<int16_t>(ctx->cop2d[GTE_IR0]));
@@ -730,7 +730,7 @@ void GTE::NCCT(CPUContext *ctx, bool sf, bool lm) {
 
 void GTE::CC(CPUContext *ctx, bool sf, bool lm) {
   ctx->cop2c[GTE_FLAG] = 0;
-  // Light color matrix × IR + BK
+  // Light color matrix x IR + BK
   doMVMVA(ctx, 2, 3, 1, sf, lm);
   // Multiply by RGBC
   uint8_t rgbc_r = ctx->cop2d[GTE_RGBC] & 0xFF;
@@ -796,7 +796,7 @@ void GTE::DCPL(CPUContext *ctx, bool sf, bool lm) {
   uint8_t rgbc_r = ctx->cop2d[GTE_RGBC] & 0xFF;
   uint8_t rgbc_g = (ctx->cop2d[GTE_RGBC] >> 8) & 0xFF;
   uint8_t rgbc_b = (ctx->cop2d[GTE_RGBC] >> 16) & 0xFF;
-  // Multiply color × IR
+  // Multiply color x IR
   int64_t cr =
       static_cast<int64_t>(rgbc_r) * static_cast<int16_t>(ctx->cop2d[GTE_IR1]);
   int64_t cg =

@@ -62,7 +62,7 @@ uint32_t fetchArg(recomp_context *ctx, unsigned argStartReg, unsigned i) {
 
 // Format a printf-subset (`%d %i %u %x %X %p %c %s %%`) into `out`.
 //    Width/precision/length modifiers are parsed so they survive the
-//    consumed-character bookkeeping but their values are ignored — this
+//    consumed-character bookkeeping but their values are ignored -- this
 //    matches stub_printf in bios.cpp and `formatFnt` in psyq_font.cpp.
 //    Returns the number of characters appended to `out`.
 size_t formatVa(recomp_context *ctx, const std::string &fmt,
@@ -143,7 +143,7 @@ size_t formatVa(recomp_context *ctx, const std::string &fmt,
       out.append(tmp);
       break;
     default:
-      // Unknown specifier — preserve the raw bytes so the user can spot it.
+      // Unknown specifier -- preserve the raw bytes so the user can spot it.
       out.push_back('%');
       out.push_back(spec);
       break;
@@ -154,7 +154,7 @@ size_t formatVa(recomp_context *ctx, const std::string &fmt,
 
 } // namespace
 
-// Memory routines — single source of truth in bios.cpp's A0 table
+// Memory routines -- single source of truth in bios.cpp's A0 table
 void hle_libc_memcpy(recomp_context *ctx)  { dispatchA(ctx, 0x2A); }
 void hle_libc_memset(recomp_context *ctx)  { dispatchA(ctx, 0x2B); }
 void hle_libc_memmove(recomp_context *ctx) { dispatchA(ctx, 0x2C); }
@@ -174,7 +174,7 @@ void hle_libc_labs(recomp_context *ctx) { dispatchA(ctx, 0x11); }
 void hle_libc_rand(recomp_context *ctx) { dispatchA(ctx, 0x1E); }
 void hle_libc_srand(recomp_context *ctx) { dispatchA(ctx, 0x1F); }
 
-//  atoi(s) — leading whitespace skip, optional sign, decimal digits only.
+//  atoi(s) -- leading whitespace skip, optional sign, decimal digits only.
 //  Stops at first non-digit (no overflow detection beyond int32_t wrap, to
 //  match the historical PsyQ behaviour).  Returns 0 for empty/garbage input.
 void hle_libc_atoi(recomp_context *ctx) {
@@ -196,7 +196,7 @@ void hle_libc_atoi(recomp_context *ctx) {
   ctx->r[V0] = static_cast<uint32_t>(value);
 }
 
-//  printf(fmt, ...) — debug stdout, gated on PS1_BIOS_DEBUG.  Returns the
+//  printf(fmt, ...) -- debug stdout, gated on PS1_BIOS_DEBUG.  Returns the
 //  formatted-character count regardless of whether the gate suppresses
 //  the actual write, so callers that test the return value still observe
 //  realistic numbers.  Format args start at $a1 (a0 is the fmt pointer).
@@ -209,9 +209,9 @@ void hle_libc_printf(recomp_context *ctx) {
   ctx->r[V0] = static_cast<uint32_t>(n);
 }
 
-//  sprintf(buf, fmt, ...) — write formatted bytes to PS1 RAM at $a0,
+//  sprintf(buf, fmt, ...) -- write formatted bytes to PS1 RAM at $a0,
 //  including the trailing NUL.  Returns the character count *excluding*
-//  the NUL (libc convention).  Always runs — debug gating only suppresses
+//  the NUL (libc convention).  Always runs -- debug gating only suppresses
 //  the host stdout side of printf.  Format args start at $a2.
 void hle_libc_sprintf(recomp_context *ctx) {
   uint32_t bufAddr = ctx->r[A0];
@@ -232,7 +232,7 @@ void hle_libc_sprintf(recomp_context *ctx) {
 
 void psyq_libc_reset_for_tests() {
   // RNG state lives inside bios.cpp (`sRandSeed`), which exposes srand
-  // via A0:0x1F — re-seed via a direct dispatchA when needed in tests.
+  // via A0:0x1F -- re-seed via a direct dispatchA when needed in tests.
   // Nothing local to reset here yet.
 }
 
@@ -267,7 +267,7 @@ void psyq_register_libc() {
   registerAllPrefixes("memset",  &hle_libc_memset);
   registerAllPrefixes("memmove", &hle_libc_memmove);
   registerAllPrefixes("memcmp",  &hle_libc_memcmp);
-  // PsyQ also ships `_memmove` (LIBAPI) — wire the underscore alias.
+  // PsyQ also ships `_memmove` (LIBAPI) -- wire the underscore alias.
   psyq_register("libapi__memmove", &hle_libc_memmove);
   psyq_register("libc__memmove",   &hle_libc_memmove);
 

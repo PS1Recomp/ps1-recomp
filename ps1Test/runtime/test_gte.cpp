@@ -1,4 +1,4 @@
-// Tests for ps1Runtime — GTE (Geometry Transform Engine)
+// Tests for ps1Runtime -- GTE (Geometry Transform Engine)
 // Validates the 22 GTE commands with PS1-accurate fixed-point math
 
 #include <cstring>
@@ -54,23 +54,23 @@ protected:
 // NCLIP
 
 TEST_F(GTETest, NCLIP_CounterClockwise) {
-  // Triangle: (0,0) (100,0) (0,100) → positive area
+  // Triangle: (0,0) (100,0) (0,100) -> positive area
   ctx.cop2d[GTE_SXY0] = 0;                                // (0,0)
   ctx.cop2d[GTE_SXY1] = 100;                              // (100,0)
   ctx.cop2d[GTE_SXY2] = static_cast<uint32_t>(100) << 16; // (0,100)
   GTE::NCLIP(&ctx, true, true);
   int32_t mac0 = static_cast<int32_t>(ctx.cop2d[GTE_MAC0]);
-  EXPECT_GT(mac0, 0); // Counter-clockwise → positive
+  EXPECT_GT(mac0, 0); // Counter-clockwise -> positive
 }
 
 TEST_F(GTETest, NCLIP_Clockwise) {
-  // Reversed triangle: (0,0) (0,100) (100,0) → negative
+  // Reversed triangle: (0,0) (0,100) (100,0) -> negative
   ctx.cop2d[GTE_SXY0] = 0;
   ctx.cop2d[GTE_SXY1] = static_cast<uint32_t>(100) << 16;
   ctx.cop2d[GTE_SXY2] = 100;
   GTE::NCLIP(&ctx, true, true);
   int32_t mac0 = static_cast<int32_t>(ctx.cop2d[GTE_MAC0]);
-  EXPECT_LT(mac0, 0); // Clockwise → negative
+  EXPECT_LT(mac0, 0); // Clockwise -> negative
 }
 
 // SQR
@@ -91,7 +91,7 @@ TEST_F(GTETest, AVSZ3_AverageZ) {
   ctx.cop2d[GTE_SZ1] = 100;
   ctx.cop2d[GTE_SZ2] = 200;
   ctx.cop2d[GTE_SZ3] = 300;
-  // ZSF3 = 4096/3 ≈ 1365 in fixed 1.3.12
+  // ZSF3 = 4096/3 ~= 1365 in fixed 1.3.12
   ctx.cop2c[GTE_ZSF3] = static_cast<uint32_t>(static_cast<int16_t>(1365));
   GTE::AVSZ3(&ctx, true, true);
   // MAC0 = 1365 * (100+200+300) = 819000
@@ -138,7 +138,7 @@ TEST_F(GTETest, GPF_Multiply) {
   ctx.cop2d[GTE_IR1] = static_cast<uint32_t>(static_cast<int16_t>(100));
   ctx.cop2d[GTE_IR2] = static_cast<uint32_t>(static_cast<int16_t>(200));
   ctx.cop2d[GTE_IR3] = static_cast<uint32_t>(static_cast<int16_t>(300));
-  GTE::GPF(&ctx, true, false); // sf=1 → shift 12
+  GTE::GPF(&ctx, true, false); // sf=1 -> shift 12
   // MAC1 = 4096 * 100 = 409600 >> 12 = 100
   EXPECT_EQ(static_cast<int32_t>(ctx.cop2d[GTE_MAC1]), 100);
   EXPECT_EQ(static_cast<int32_t>(ctx.cop2d[GTE_MAC2]), 200);
@@ -152,7 +152,7 @@ TEST_F(GTETest, MVMVA_Identity) {
   setTranslation(0, 0, 0);
   setV0(100, 200, 300);
   GTE::MVMVA(&ctx, 0, 0, 0, true, false);
-  // Identity rotation × (100,200,300) + (0,0,0) = (100,200,300)
+  // Identity rotation x (100,200,300) + (0,0,0) = (100,200,300)
   EXPECT_EQ(static_cast<int32_t>(ctx.cop2d[GTE_MAC1]), 100);
   EXPECT_EQ(static_cast<int32_t>(ctx.cop2d[GTE_MAC2]), 200);
   EXPECT_EQ(static_cast<int32_t>(ctx.cop2d[GTE_MAC3]), 300);
@@ -163,7 +163,7 @@ TEST_F(GTETest, MVMVA_WithTranslation) {
   setTranslation(1000, 2000, 3000);
   setV0(100, 200, 300);
   GTE::MVMVA(&ctx, 0, 0, 0, true, false);
-  // Identity × V0 + TR = (100+1000, 200+2000, 300+3000)
+  // Identity x V0 + TR = (100+1000, 200+2000, 300+3000)
   EXPECT_EQ(static_cast<int32_t>(ctx.cop2d[GTE_MAC1]), 1100);
   EXPECT_EQ(static_cast<int32_t>(ctx.cop2d[GTE_MAC2]), 2200);
   EXPECT_EQ(static_cast<int32_t>(ctx.cop2d[GTE_MAC3]), 3300);

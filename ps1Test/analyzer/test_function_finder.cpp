@@ -1,4 +1,4 @@
-// Tests for ps1Analyzer — Function Finder
+// Tests for ps1Analyzer -- Function Finder
 // Validates function detection using crafted MIPS binaries
 
 #include <gtest/gtest.h>
@@ -150,7 +150,7 @@ TEST(MipsHelpers, NOPDetection) {
     EXPECT_FALSE(mips::isNOP(makeJR_RA()));
 }
 
-// Function Finder — Entry Point Detection
+// Function Finder -- Entry Point Detection
 
 TEST(FunctionFinder, DetectsEntryPoint) {
     const std::string path = "/tmp/ps1recomp_test_ff_entry.elf";
@@ -172,7 +172,7 @@ TEST(FunctionFinder, DetectsEntryPoint) {
     cleanupFile(path);
 }
 
-// Function Finder — JAL Target Detection
+// Function Finder -- JAL Target Detection
 
 TEST(FunctionFinder, DetectsJALTargets) {
     const std::string path = "/tmp/ps1recomp_test_ff_jal.elf";
@@ -208,7 +208,7 @@ TEST(FunctionFinder, DetectsJALTargets) {
     cleanupFile(path);
 }
 
-// Function Finder — Symbol Detection
+// Function Finder -- Symbol Detection
 
 TEST(FunctionFinder, DetectsSymbolFunctions) {
     const std::string path = "/tmp/ps1recomp_test_ff_syms.elf";
@@ -244,7 +244,7 @@ TEST(FunctionFinder, DetectsSymbolFunctions) {
     cleanupFile(path);
 }
 
-// Function Finder — Prologue Detection
+// Function Finder -- Prologue Detection
 
 TEST(FunctionFinder, DetectsProloguePatterns) {
     const std::string path = "/tmp/ps1recomp_test_ff_prologue.elf";
@@ -273,7 +273,7 @@ TEST(FunctionFinder, DetectsProloguePatterns) {
     cleanupFile(path);
 }
 
-// Function Finder — Boundary Computation
+// Function Finder -- Boundary Computation
 
 TEST(FunctionFinder, ComputesSizes) {
     const std::string path = "/tmp/ps1recomp_test_ff_sizes.elf";
@@ -335,7 +335,7 @@ TEST(FunctionFinder, RecomputeBoundariesAssignsSizeToLateAddedFunction) {
     // The added function should get size = (next.address - addr) = 0x10.
     // Existing functions keep their pre-computed size (computeBoundaries
     // skips entries with size != 0).  Without `recomputeBoundaries` the
-    // added function would have stayed at size=0 — the bug this fixes.
+    // added function would have stayed at size=0 -- the bug this fixes.
     auto* added = finder.findByAddress(0x80010040);
     ASSERT_NE(added, nullptr);
     EXPECT_EQ(added->size, 0x10u);
@@ -344,7 +344,7 @@ TEST(FunctionFinder, RecomputeBoundariesAssignsSizeToLateAddedFunction) {
     cleanupFile(path);
 }
 
-// Function Finder — Leaf Detection
+// Function Finder -- Leaf Detection
 
 TEST(FunctionFinder, DetectsLeafFunctions) {
     const std::string path = "/tmp/ps1recomp_test_ff_leaf.elf";
@@ -382,7 +382,7 @@ TEST(FunctionFinder, DetectsLeafFunctions) {
     cleanupFile(path);
 }
 
-// Function Finder — findContaining
+// Function Finder -- findContaining
 
 TEST(FunctionFinder, FindContaining) {
     const std::string path = "/tmp/ps1recomp_test_ff_containing.elf";
@@ -414,7 +414,7 @@ TEST(FunctionFinder, FindContaining) {
     cleanupFile(path);
 }
 
-// Function Finder — Empty Section
+// Function Finder -- Empty Section
 
 TEST(FunctionFinder, HandlesEmptyCode) {
     const std::string path = "/tmp/ps1recomp_test_ff_empty.elf";

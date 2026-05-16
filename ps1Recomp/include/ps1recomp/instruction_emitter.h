@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1Recomp — Instruction Emitter
+// ps1Recomp -- Instruction Emitter
 // Translates decoded MIPS I instructions to C++ code
 
 #include "mips_decoder.h"
@@ -46,7 +46,7 @@ using FuncResolver = std::function<std::string(uint32_t address)>;
 
 class InstructionEmitter {
 public:
-  /// Set the function call resolver (for JAL targets → names)
+  /// Set the function call resolver (for JAL targets -> names)
   void setFuncResolver(FuncResolver resolver) {
     m_resolver = std::move(resolver);
   }

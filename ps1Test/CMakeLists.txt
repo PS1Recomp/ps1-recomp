@@ -1,9 +1,9 @@
 # PS1Recomp Tests
 # Structure: tests/<component>/test_<module>.cpp
 
-# ──────────────────────────────────────────
+# ------------------------------------------
 # Analyzer Tests
-# ──────────────────────────────────────────
+# ------------------------------------------
 add_executable(ps1Analyzer_tests
     analyzer/test_elf_parser.cpp
     analyzer/test_function_finder.cpp
@@ -27,9 +27,9 @@ target_compile_definitions(ps1Analyzer_tests
 
 gtest_discover_tests(ps1Analyzer_tests)
 
-# ──────────────────────────────────────────
+# ------------------------------------------
 # Recompiler Tests
-# ──────────────────────────────────────────
+# ------------------------------------------
 add_executable(ps1Recomp_tests
     recompiler/test_mips_decoder.cpp
     recompiler/test_instruction_emitter.cpp
@@ -46,9 +46,9 @@ target_link_libraries(ps1Recomp_tests
 
 gtest_discover_tests(ps1Recomp_tests)
 
-# ──────────────────────────────────────────
+# ------------------------------------------
 # Runtime Tests
-# ──────────────────────────────────────────
+# ------------------------------------------
 add_executable(ps1Runtime_tests
     runtime/test_stubs.cpp
     runtime/test_cpu_context.cpp

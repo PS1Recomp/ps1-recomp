@@ -2,7 +2,7 @@
 //
 // Covers:
 //   * `mask_immediates()` parity with tools/extract_psyq_signatures.py
-//   * SHA-256 → uint64_t determinism and the relocation-tolerance property
+//   * SHA-256 -> uint64_t determinism and the relocation-tolerance property
 //   * TOML loader populates the in-memory hash maps
 //   * End-to-end detection in a synthetic ELF whose .text mirrors a real
 //     signature loaded from the project's psyq_signatures.toml.
@@ -41,10 +41,10 @@ static std::string metaTomlPath() {
     return std::string(PS1RECOMP_DATA_DIR_DEFAULT) + "/psyq_metadata.toml";
 }
 
-// mask_immediates — parity with tools/tests/test_extract_psyq_signatures.py
+// mask_immediates -- parity with tools/tests/test_extract_psyq_signatures.py
 
 TEST(PsyqHashMasking, RTypePassthrough) {
-    // add $v0, $a0, $a1 — pure R-type, no immediate
+    // add $v0, $a0, $a1 -- pure R-type, no immediate
     EXPECT_EQ(PsyQMatcher::maskImmediates(0x00851020u), 0x00851020u);
     // jr $ra (special, funct=0x08)
     EXPECT_EQ(PsyQMatcher::maskImmediates(0x03E00008u), 0x03E00008u);
@@ -84,7 +84,7 @@ TEST(PsyqHashMasking, JJalTargetZeroed) {
 }
 
 TEST(PsyqHashMasking, CopKeptExact) {
-    // mfc0/mtc0/cfc2/ctc2/mtc2 — encoding distinguishes GTE ops via funct/rd
+    // mfc0/mtc0/cfc2/ctc2/mtc2 -- encoding distinguishes GTE ops via funct/rd
     for (uint32_t w : {0x40046800u, 0x40846800u, 0x48046800u, 0x4884E800u}) {
         EXPECT_EQ(PsyQMatcher::maskImmediates(w), w);
     }
@@ -97,7 +97,7 @@ TEST(PsyqHashMasking, AddiuDifferentImmCollideOnMask) {
               PsyQMatcher::maskImmediates(0x240900ADu));
 }
 
-// SHA-256 → uint64 helpers
+// SHA-256 -> uint64 helpers
 
 TEST(PsyqHashHash, Deterministic) {
     const std::vector<uint8_t> bytes = {
@@ -141,13 +141,13 @@ TEST(PsyqHashHash, HashMaskedRelocationTolerant) {
 TEST(PsyqHashHash, ParseHashHex) {
     EXPECT_EQ(PsyQMatcher::parseHashHex("ba7816bf8f01cfea"), 0xBA7816BF8F01CFEAull);
     EXPECT_EQ(PsyQMatcher::parseHashHex("0000000000000000"), 0u);
-    // Too short → 0.
+    // Too short -> 0.
     EXPECT_EQ(PsyQMatcher::parseHashHex("ba78"), 0u);
-    // Non-hex char → 0.
+    // Non-hex char -> 0.
     EXPECT_EQ(PsyQMatcher::parseHashHex("zzzzzzzzzzzzzzzz"), 0u);
 }
 
-// TOML loader — verify the in-tree DB parses cleanly and populates the
+// TOML loader -- verify the in-tree DB parses cleanly and populates the
 // matcher with a non-trivial number of signatures.
 
 TEST(PsyqHashLoader, LoadsInTreeDb) {
@@ -239,7 +239,7 @@ static bool findSignature(const std::string& tomlPath,
 // Build a synthetic ELF with a single function whose body hashes to the
 // supplied target. We can't reproduce real PsyQ bytes (the SDK ships no
 // .text we want to redistribute), so the test instead encodes the hash as
-// the byte stream itself — `hashFull` over those bytes is deterministic.
+// the byte stream itself -- `hashFull` over those bytes is deterministic.
 // To exercise the lookup path, we INSTEAD insert a custom signature into
 // the matcher whose hash matches a known synthetic body, then run match.
 // (This decouples the test from any real PsyQ binary.)
@@ -294,8 +294,8 @@ TEST(PsyqHashLoader, DetectsSyntheticBodyMatchingLoadedFullHash) {
     // Construct a tiny synthetic body, compute its hash_full, then write a
     // throw-away TOML containing a signature with that hash. Loading that
     // TOML and matching a synthetic ELF carrying the body should produce
-    // exactly one match — round-trips the full pipeline (loader → indexer
-    // → matchByHash) without depending on any real PsyQ bytes.
+    // exactly one match -- round-trips the full pipeline (loader -> indexer
+    // -> matchByHash) without depending on any real PsyQ bytes.
     constexpr uint32_t FUNC_ADDR = 0x80050000;
 
     // 16-byte synthetic body (full mode threshold is <=24 bytes).
@@ -369,7 +369,7 @@ TEST(PsyqHashLoader, MaskedHashIgnoresImmediateRelocation) {
     };
 
     std::vector<uint8_t> bodyA, bodyB;
-    // 8 instructions × 4 bytes = 32 bytes
+    // 8 instructions x 4 bytes = 32 bytes
     pack32(bodyA, 0x27BDFFE8u);  // addiu sp,sp,-0x18
     pack32(bodyA, 0xAFBF0014u);  // sw ra,0x14(sp)
     pack32(bodyA, 0x240900ADu);  // addiu t1,zero,0xAD  <-- imm differs
@@ -379,7 +379,7 @@ TEST(PsyqHashLoader, MaskedHashIgnoresImmediateRelocation) {
     pack32(bodyA, 0x8FBF0014u);  // lw ra,0x14(sp)
     pack32(bodyA, 0x03E00008u);  // jr ra
     bodyB = bodyA;
-    // Patch the third word's imm: 0xAD → 0x12. Bytes 8..11.
+    // Patch the third word's imm: 0xAD -> 0x12. Bytes 8..11.
     bodyB[8]  = 0x12; bodyB[9]  = 0x00;
 
     const uint64_t hmA = PsyQMatcher::hashMasked(bodyA.data(), bodyA.size());
@@ -422,7 +422,7 @@ TEST(PsyqHashLoader, MaskedHashIgnoresImmediateRelocation) {
         std::remove(elfPath.c_str());
     }
 
-    // Detect bodyB (different imm) — same hash, same match.
+    // Detect bodyB (different imm) -- same hash, same match.
     {
         const std::string elfPath = "/tmp/ps1recomp_test_psyq_masked_b.elf";
         writeSyntheticElf(elfPath, FUNC_ADDR, bodyB);
@@ -441,7 +441,7 @@ TEST(PsyqHashLoader, MaskedHashIgnoresImmediateRelocation) {
 
 TEST(PsyqHashLoader, RealDbContainsResetGraph) {
     // Sanity check the canonical example. ResetGraph should be present
-    // (with one or more @vN variants — but base name must exist).
+    // (with one or more @vN variants -- but base name must exist).
     Sig got;
     ASSERT_TRUE(findSignature(sigsTomlPath(), "ResetGraph", "masked", got))
         << "ResetGraph missing from " << sigsTomlPath();
@@ -450,7 +450,7 @@ TEST(PsyqHashLoader, RealDbContainsResetGraph) {
     EXPECT_EQ(got.hash_masked.size(), 16u);
 }
 
-// Collision handling — two distinct base names sharing a hash must not
+// Collision handling -- two distinct base names sharing a hash must not
 // produce a match through the colliding hash. Otherwise the matcher would
 // silently mis-identify wrappers (cf. 9-way collision of CdSync / CdReadSync /
 // PadStop / ... on hash_masked 43f20be7a8d281c6 in the in-tree DB).
@@ -470,7 +470,7 @@ TEST(PsyqHashLoader, CollidingMaskedHashIsDroppedFromLiveMap) {
         v.push_back((w >> 24) & 0xFF);
     };
 
-    // Body A — distinct bytes from B (different jal target). Both bodies
+    // Body A -- distinct bytes from B (different jal target). Both bodies
     // mask to the same hash_masked (jal target field is masked off).
     std::vector<uint8_t> bodyA;
     pack32(bodyA, 0x27BDFFE8u);  // addiu sp,sp,-0x18
@@ -483,7 +483,7 @@ TEST(PsyqHashLoader, CollidingMaskedHashIsDroppedFromLiveMap) {
     pack32(bodyA, 0x00000000u);  // nop
 
     std::vector<uint8_t> bodyB = bodyA;
-    // Patch jal target bytes: 0x0C0AAAAAu → 0x0C0BBBBBu.
+    // Patch jal target bytes: 0x0C0AAAAAu -> 0x0C0BBBBBu.
     bodyB[8]  = 0xBB; bodyB[9]  = 0xBB; bodyB[10] = 0x0B; bodyB[11] = 0x0C;
 
     const uint64_t hmA = PsyQMatcher::hashMasked(bodyA.data(), bodyA.size());
@@ -529,7 +529,7 @@ TEST(PsyqHashLoader, CollidingMaskedHashIsDroppedFromLiveMap) {
 
     // Use a fresh matcher without the in-tree DB so we only see the test sigs.
     PsyQMatcher matcher;
-    // Wipe state from the constructor's loadDefaults() — we want a clean
+    // Wipe state from the constructor's loadDefaults() -- we want a clean
     // slate scoped to this test's two synthetic entries. The public API
     // doesn't expose a reset; load the test TOML which leaves the in-tree
     // entries untouched but adds the two synthetic ones, then we test only
@@ -557,7 +557,7 @@ TEST(PsyqHashLoader, CollidingMaskedHashIsDroppedFromLiveMap) {
 }
 
 TEST(PsyqHashLoader, FullyCollidingPairDropsBothFromMatching) {
-    // Two sigs with identical hash_masked AND hash_full but distinct names —
+    // Two sigs with identical hash_masked AND hash_full but distinct names --
     // the unrelocated PsyQ .OBJ wrapper case. Both must drop; the matcher
     // must refuse to match a body that hashes there.
     constexpr uint32_t FUNC_ADDR = 0x80080000;
@@ -603,7 +603,7 @@ TEST(PsyqHashLoader, FullyCollidingPairDropsBothFromMatching) {
 
     for (const auto& m : matcher.getMatches()) {
         EXPECT_FALSE(m.address == FUNC_ADDR && (m.name == "WrapperX" || m.name == "WrapperY"))
-            << "fully colliding wrappers must not match — got " << m.name;
+            << "fully colliding wrappers must not match -- got " << m.name;
     }
 
     std::remove(tmpToml.c_str());

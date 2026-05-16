@@ -62,7 +62,7 @@ TEST(OverlayScannerTest, ParsePsxExeHeaderTooSmall) {
 // MIPS Score tests
 
 TEST(OverlayScannerTest, MipsScoreAllNop) {
-  // All NOPs — valid but heavily penalized
+  // All NOPs -- valid but heavily penalized
   std::vector<uint8_t> data(256, 0);
   float score = OverlayScanner::computeMipsScore(data.data(), data.size());
   // All valid (NOPs) but >50% NOPs so penalized by 0.5x
@@ -143,11 +143,11 @@ TEST(OverlayScannerTest, DetectFunctionPrologues) {
 TEST(OverlayScannerTest, InferRamBaseFromLuiOri) {
   std::vector<uint32_t> code = {
       0x3C028004, // lui $v0, 0x8004
-      0x34420100, // ori $v0, $v0, 0x0100  → 0x80040100
+      0x34420100, // ori $v0, $v0, 0x0100  -> 0x80040100
       0x3C038004, // lui $v1, 0x8004
-      0x34630200, // ori $v1, $v1, 0x0200  → 0x80040200
+      0x34630200, // ori $v1, $v1, 0x0200  -> 0x80040200
       0x3C048004, // lui $a0, 0x8004
-      0x34840300, // ori $a0, $a0, 0x0300  → 0x80040300
+      0x34840300, // ori $a0, $a0, 0x0300  -> 0x80040300
       // Some code
       0x00000000,
       0x03E00008,
@@ -162,9 +162,9 @@ TEST(OverlayScannerTest, InferRamBaseFromLuiOri) {
 TEST(OverlayScannerTest, InferRamBaseFromLuiAddiu) {
   std::vector<uint32_t> code = {
       0x3C028005, // lui $v0, 0x8005
-      0x24420800, // addiu $v0, $v0, 0x0800  → 0x80050800
+      0x24420800, // addiu $v0, $v0, 0x0800  -> 0x80050800
       0x3C038005, // lui $v1, 0x8005
-      0x24631000, // addiu $v1, $v1, 0x1000  → 0x80051000
+      0x24631000, // addiu $v1, $v1, 0x1000  -> 0x80051000
       0x00000000,
       0x03E00008,
   };
@@ -232,7 +232,7 @@ TEST(OverlayScannerTest, ScanFileRawMips) {
 }
 
 TEST(OverlayScannerTest, ScanFileNotCode) {
-  std::vector<uint8_t> data(512, 0xFF); // Just 0xFF bytes — not MIPS
+  std::vector<uint8_t> data(512, 0xFF); // Just 0xFF bytes -- not MIPS
 
   OverlayScanner scanner;
   auto result = scanner.scanFile(data, "DATA.BIN");

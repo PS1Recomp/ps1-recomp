@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1Runtime — DMA Controller
+// ps1Runtime -- DMA Controller
 // PS1 DMA: 7 channels for high-speed data transfer between devices
 
 #include <cstdint>
@@ -47,9 +47,9 @@ public:
   };
 
   struct ChannelRegs {
-    uint32_t baseAddr = 0;       // MADR — DMA base address
-    uint32_t blockControl = 0;   // BCR — block size/count
-    uint32_t channelControl = 0; // CHCR — channel control
+    uint32_t baseAddr = 0;       // MADR -- DMA base address
+    uint32_t blockControl = 0;   // BCR -- block size/count
+    uint32_t channelControl = 0; // CHCR -- channel control
   };
 
   DMA();

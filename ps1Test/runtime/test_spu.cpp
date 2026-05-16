@@ -260,7 +260,7 @@ TEST(SpuSoundRam, TransferViaRegister) {
   SPU spu;
   spu.reset();
 
-  // Set transfer address (in 8-byte units, so val=1 → byte addr 8)
+  // Set transfer address (in 8-byte units, so val=1 -> byte addr 8)
   spu.writeRegister(0x1F801DA6, 1);      // addr = 8
   spu.writeRegister(0x1F801DA8, 0xDEAD); // write data
 

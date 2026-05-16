@@ -41,7 +41,7 @@ void OverlayManager::notifyMemWrite(uint32_t addr, uint32_t writeSize) {
     auto &ovl = overlays_[idx];
 
     // Deactivate any other overlay that occupies the same RAM region
-    // (they conflict — only one can be active at a time)
+    // (they conflict -- only one can be active at a time)
     for (auto &other : overlays_) {
       if (&other == &ovl)
         continue;
@@ -55,7 +55,7 @@ void OverlayManager::notifyMemWrite(uint32_t addr, uint32_t writeSize) {
       uint32_t nEnd = nStart + ovl.size;
 
       if (oStart < nEnd && oEnd > nStart) {
-        // Conflict — deactivate the old one
+        // Conflict -- deactivate the old one
         fmt::print("[Overlay] Deactivating '{}' (conflict with '{}')\n",
                    other.name, ovl.name);
         other.active = false;

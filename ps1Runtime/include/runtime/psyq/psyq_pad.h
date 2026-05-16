@@ -14,7 +14,7 @@
  * The active-low button bitmask used by `InputController::buttonState()`
  * already matches the wire format the original PsyQ pad subsystem returns
  * (bit clear = pressed) so no additional inversion is needed at the HLE
- * boundary — `PadRead` packs `port2:port1` into the 32-bit return word as
+ * boundary -- `PadRead` packs `port2:port1` into the 32-bit return word as
  * real `libetc` does.
  *
  * `PadInitDirect(buf1, buf2)` records the per-port 34-byte status-buffer
@@ -26,29 +26,29 @@
 
 namespace ps1::psyq {
 
-/// PadInit(mode) — initialise the pad subsystem.  `mode` is reserved and
+/// PadInit(mode) -- initialise the pad subsystem.  `mode` is reserved and
 /// ignored by real libetc; we just enable polling and return 0 in `$v0`.
 void hle_libetc_PadInit(recomp_context *ctx);
 
-/// PadStartCom() — re-acquire SIO for pad communication after MemCard I/O.
+/// PadStartCom() -- re-acquire SIO for pad communication after MemCard I/O.
 /// NOP in our runtime (SIO multiplexing is implicit), returns 0.
 void hle_libetc_PadStartCom(recomp_context *ctx);
 
-/// PadStopCom() — release SIO so MemCard transfers can run undisturbed.
+/// PadStopCom() -- release SIO so MemCard transfers can run undisturbed.
 /// NOP, returns 0.
 void hle_libetc_PadStopCom(recomp_context *ctx);
 
-/// PadInitDirect(buf1, buf2) — register per-port 34-byte pad-status buffers.
+/// PadInitDirect(buf1, buf2) -- register per-port 34-byte pad-status buffers.
 /// `buf1` services port 0, `buf2` services port 1.  Either may be NULL.
 /// Returns 0 in `$v0`.
 void hle_libetc_PadInitDirect(recomp_context *ctx);
 
-/// PadGetState(port) — return the link-state code.  We collapse the 6-state
+/// PadGetState(port) -- return the link-state code.  We collapse the 6-state
 /// PsyQ machine to two values: `PadStateStable` (4) when a pad is attached,
 /// `PadStateDiscovery` (0) otherwise.  Games typically just compare to 4.
 void hle_libetc_PadGetState(recomp_context *ctx);
 
-/// PadRead(n) — return `(port2 << 16) | port1` of active-low button words.
+/// PadRead(n) -- return `(port2 << 16) | port1` of active-low button words.
 /// The `n` arg is reserved and ignored.  When no input controller is
 /// attached returns `0xFFFFFFFF` (no buttons pressed on either port).
 void hle_libetc_PadRead(recomp_context *ctx);

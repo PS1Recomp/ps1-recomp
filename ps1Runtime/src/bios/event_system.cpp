@@ -74,12 +74,12 @@ uint32_t EventSystem::waitEvent(uint32_t eventId) {
   uint32_t bit = 1u << eventId;
   uint32_t bits = triggeredBits_.load(std::memory_order_acquire);
   if (bits & bit) {
-    // Clear this bit atomically (acknowledge) — same pattern as testEvent
+    // Clear this bit atomically (acknowledge) -- same pattern as testEvent
     triggeredBits_.fetch_and(~bit, std::memory_order_release);
     return 1;
   }
 
-  // Not triggered yet — on a real PS1, this would spin-wait.
+  // Not triggered yet -- on a real PS1, this would spin-wait.
   // In our HLE, the caller (recompiled code) is in a polling loop
   // that will call drainPendingCallbacks() before re-checking.
   return 0;
@@ -139,7 +139,7 @@ void EventSystem::triggerEvent(uint32_t classId, uint32_t specId) {
         ev.pendingTrigger = true;
         continue;
       }
-      // Set bit in atomic bitmask (thread-safe for main→game thread visibility)
+      // Set bit in atomic bitmask (thread-safe for main->game thread visibility)
       uint32_t oldBits =
           triggeredBits_.fetch_or(1u << i, std::memory_order_release);
       if (ev.mode == 0x1000 && ev.handler != 0) {

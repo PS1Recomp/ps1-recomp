@@ -89,9 +89,9 @@ TEST_F(PsyqRegistryTest, DispatchUnknownNameAborts) {
 TEST_F(PsyqRegistryTest, InitDefaultsRegistersBuiltins) {
   psyq_registry_init_defaults();
 
-  // Spot-check a few — full list is in psyq_registry.cpp. Pick HLEs whose
+  // Spot-check a few -- full list is in psyq_registry.cpp. Pick HLEs whose
   // bodies are NOPs or pointer-only (don't need GPU/BIOS configuration).
-  // ResetGraph: NOP regardless of mode — safe to dispatch with default ctx.
+  // ResetGraph: NOP regardless of mode -- safe to dispatch with default ctx.
   EXPECT_NO_FATAL_FAILURE(psyq_dispatch("libgpu_ResetGraph", &ctx));
 
   // ClearOTag with n==0: short-circuits to v0=base, no memory writes.
@@ -111,7 +111,7 @@ TEST_F(PsyqRegistryTest, InitDefaultsIsIdempotent) {
   psyq_dispatch("libgpu_ResetGraph", &ctx);
   EXPECT_EQ(g_test_dispatch_calls.load(), 1);
 
-  // Calling init_defaults() again must be a no-op — the override stays.
+  // Calling init_defaults() again must be a no-op -- the override stays.
   psyq_registry_init_defaults();
   psyq_dispatch("libgpu_ResetGraph", &ctx);
   EXPECT_EQ(g_test_dispatch_calls.load(), 2);

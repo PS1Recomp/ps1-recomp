@@ -10,7 +10,7 @@ namespace {
 
 // All libapi BIOS-wrapper HLEs share this shape: load $t1 with the syscall
 // index, then dispatch through the matching A/B/C table.  Bios::execute*
-// reads $a0..$a3 and writes $v0 — exactly what the original PsyQ wrapper does.
+// reads $a0..$a3 and writes $v0 -- exactly what the original PsyQ wrapper does.
 inline void dispatchA(recomp_context *ctx, uint32_t index) {
   ctx->r[T1] = index;
   ctx->bios->executeA0();
@@ -34,7 +34,7 @@ void hle_libapi_EnableEvent(recomp_context *ctx)  { dispatchB(ctx, 0x0C); }
 void hle_libapi_DisableEvent(recomp_context *ctx) { dispatchB(ctx, 0x0D); }
 void hle_libapi_TestEvent(recomp_context *ctx)    { dispatchB(ctx, 0x0B); }
 
-// Critical section (kernel SYSCALL on real HW — stubbed here)
+// Critical section (kernel SYSCALL on real HW -- stubbed here)
 //
 // EnterCriticalSection: SYS(01h).  Disables interrupts; returns 1 if they had
 // been enabled.  Our recompiler does not model COP0 interrupt enable bits, so
@@ -51,7 +51,7 @@ void hle_libapi_ExitCriticalSection(recomp_context *ctx) {
 void hle_libapi_ReturnFromException(recomp_context *ctx) {
   dispatchB(ctx, 0x17);
 }
-// HookEntryInt(*entry) → C(0x01) SysEnqIntRP — register a handler in the
+// HookEntryInt(*entry) -> C(0x01) SysEnqIntRP -- register a handler in the
 // priority chain.  PsyQ's HookEntryInt computes priority/handler from the
 // `entry` struct and forwards to SysEnqIntRP; the C0 stub already accepts
 // (priority, handler) but the recompiled binary supplies them via $a0/$a1
@@ -75,7 +75,7 @@ void hle_libapi_erase(recomp_context *ctx)  { dispatchB(ctx, 0x45); } // delete(
 void hle_libapi_format(recomp_context *ctx) { dispatchB(ctx, 0x41); }
 void hle_libapi__bu_init(recomp_context *ctx)   { dispatchA(ctx, 0x70); }
 // PS1 BIOS table A: A0:0x42 = firstfile2, A0:0x43 = nextfile.
-// Previously dispatched to B0:0x42 (SetConf — stub returns 1 = "ok") and
+// Previously dispatched to B0:0x42 (SetConf -- stub returns 1 = "ok") and
 // B0:0x43 (HookEntryInt) which silently corrupted the firstfile2 caller's
 // out-pointer with wrong values.  Game subsequently tried to read a file
 // at a garbage LBA and the CD wait loop hung pre-render.

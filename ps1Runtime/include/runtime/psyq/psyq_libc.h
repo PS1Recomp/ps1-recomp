@@ -13,7 +13,7 @@
  * **Consolidation strategy.** `bios.cpp` already implements byte-for-byte
  * `memcpy`/`memset`/`strcpy`/`strlen`/etc. as A0 syscalls (A0:0x10..0x2D).
  * The HLEs in this module forward to those tables via the same `dispatchA`
- * pattern used by `psyq_libapi.cpp` — no logic duplication, single source of
+ * pattern used by `psyq_libapi.cpp` -- no logic duplication, single source of
  * truth in `bios.cpp`.  Functions without a matching A0 stub (`atoi`,
  * `printf`, `sprintf`) are implemented directly here.
  *
@@ -29,38 +29,38 @@
 namespace ps1::psyq {
 
 // Memory routines (A0:0x2A..0x2D)
-void hle_libc_memcpy(recomp_context *ctx);   ///< A0:0x2A — memcpy(dst, src, n)
-void hle_libc_memset(recomp_context *ctx);   ///< A0:0x2B — memset(dst, c, n)
-void hle_libc_memmove(recomp_context *ctx);  ///< A0:0x2C — memmove(dst, src, n)
-void hle_libc_memcmp(recomp_context *ctx);   ///< A0:0x2D — memcmp(s1, s2, n)
+void hle_libc_memcpy(recomp_context *ctx);   ///< A0:0x2A -- memcpy(dst, src, n)
+void hle_libc_memset(recomp_context *ctx);   ///< A0:0x2B -- memset(dst, c, n)
+void hle_libc_memmove(recomp_context *ctx);  ///< A0:0x2C -- memmove(dst, src, n)
+void hle_libc_memcmp(recomp_context *ctx);   ///< A0:0x2D -- memcmp(s1, s2, n)
 
 // String routines (A0:0x15..0x1A)
-void hle_libc_strcpy(recomp_context *ctx);   ///< A0:0x15 — strcpy(dst, src)
-void hle_libc_strcmp(recomp_context *ctx);   ///< A0:0x16 — strcmp(s1, s2)
-void hle_libc_strlen(recomp_context *ctx);   ///< A0:0x17 — strlen(s)
-void hle_libc_strncpy(recomp_context *ctx);  ///< A0:0x18 — strncpy(dst, src, n)
-void hle_libc_strcat(recomp_context *ctx);   ///< A0:0x19 — strcat(dst, src)
-void hle_libc_strncmp(recomp_context *ctx);  ///< A0:0x1A — strncmp(s1, s2, n)
+void hle_libc_strcpy(recomp_context *ctx);   ///< A0:0x15 -- strcpy(dst, src)
+void hle_libc_strcmp(recomp_context *ctx);   ///< A0:0x16 -- strcmp(s1, s2)
+void hle_libc_strlen(recomp_context *ctx);   ///< A0:0x17 -- strlen(s)
+void hle_libc_strncpy(recomp_context *ctx);  ///< A0:0x18 -- strncpy(dst, src, n)
+void hle_libc_strcat(recomp_context *ctx);   ///< A0:0x19 -- strcat(dst, src)
+void hle_libc_strncmp(recomp_context *ctx);  ///< A0:0x1A -- strncmp(s1, s2, n)
 
 // Math / RNG (A0:0x10..0x1F)
-void hle_libc_abs(recomp_context *ctx);      ///< A0:0x10 — abs(x)
-void hle_libc_labs(recomp_context *ctx);     ///< A0:0x11 — labs(x)
-void hle_libc_rand(recomp_context *ctx);     ///< A0:0x1E — rand()
-void hle_libc_srand(recomp_context *ctx);    ///< A0:0x1F — srand(seed)
+void hle_libc_abs(recomp_context *ctx);      ///< A0:0x10 -- abs(x)
+void hle_libc_labs(recomp_context *ctx);     ///< A0:0x11 -- labs(x)
+void hle_libc_rand(recomp_context *ctx);     ///< A0:0x1E -- rand()
+void hle_libc_srand(recomp_context *ctx);    ///< A0:0x1F -- srand(seed)
 
 // Standalone (no matching BIOS syscall)
 
-/// `atoi(s)` — parse leading optional sign + decimal digits; ignores
+/// `atoi(s)` -- parse leading optional sign + decimal digits; ignores
 /// leading whitespace.  Returns 0 on parse failure (matches libc).
 void hle_libc_atoi(recomp_context *ctx);
 
-/// `printf(fmt, ...)` — formatted host-stdout debug output.  No-op unless
+/// `printf(fmt, ...)` -- formatted host-stdout debug output.  No-op unless
 /// `PS1_BIOS_DEBUG=1` is set in the environment.  Returns the number of
 /// characters that *would have been* written (matches C-libc semantics)
 /// regardless of the gate.
 void hle_libc_printf(recomp_context *ctx);
 
-/// `sprintf(buf, fmt, ...)` — formatted write to PS1 RAM at `buf`.  Always
+/// `sprintf(buf, fmt, ...)` -- formatted write to PS1 RAM at `buf`.  Always
 /// runs (the gate only suppresses host stdout).  Returns the number of
 /// characters written, excluding the trailing NUL.
 void hle_libc_sprintf(recomp_context *ctx);

@@ -9,7 +9,7 @@ namespace ps1::bios {
 
 using detail::readString;
 
-// PS1 BIOS Table A (0xA0) — string/memory/heap helpers, printf, GPU stubs,
+// PS1 BIOS Table A (0xA0) -- string/memory/heap helpers, printf, GPU stubs,
 // CD-ROM low-level stubs. Dispatched from Bios::executeA0() in bios.cpp.
 
 namespace {
@@ -224,7 +224,7 @@ void Bios::handleA0(uint32_t index) {
     break;
 
   // Memory functions
-  case 0x27: { // bcopy (src, dst, len) — note: args reversed from memcpy
+  case 0x27: { // bcopy (src, dst, len) -- note: args reversed from memcpy
     uint32_t src = ctx_.r[A0];
     uint32_t dst = ctx_.r[A1];
     uint32_t n = ctx_.r[A2];
@@ -265,7 +265,7 @@ void Bios::handleA0(uint32_t index) {
     }
     ctx_.r[V0] = ctx_.r[A0];
     break;
-  case 0x2C: { // memmove — handles overlapping regions
+  case 0x2C: { // memmove -- handles overlapping regions
     uint32_t dst = ctx_.r[A0];
     uint32_t src = ctx_.r[A1];
     uint32_t n = ctx_.r[A2];
@@ -314,7 +314,7 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = ptr;
     break;
   }
-  case 0x36: { // realloc — simplified: alloc new + copy + free old
+  case 0x36: { // realloc -- simplified: alloc new + copy + free old
     uint32_t oldPtr = ctx_.r[A0];
     uint32_t newSize = ctx_.r[A1];
     if (newSize == 0) {
@@ -324,7 +324,7 @@ void Bios::handleA0(uint32_t index) {
     }
     uint32_t newPtr = heap_.malloc(newSize);
     if (oldPtr != 0 && newPtr != 0) {
-      // Copy min(oldSize, newSize) — we don't know oldSize, copy newSize
+      // Copy min(oldSize, newSize) -- we don't know oldSize, copy newSize
       for (uint32_t i = 0; i < newSize; i++)
         ctx_.mem->write8(newPtr + i, ctx_.mem->read8(oldPtr + i));
       heap_.free(oldPtr);
@@ -345,7 +345,7 @@ void Bios::handleA0(uint32_t index) {
     break;
 
   // GPU functions
-  case 0x46: { // GPU_dw — copy data block to GP0 (used by PutDispEnv init)
+  case 0x46: { // GPU_dw -- copy data block to GP0 (used by PutDispEnv init)
     // A0=src_addr, A1=count (words). Sends each word to GP0.
     uint32_t addr = ctx_.r[A0];
     uint32_t count = ctx_.r[A1];
@@ -358,12 +358,12 @@ void Bios::handleA0(uint32_t index) {
     }
     break;
   }
-  case 0x47: { // gpu_send_dma — wait for DMA, then trigger GPU DMA
+  case 0x47: { // gpu_send_dma -- wait for DMA, then trigger GPU DMA
     BIOS_LOG("[BIOS] gpu_send_dma() [STUB]\n");
     ctx_.r[V0] = 0;
     break;
   }
-  case 0x48: { // SendGP1Command — write single word to GP1 (0x1F801814)
+  case 0x48: { // SendGP1Command -- write single word to GP1 (0x1F801814)
     // PutDispEnv calls this to set display area (GP1 0x05), ranges (0x06/0x07),
     // and display mode (0x08). Critical for double-buffer display swap.
     uint32_t cmd = ctx_.r[A0];
@@ -374,7 +374,7 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = cmd;
     break;
   }
-  case 0x4B: { // send_gpu_linked_list — send GP0 OT via DMA-like walk
+  case 0x4B: { // send_gpu_linked_list -- send GP0 OT via DMA-like walk
     // A0 = pointer to linked list tail. Walk the list sending GP0 commands.
     // Each entry: [23:0]=next_ptr, [31:24]=word_count, followed by count words.
     uint32_t ptr = ctx_.r[A0];
@@ -393,16 +393,16 @@ void Bios::handleA0(uint32_t index) {
     }
     break;
   }
-  case 0x4D: { // GetGPUStatus — read GPUSTAT register
+  case 0x4D: { // GetGPUStatus -- read GPUSTAT register
     ctx_.r[V0] = gpu_ ? gpu_->readGPUSTAT() : 0x14802000;
     break;
   }
-  case 0x4E: { // gpu_sync — wait for GPU to be idle
+  case 0x4E: { // gpu_sync -- wait for GPU to be idle
     // Our GPU is always synchronous, so this is a NOP.
     ctx_.r[V0] = 0;
     break;
   }
-  case 0x49: { // GPU_cw — send single GP0 command word
+  case 0x49: { // GPU_cw -- send single GP0 command word
     uint32_t cmd = ctx_.r[A0];
     BIOS_LOG("[BIOS] GPU_cw(0x{:08X})\n", cmd);
     if (gpu_) {
@@ -410,7 +410,7 @@ void Bios::handleA0(uint32_t index) {
     }
     break;
   }
-  case 0x4A: { // GPU_cwp — send multiple GP0 command words from RAM
+  case 0x4A: { // GPU_cwp -- send multiple GP0 command words from RAM
     uint32_t addr = ctx_.r[A0];
     uint32_t count = ctx_.r[A1];
     BIOS_LOG("[BIOS] GPU_cwp(addr: 0x{:08X}, count: {})\n", addr, count);
@@ -424,14 +424,14 @@ void Bios::handleA0(uint32_t index) {
   }
 
   // Cache
-  case 0x40: // FlushCache — NOP in recompiler
+  case 0x40: // FlushCache -- NOP in recompiler
   case 0x44: // FlushCache (alternate)
     break;
 
   // PsyQ libapi: directory iteration (PS1 BIOS A0:42 / A0:43)
   // Real BIOS returns a pointer to the DIRENTRY out-buffer (a1) when a
   // matching file is found, NULL (0) on no-match.  We return 0 to signal
-  // "no entry" cleanly — game's firstfile2 callers we've seen take the
+  // "no entry" cleanly -- game's firstfile2 callers we've seen take the
   // not-found branch (which skips file-iteration init paths) instead of
   // reading garbage from a half-populated DIRENTRY.  A proper
   // implementation would walk the ISO9660 directory via VirtualFs;
@@ -460,51 +460,51 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = 0;
     break;
 
-  case 0xAB: // _96_CdInitSubFunc — PsyQ CD initialization sub-function
-    BIOS_LOG("[BIOS] _96_CdInitSubFunc({}) — firing INT3+INT2\n",
+  case 0xAB: // _96_CdInitSubFunc -- PsyQ CD initialization sub-function
+    BIOS_LOG("[BIOS] _96_CdInitSubFunc({}) -- firing INT3+INT2\n",
                ctx_.r[A0]);
     // On real hardware _96_CdInitSubFunc runs as the INT2 completion handler
     // for the CdlInit command.  Before returning it sends a GetStat (0x01)
     // which immediately generates INT3 (Ack).  The CdInit polling loop then
     // checks testEvent(0) [spec=0x0004 = INT3] to verify the drive responded.
     // We fire INT3 first so that testEvent(0) succeeds, then INT2 for event 1.
-    triggerCdromEvent(3); // INT3 Ack  → spec 0x0004 → event 0 (GetStat Ack)
-    triggerCdromEvent(2); // INT2 Complete → spec 0x8000 → event 1
+    triggerCdromEvent(3); // INT3 Ack  -> spec 0x0004 -> event 0 (GetStat Ack)
+    triggerCdromEvent(2); // INT2 Complete -> spec 0x8000 -> event 1
     ctx_.r[V0] = 0; // success
     break;
 
-  case 0xAC: { // _96_CdGetStatus — send GetStat to query disc/drive state
+  case 0xAC: { // _96_CdGetStatus -- send GetStat to query disc/drive state
     // PsyQ CdInit calls this after _96_CdInitSubFunc to probe disc presence.
     // On real HW: sends GetStat(0x01), which fires INT3(Ack) with status byte.
     // We deliver INT3 synchronously and cancel the controller's pending response
     // to prevent double-interrupt for games using SetCustomExitFromException.
-    BIOS_LOG("[BIOS] _96_CdGetStatus() — HLE GetStat (synchronous)\n");
+    BIOS_LOG("[BIOS] _96_CdGetStatus() -- HLE GetStat (synchronous)\n");
     if (cdrom_) {
       cdrom_->writeRegister(0x1F801800, 0);    // index = 0
       cdrom_->writeRegister(0x1F801801, 0x01); // GetStat
       cdrom_->cancelPendingInterrupt();
     }
-    triggerCdromEvent(3); // INT3 Ack → disc-present status
+    triggerCdromEvent(3); // INT3 Ack -> disc-present status
     ctx_.r[V0] = 0;
     break;
   }
 
-  case 0xAD: { // _96_CdReset — send CdlInit (hardware reset)
-    BIOS_LOG("[BIOS] _96_CdReset() — HLE CdlInit (synchronous)\n");
+  case 0xAD: { // _96_CdReset -- send CdlInit (hardware reset)
+    BIOS_LOG("[BIOS] _96_CdReset() -- HLE CdlInit (synchronous)\n");
     // Initialize the CDROM controller state without queuing an async response.
     // We deliver INT3+INT2 synchronously below, so we DON'T want the controller
     // to fire its own deferred INT3+INT2 later (that would cause double-events,
     // disrupting games that use SetCustomExitFromException for CD interrupts).
     if (cdrom_) {
       cdrom_->writeRegister(0x1F801800, 0);    // index = 0
-      cdrom_->writeRegister(0x1F801801, 0x0A); // CdlInit → sets controller state
+      cdrom_->writeRegister(0x1F801801, 0x0A); // CdlInit -> sets controller state
       // Discard the queued response so tick() doesn't fire a duplicate event.
       cdrom_->cancelPendingInterrupt();
     }
     // Fire INT3+INT2 immediately on the game thread so CdSync/testEvent/
     // SetCustomExitFromException handlers see the response right away.
-    triggerCdromEvent(3); // INT3 Ack      → cdSyncByte = 2
-    triggerCdromEvent(2); // INT2 Complete → cdSyncByte = 2
+    triggerCdromEvent(3); // INT3 Ack      -> cdSyncByte = 2
+    triggerCdromEvent(2); // INT2 Complete -> cdSyncByte = 2
     ctx_.r[V0] = 0; // success
     break;
   }

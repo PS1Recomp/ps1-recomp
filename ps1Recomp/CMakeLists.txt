@@ -1,4 +1,4 @@
-# ps1Recomp — PS1 Static Recompiler
+# ps1Recomp -- PS1 Static Recompiler
 
 # Library target (for linking into tests)
 add_library(ps1Recomp_lib

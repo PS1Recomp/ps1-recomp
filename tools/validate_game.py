@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-validate_game.py — Automated validation pipeline for ps1-recomp.
+validate_game.py -- Automated validation pipeline for ps1-recomp.
 
 Runs the game, captures VRAM snapshots at multiple time points, analyzes
 pixel content, and reports whether display is correct.
@@ -33,7 +33,7 @@ BUILD_DIR    = PROJECT_ROOT / "build"
 RUNTIME_BIN  = BUILD_DIR / "ps1Runtime" / "ps1Runtime"
 TESTS_BIN    = BUILD_DIR / "ps1Test" / "ps1Runtime_tests"
 
-# VRAM dimensions (PS1 always 1024×512, ABGR1555 = 2 bytes/pixel)
+# VRAM dimensions (PS1 always 1024x512, ABGR1555 = 2 bytes/pixel)
 VRAM_W, VRAM_H = 1024, 512
 VRAM_BYTES = VRAM_W * VRAM_H * 2
 
@@ -60,7 +60,7 @@ class Report:
         print("  VALIDATION REPORT")
         print("="*60)
         for c in self.checks:
-            icon = "✓" if c.passed else "✗"
+            icon = "[ok]" if c.passed else "[fail]"
             status = "PASS" if c.passed else "FAIL"
             print(f"  [{icon}] {status:4}  {c.name}")
             if c.detail:
@@ -237,9 +237,9 @@ def step_vram_analysis(report: Report, vram_files: list[Path], log: str) -> bool
     rgb, w, h = result
 
     # Expected regions for Rayman:
-    # - Title screen: single 640×262 buffer at (0,109) — large pixels in mid-VRAM
-    # - Gameplay: double buffer at (0,0) and (320,0) — pixels in top area
-    # - Texture area: (0,256) to (1023,511) — should NOT be displayed
+    # - Title screen: single 640x262 buffer at (0,109) -- large pixels in mid-VRAM
+    # - Gameplay: double buffer at (0,0) and (320,0) -- pixels in top area
+    # - Texture area: (0,256) to (1023,511) -- should NOT be displayed
 
     # Check 1: Is there content in the framebuffer area (Y=0..256)?
     fb_pixels = count_nonzero_region(rgb, w, h, 0, 0, 640, 256)
@@ -247,7 +247,7 @@ def step_vram_analysis(report: Report, vram_files: list[Path], log: str) -> bool
     fb_pct = 100 * fb_pixels / total_possible
     report.add("VRAM: content in framebuffer area (Y<256)",
                fb_pixels > 1000,
-               f"{fb_pixels:,} non-black pixels ({fb_pct:.1f}% of 640×256 area)")
+               f"{fb_pixels:,} non-black pixels ({fb_pct:.1f}% of 640x256 area)")
 
     # Check 2: Title screen at Y=109 region (should have pixels)
     title_pixels = count_nonzero_region(rgb, w, h, 0, 109, 640, 147)
@@ -255,7 +255,7 @@ def step_vram_analysis(report: Report, vram_files: list[Path], log: str) -> bool
                title_pixels > 500,
                f"{title_pixels:,} non-black pixels in Y=109..256")
 
-    # Check 3: Display area sanity — check log for what display Y was set to
+    # Check 3: Display area sanity -- check log for what display Y was set to
     for line in log.splitlines():
         if "displayVRAMYStart" in line or "display Y" in line.lower():
             print(f"         Log: {line.strip()}")

@@ -1,4 +1,4 @@
-// ps1Analyzer — Function Finder Implementation
+// ps1Analyzer -- Function Finder Implementation
 // Multi-pass function detection for PS1 MIPS binaries
 
 #include "ps1recomp/function_finder.h"
@@ -90,7 +90,7 @@ void FunctionFinder::scanPrologues(const Section& text) {
             bool likelyStart = false;
 
             if (i == 0) {
-                // First instruction in section — likely function start
+                // First instruction in section -- likely function start
                 likelyStart = true;
             } else if (i >= 2) {
                 // Check if the instruction 2 slots back is JR $ra
@@ -203,7 +203,7 @@ const FunctionInfo* FunctionFinder::findContaining(uint32_t addr) const {
 // Helpers
 
 void FunctionFinder::addFunction(uint32_t addr, const std::string& name, FunctionSource source) {
-    // Don't add if already exists (prefer earlier source — higher priority)
+    // Don't add if already exists (prefer earlier source -- higher priority)
     if (hasFunction(addr)) {
         return;
     }

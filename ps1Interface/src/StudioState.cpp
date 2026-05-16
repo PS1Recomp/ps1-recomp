@@ -71,7 +71,7 @@ void StudioState::StartAnalysis() {
 
     workerThread_ = std::async(std::launch::async, [this, currentPath]() {
         try {
-            // 1. Handle BIN disc image — extract boot EXE
+            // 1. Handle BIN disc image -- extract boot EXE
             std::string parsePath = currentPath;
             std::vector<uint8_t> extractedExe;
 
@@ -172,7 +172,7 @@ void StudioState::LoadConfigToml() {
         } catch (...) {}
     }
 
-    // No config found — create default
+    // No config found -- create default
     configTomlPath = std::filesystem::absolute("config.toml").string();
     data.configTomlContent =
         "# PS1Recomp Configuration\n"
@@ -195,7 +195,7 @@ void StudioState::SaveConfigTOML() {
         ps1recomp::PsyQMatcher     matcher;
 
         // Re-use already analysed data via a minimal regeneration
-        // (full regen would require re-parsing — here we just save what we have)
+        // (full regen would require re-parsing -- here we just save what we have)
         std::string savePath = configTomlPath.empty() ? "config.toml" : configTomlPath;
 
         // Apply overrides to config content and write it

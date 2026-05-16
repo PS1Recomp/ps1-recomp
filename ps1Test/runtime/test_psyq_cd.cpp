@@ -4,7 +4,7 @@
 // state singleton in SetUp; call each HLE entry and verify both the
 // `psyq_state()` updates (sector counters, callbacks, sync atomics) and the
 // controller-side state changes (motor on, command FIFO drained, etc.).
-// Phase 2.4 retired the per-game BSS slot configuration — every libcd HLE
+// Phase 2.4 retired the per-game BSS slot configuration -- every libcd HLE
 // now talks to `ps1::psyq::psyq_state()`.
 
 #include "runtime/bios/bios.h"
@@ -42,7 +42,7 @@ protected:
     // Wire the controller's interrupt callback exactly like main_host.cpp:
     // cross-thread enqueue, drained game-thread-side via Bios::drainCdrom-
     // EventQueue (called from drainPendingCallbacks and hle_libcd_CdSync).
-    // Phase 3.3 — direct triggerCdromEvent from this lambda would race on
+    // Phase 3.3 -- direct triggerCdromEvent from this lambda would race on
     // event-system state when the SDL render thread fires it concurrently.
     cdrom.setInterruptCallback(
         [this](uint8_t intType) { bios->queueCdromEvent(intType); });
@@ -66,7 +66,7 @@ TEST_F(PsyqCdTest, CdInitReturnsSuccessAndDrivesStateAndController) {
   hle_libcd_CdInit(&ctx);
 
   // libcd CdInit returns 1 on success (the path that doesn't print
-  // "Init failed" — the whole point of the HLE replacement).
+  // "Init failed" -- the whole point of the HLE replacement).
   EXPECT_EQ(ctx.r[V0], 1u);
 
   // BIOS event chain mapped INT3 + INT2 to psyq_state().cdSyncByte = 2.
@@ -77,7 +77,7 @@ TEST_F(PsyqCdTest, CdInitReturnsSuccessAndDrivesStateAndController) {
   EXPECT_EQ(psyq::psyq_state().cdDestPtr,   0u);
   EXPECT_EQ(psyq::psyq_state().cdWordCount, 0u);
 
-  // Controller transitioned through CdlInit → state is Idle, motor on.
+  // Controller transitioned through CdlInit -> state is Idle, motor on.
   EXPECT_EQ(cdrom.getState(), cdrom::CdromState::Idle);
   // Mode is reset to 0 by cmdInit.
   EXPECT_EQ(cdrom.getMode(), 0u);
@@ -95,7 +95,7 @@ TEST_F(PsyqCdTest, CdInitToleratesMissingBiosGracefully) {
 TEST_F(PsyqCdTest, CdReadWritesReadStateAndIssuesCommands) {
   ctx.r[A0] = 8;             // sectors
   ctx.r[A1] = 0x80020000u;   // dest buffer
-  ctx.r[A2] = 0x80;          // mode bit 7 = double-speed, bit 5 unset → 2048 sectors
+  ctx.r[A2] = 0x80;          // mode bit 7 = double-speed, bit 5 unset -> 2048 sectors
 
   hle_libcd_CdRead(&ctx);
 
@@ -104,7 +104,7 @@ TEST_F(PsyqCdTest, CdReadWritesReadStateAndIssuesCommands) {
   EXPECT_EQ(psyq::psyq_state().cdDestPtr,   0x80020000u);
   EXPECT_EQ(psyq::psyq_state().cdWordCount, 512u); // 2048 bytes / 4
 
-  // CdlSetmode + CdlReadN landed on the controller — check the side effects.
+  // CdlSetmode + CdlReadN landed on the controller -- check the side effects.
   EXPECT_EQ(cdrom.getMode(), 0x80u);
   EXPECT_EQ(cdrom.getState(), cdrom::CdromState::ReadingData);
 }
@@ -112,7 +112,7 @@ TEST_F(PsyqCdTest, CdReadWritesReadStateAndIssuesCommands) {
 TEST_F(PsyqCdTest, CdReadHonoursWholeSectorMode) {
   ctx.r[A0] = 1;
   ctx.r[A1] = 0x80020000u;
-  ctx.r[A2] = 0x20; // bit 5 set → 2340-byte sectors
+  ctx.r[A2] = 0x20; // bit 5 set -> 2340-byte sectors
 
   hle_libcd_CdRead(&ctx);
 
@@ -147,7 +147,7 @@ TEST_F(PsyqCdTest, CdReadWithZeroSectorsPreservesRemaining) {
 
 TEST_F(PsyqCdTest, CdReadWithZeroSectorsDoesNotResetCurrentLba) {
   // Re-issuing `CdlReadN` from CdRead(sectors=0) would reset the controller's
-  // `currentLba_` to whatever `seekTarget_` was last set to — Crash Bandicoot
+  // `currentLba_` to whatever `seekTarget_` was last set to -- Crash Bandicoot
   // does an intervening CdlSetloc with a different MSF, so re-emitting ReadN
   // would yank the in-flight read to the wrong sector.  Skip controller
   // commands entirely when sectors==0.
@@ -176,7 +176,7 @@ TEST_F(PsyqCdTest, CdReadWithZeroSectorsDoesNotResetCurrentLba) {
   cdrom.ackInterrupt(0x1F);
   cdrom.clearWaitingForAck();
 
-  // CdRead(sectors=0) follow-up.  Must NOT issue another ReadN — that would
+  // CdRead(sectors=0) follow-up.  Must NOT issue another ReadN -- that would
   // overwrite `currentLba_` with the latest seekTarget (LBA 0).
   ctx.r[A0] = 0;
   ctx.r[A1] = 0x80030000u;
@@ -250,7 +250,7 @@ TEST_F(PsyqCdTest, CdReadyPollWithZeroAtomicReturnsDataReadySentinel) {
 
 TEST_F(PsyqCdTest, TriggerCdromEventInt2WritesAtomicToComplete) {
   // Direct integration check: bios::triggerCdromEvent(2) should set
-  // psyq_state().cdSyncByte to 2 (no BSS write happens — Phase 2.3).
+  // psyq_state().cdSyncByte to 2 (no BSS write happens -- Phase 2.3).
   psyq::psyq_state().cdSyncByte.store(0);
   bios->triggerCdromEvent(2);
   EXPECT_EQ(psyq::psyq_state().cdSyncByte.load(), 2u);
@@ -267,7 +267,7 @@ TEST_F(PsyqCdTest, TriggerCdromEventInt5WritesBothAtomicsToError) {
 // CdControl / CdControlF
 
 TEST_F(PsyqCdTest, CdControlPushesParamsAndIssuesCommand) {
-  // CdlSetloc(0x02) — 3 BCD bytes M:S:F.
+  // CdlSetloc(0x02) -- 3 BCD bytes M:S:F.
   uint32_t paramPtr = 0x80100200u;
   mem.write8(paramPtr + 0, 0x00); // M
   mem.write8(paramPtr + 1, 0x05); // S = 5
@@ -290,7 +290,7 @@ TEST_F(PsyqCdTest, CdControlPushesParamsAndIssuesCommand) {
 }
 
 TEST_F(PsyqCdTest, CdControlFiresCommandWithoutParamsWhenParamPtrIsNull) {
-  ctx.r[A0] = 0x09; // CdlPause — 0 params
+  ctx.r[A0] = 0x09; // CdlPause -- 0 params
   ctx.r[A1] = 0;
   ctx.r[A2] = 0;
   hle_libcd_CdControl(&ctx);
@@ -375,7 +375,7 @@ TEST_F(PsyqCdTest, CdReadBreakStopsControllerAndZeroesState) {
   EXPECT_EQ(psyq::psyq_state().cdWordCount, 0u);
 }
 
-// Phase 2.4 — direct PsyqState integration
+// Phase 2.4 -- direct PsyqState integration
 
 TEST_F(PsyqCdTest, TriggerVBlankStampsDrawSyncAllSlotsComplete) {
   // PsyQ DrawSync polls status == 2 for "drawing complete".  triggerVBlankEvent
@@ -394,22 +394,22 @@ TEST_F(PsyqCdTest, TriggerVBlankStampsDrawSyncAllSlotsComplete) {
 }
 
 TEST_F(PsyqCdTest, TriggerVBlankSkipsSwapCbWhenZero) {
-  // Default psyq_state().gpuSwapCb is 0 — VBlank must not crash queuing it.
+  // Default psyq_state().gpuSwapCb is 0 -- VBlank must not crash queuing it.
   ASSERT_EQ(psyq::psyq_state().gpuSwapCb, 0u);
   EXPECT_NO_FATAL_FAILURE(bios->triggerVBlankEvent());
 }
 
-// Phase 3.3 — cross-thread CDROM event queue
+// Phase 3.3 -- cross-thread CDROM event queue
 
-// queueCdromEvent must NOT touch psyq_state or the event system itself —
+// queueCdromEvent must NOT touch psyq_state or the event system itself --
 // those side effects only run when the game thread later drains the queue.
 // This is what makes the call cross-thread-safe from the SDL render thread.
 TEST_F(PsyqCdTest, QueueCdromEventDefersAllSideEffectsUntilDrain) {
   psyq::psyq_state().cdSyncByte.store(0);
   psyq::psyq_state().cdReadyByte.store(0);
 
-  bios->queueCdromEvent(2); // INT2 Complete → would set cdSyncByte=2 if direct
-  bios->queueCdromEvent(1); // INT1 DataReady → would set cdReadyByte=1
+  bios->queueCdromEvent(2); // INT2 Complete -> would set cdSyncByte=2 if direct
+  bios->queueCdromEvent(1); // INT1 DataReady -> would set cdReadyByte=1
 
   // Nothing should have run yet.
   EXPECT_EQ(psyq::psyq_state().cdSyncByte.load(), 0u);
@@ -421,7 +421,7 @@ TEST_F(PsyqCdTest, QueueCdromEventDefersAllSideEffectsUntilDrain) {
   EXPECT_EQ(psyq::psyq_state().cdSyncByte.load(),  2u);
   EXPECT_EQ(psyq::psyq_state().cdReadyByte.load(), 1u);
 
-  // Re-draining is a no-op — the queue is empty.
+  // Re-draining is a no-op -- the queue is empty.
   EXPECT_EQ(bios->drainCdromEventQueue(), 0u);
 }
 
@@ -434,7 +434,7 @@ TEST_F(PsyqCdTest, CdSyncDrainsQueueBeforeReadingStatus) {
   configure(cfg);
 
   // Simulate a cross-thread IRQ that arrived just before the game thread
-  // entered CdSync — the controller's tick() callback would have queued
+  // entered CdSync -- the controller's tick() callback would have queued
   // an INT5 (DiskError) which maps to cdSyncByte = 5.
   psyq::psyq_state().cdSyncByte.store(0);
   bios->queueCdromEvent(5);
@@ -451,7 +451,7 @@ TEST_F(PsyqCdTest, CdSyncDrainsQueueBeforeReadingStatus) {
       << "CdSync must drain the queued IRQ before checking status";
 }
 
-// drainPendingCallbacks owns the same queue drain — so any code path that
+// drainPendingCallbacks owns the same queue drain -- so any code path that
 // reaches a yield point picks up cross-thread IRQs.  This is the "general
 // drain" hook for sites that don't go through CdSync.
 TEST_F(PsyqCdTest, DrainPendingCallbacksDrainsCdromEventQueue) {
@@ -464,15 +464,15 @@ TEST_F(PsyqCdTest, DrainPendingCallbacksDrainsCdromEventQueue) {
   EXPECT_EQ(psyq::psyq_state().cdSyncByte.load(), 2u);
 }
 
-// FIFO ordering is preserved — the queue is std::queue<uint8_t> under the
+// FIFO ordering is preserved -- the queue is std::queue<uint8_t> under the
 // hood and drain pops front-to-back.  Use the cdReadyByte atomic which
 // records the LAST INT1/INT4 to land (overwrites): if INT4 was queued
 // after INT1, the atomic should reflect 4.
 TEST_F(PsyqCdTest, QueuePreservesFifoOrderOnDrain) {
   psyq::psyq_state().cdReadyByte.store(0);
 
-  bios->queueCdromEvent(1); // first → readyByte=1
-  bios->queueCdromEvent(4); // last  → readyByte=4 (overwrites)
+  bios->queueCdromEvent(1); // first -> readyByte=1
+  bios->queueCdromEvent(4); // last  -> readyByte=4 (overwrites)
 
   bios->drainCdromEventQueue();
   EXPECT_EQ(psyq::psyq_state().cdReadyByte.load(), 4u);

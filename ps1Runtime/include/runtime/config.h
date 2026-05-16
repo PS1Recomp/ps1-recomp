@@ -28,7 +28,7 @@ struct VideoConfig {
   int windowHeight = 480;
   bool fullscreen = false;
   bool vsync = true;
-  int internalResScale = 1; // 1x = native 320×240
+  int internalResScale = 1; // 1x = native 320x240
 };
 
 struct AudioConfig {
@@ -44,7 +44,7 @@ struct InputBinding {
 };
 
 struct InputConfig {
-  std::unordered_map<std::string, std::string> keyMap; // key → ps1 button
+  std::unordered_map<std::string, std::string> keyMap; // key -> ps1 button
   bool enableAnalog = false;
 };
 

@@ -19,8 +19,8 @@ constexpr uint32_t MATRIX_T_OFFSET = 20;
 // 1.3.12 fixed-point unit value (= 1.0).
 constexpr int32_t ONE_12 = 4096;
 
-// PsyQ angle convention: 4096 units == full rotation (2π rad).
-// csin/ccos return 1.3.12 fixed-point (sin(90°) = 0x1000).
+// PsyQ angle convention: 4096 units == full rotation (2pi rad).
+// csin/ccos return 1.3.12 fixed-point (sin(90 deg) = 0x1000).
 int16_t psyq_sin(int16_t a) {
   double rad = static_cast<double>(a) * 2.0 * M_PI / 4096.0;
   double s = std::sin(rad) * 4096.0;
@@ -64,7 +64,7 @@ void writeMatrix3x3(recomp_context *ctx, uint32_t p, const int16_t m[3][3]) {
       writeShort(ctx, p + (i * 3 + j) * 2, m[i][j]);
 }
 
-// 3x3 matrix multiply in 1.3.12 fixed-point: out = a × b.
+// 3x3 matrix multiply in 1.3.12 fixed-point: out = a x b.
 // Each element is computed in 32-bit then >>12 to preserve scale.  Values
 // outside int16 range are saturated (matches PsyQ behaviour qualitatively;
 // the GTE proper uses 1.3.12 throughout, not int16).
@@ -105,7 +105,7 @@ void hle_libgte_SetDQA(recomp_context *ctx) {
   ctx->cop2c[GTE_DQA] = ctx->r[A0] & 0xFFFFu;
 }
 
-// Group 1.C — control-register loaders
+// Group 1.C -- control-register loaders
 
 // InitGeom(): on real PsyQ this enables COP2 in the COP0 status register
 // and clears a few defaults.  Our recompiled context always has GTE
@@ -171,13 +171,13 @@ void hle_libgte_SetFarColor(recomp_context *ctx) {
   ctx->cop2c[GTE_BFC] = ctx->r[A2];
 }
 
-// Group 1.C — matrix builders
+// Group 1.C -- matrix builders
 
 // RotMatrix(SVECTOR *r, MATRIX *m): build a YXZ Tait-Bryan rotation matrix
-// (M = Rz × Rx × Ry) into m->m[3][3] from Euler angles in r->{vx,vy,vz}.
+// (M = Rz x Rx x Ry) into m->m[3][3] from Euler angles in r->{vx,vy,vz}.
 // PsyQ stores angles as 1/4096 of a full rotation; sin/cos produce 1.3.12.
 //
-// For r = (0,0,0) this yields the identity matrix — the simplest test case.
+// For r = (0,0,0) this yields the identity matrix -- the simplest test case.
 // Returns m in $v0 (PsyQ contract).
 void hle_libgte_RotMatrix(recomp_context *ctx) {
   uint32_t rPtr = ctx->r[A0];
@@ -226,7 +226,7 @@ void hle_libgte_TransMatrix(recomp_context *ctx) {
 }
 
 // ScaleMatrix(MATRIX *m, VECTOR *v): scale row i of m by v[i] (1.3.12),
-// i.e. M' = diag(vx, vy, vz) × M.  Returns m.
+// i.e. M' = diag(vx, vy, vz) x M.  Returns m.
 void hle_libgte_ScaleMatrix(recomp_context *ctx) {
   uint32_t mPtr = ctx->r[A0];
   uint32_t vPtr = ctx->r[A1];
@@ -248,7 +248,7 @@ void hle_libgte_ScaleMatrix(recomp_context *ctx) {
   ctx->r[V0] = mPtr;
 }
 
-// MulMatrix(MATRIX *m0, MATRIX *m1): m0 = m0 × m1 (rotation parts only).
+// MulMatrix(MATRIX *m0, MATRIX *m1): m0 = m0 x m1 (rotation parts only).
 // Returns m0.  Translation field (m0->t) is left untouched.
 void hle_libgte_MulMatrix(recomp_context *ctx) {
   uint32_t p0 = ctx->r[A0];
@@ -261,7 +261,7 @@ void hle_libgte_MulMatrix(recomp_context *ctx) {
   ctx->r[V0] = p0;
 }
 
-// Group 1.C — per-vertex transform wrappers
+// Group 1.C -- per-vertex transform wrappers
 
 namespace {
 
@@ -275,7 +275,7 @@ void ldv0(recomp_context *ctx, uint32_t p) {
 } // namespace
 
 // RotTrans(SVECTOR *v0, VECTOR *v1, long *flag):
-//   v1 = rotation_matrix × v0 + translation
+//   v1 = rotation_matrix x v0 + translation
 //   *flag = GTE FLAG register
 // Drives the GTE backend with MVMVA(mx=RT, mv=V0, tv=TR, sf=1, lm=0).
 void hle_libgte_RotTrans(recomp_context *ctx) {
@@ -296,7 +296,7 @@ void hle_libgte_RotTrans(recomp_context *ctx) {
 // RotTransPers(SVECTOR *v0, long *sxy, long *p, long *flag) -> long:
 //   Apply rotate + translate + perspective-project (RTPS) to v0.
 //   *sxy  = SXY2 (packed screen XY of the projected point)
-//   *p    = MAC0 (depth-queueing factor: DQB + DQA × N/Z)
+//   *p    = MAC0 (depth-queueing factor: DQB + DQA x N/Z)
 //   *flag = GTE FLAG register
 //   return: SZ3 >> 2 (Z-sort key)
 void hle_libgte_RotTransPers(recomp_context *ctx) {
@@ -323,7 +323,7 @@ void psyq_register_libgte() {
   psyq_register("libgte_SetGeomScreen",  &hle_libgte_SetGeomScreen);
   psyq_register("libgte_SetDQA",         &hle_libgte_SetDQA);
 
-  // 1.C — control-register loaders
+  // 1.C -- control-register loaders
   psyq_register("libgte_InitGeom",       &hle_libgte_InitGeom);
   psyq_register("libgte_SetRotMatrix",   &hle_libgte_SetRotMatrix);
   psyq_register("libgte_SetTransMatrix", &hle_libgte_SetTransMatrix);
@@ -332,13 +332,13 @@ void psyq_register_libgte() {
   psyq_register("libgte_SetBackColor",   &hle_libgte_SetBackColor);
   psyq_register("libgte_SetFarColor",    &hle_libgte_SetFarColor);
 
-  // 1.C — matrix builders
+  // 1.C -- matrix builders
   psyq_register("libgte_RotMatrix",      &hle_libgte_RotMatrix);
   psyq_register("libgte_TransMatrix",    &hle_libgte_TransMatrix);
   psyq_register("libgte_ScaleMatrix",    &hle_libgte_ScaleMatrix);
   psyq_register("libgte_MulMatrix",      &hle_libgte_MulMatrix);
 
-  // 1.C — per-vertex transform wrappers
+  // 1.C -- per-vertex transform wrappers
   psyq_register("libgte_RotTrans",       &hle_libgte_RotTrans);
   psyq_register("libgte_RotTransPers",   &hle_libgte_RotTransPers);
 }

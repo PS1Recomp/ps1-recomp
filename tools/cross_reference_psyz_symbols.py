@@ -14,7 +14,7 @@ comment).
 
 Our DB (ps1Analyzer/data/psyq_signatures.toml) holds hashes for ~3463
 PSY-Q functions sourced from 14 SDK versions. We deduplicate by hash but
-do not currently carry a "canonical address in PSY-Q 4.0" — that is what
+do not currently carry a "canonical address in PSY-Q 4.0" -- that is what
 psyz can give us.
 
 This script reports:
@@ -25,7 +25,7 @@ This script reports:
                  missed when hashing the .OBJ files).
   3. Over      - signature names in our DB that are NOT in psyz (functions
                  unique to other PSY-Q versions, or local helpers psyz
-                 didn't surface). This is mostly a sanity check — proves
+                 didn't surface). This is mostly a sanity check -- proves
                  the multi-version DB carries real width.
 
 Usage:
@@ -60,7 +60,7 @@ def parse_symbol_file(path: Path) -> dict[str, int]:
             if not m:
                 continue
             name, addr = m.group(1), int(m.group(2), 16)
-            # later definitions win — symbol files rarely repeat, but be safe
+            # later definitions win -- symbol files rarely repeat, but be safe
             out[name] = addr
     return out
 
@@ -68,7 +68,7 @@ def parse_symbol_file(path: Path) -> dict[str, int]:
 # psyz symbols.{ver}.txt mixes function and data symbols. From inspection of
 # the linker script (decomp/psyq.ld) and the symbol distribution, the text
 # segment ends well before the data/bss segment. The cleanest boundary that
-# works for both 4.0 and 4.7 is 0x800B0000 — below it is .text/.rodata,
+# works for both 4.0 and 4.7 is 0x800B0000 -- below it is .text/.rodata,
 # at or above it is .data/.sbss/.bss. Filtering by this lets us compare
 # apples-to-apples against our DB (which hashes STT_FUNC only).
 TEXT_DATA_BOUNDARY = 0x800B0000
@@ -126,7 +126,7 @@ def main() -> int:
 
     db = load_db(args.db)
 
-    print(f"# psyz × ps1-recomp cross-reference")
+    print(f"# psyz x ps1-recomp cross-reference")
     print()
     print(f"DB: {args.db} ({len(db)} signature names)")
     for v in versions:
@@ -179,7 +179,7 @@ def main() -> int:
             ("PAD", "libapi"), ("pad", "libapi"),
             ("SIO", "libsio"), ("sio", "libsio"),
             ("COMB", "libcomb"), ("comb", "libcomb"),
-            ("CQ_", "libapi"),  # command queue helpers — used by libapi/libcd
+            ("CQ_", "libapi"),  # command queue helpers -- used by libapi/libcd
             ("HMD", "libhmd"), ("PMD", "libgpu"),
         ]
 
@@ -195,7 +195,7 @@ def main() -> int:
         print(f"\n## Gap functions bucketed by inferred library")
         for lib in sorted(gap_by_lib, key=lambda k: -len(gap_by_lib[k])):
             print(f"  {lib:10s} {len(gap_by_lib[lib]):4d}")
-        # Print the libcd gap in full — it is the Crash-critical bucket.
+        # Print the libcd gap in full -- it is the Crash-critical bucket.
         cd_gap = sorted(gap_by_lib["libcd"])
         if cd_gap:
             print(f"\n## Full libcd gap (Crash-critical)")
@@ -204,7 +204,7 @@ def main() -> int:
 
         # Quick win: for matched names, dump (name, psyz addr, our hash_full)
         # so callers can spot inconsistencies. Limited to first 20.
-        print(f"\n## Sample matched bindings (name → psyz addr, db hash_full)")
+        print(f"\n## Sample matched bindings (name -> psyz addr, db hash_full)")
         for n in sorted(matched)[:20]:
             addr = text_syms[v][n]
             sig = db[n]

@@ -61,7 +61,7 @@ TEST_F(PsyqGpuTest, SetDispMaskEnableSendsGP1_03_With0) {
   ctx.r[A0] = 1; // enable
   hle_libgpu_SetDispMask(&ctx);
   ASSERT_EQ(gp1.size(), 1u);
-  EXPECT_EQ(gp1[0], 0x03000000u); // bit 0 = 0 → display ON
+  EXPECT_EQ(gp1[0], 0x03000000u); // bit 0 = 0 -> display ON
 }
 
 TEST_F(PsyqGpuTest, SetDispMaskDisableSendsGP1_03_With1) {
@@ -74,7 +74,7 @@ TEST_F(PsyqGpuTest, SetDispMaskDisableSendsGP1_03_With1) {
 // LoadImage
 
 TEST_F(PsyqGpuTest, LoadImageEmitsCpuToVramHeaderAndData) {
-  // 4×2 pixels = 8 px = 4 words of pixel data.
+  // 4x2 pixels = 8 px = 4 words of pixel data.
   uint32_t rectP = 0x80100000u;
   uint32_t srcP  = 0x80100100u;
   writeRect(rectP, 320, 0, 4, 2);
@@ -86,7 +86,7 @@ TEST_F(PsyqGpuTest, LoadImageEmitsCpuToVramHeaderAndData) {
   hle_libgpu_LoadImage(&ctx);
 
   ASSERT_EQ(gp0.size(), 3u + 4u);
-  EXPECT_EQ(gp0[0], 0xA0000000u);              // CPU→VRAM cmd
+  EXPECT_EQ(gp0[0], 0xA0000000u);              // CPU->VRAM cmd
   EXPECT_EQ(gp0[1], (0u << 16) | 320u);        // Y|X
   EXPECT_EQ(gp0[2], (2u << 16) | 4u);          // H|W
   for (int i = 0; i < 4; ++i)
@@ -94,7 +94,7 @@ TEST_F(PsyqGpuTest, LoadImageEmitsCpuToVramHeaderAndData) {
 }
 
 TEST_F(PsyqGpuTest, LoadImageOddPixelCountRoundsUpDataWords) {
-  // 3×1 pixels = 3 px → ceil(3/2)=2 words.
+  // 3x1 pixels = 3 px -> ceil(3/2)=2 words.
   uint32_t rectP = 0x80100000u;
   uint32_t srcP  = 0x80100100u;
   writeRect(rectP, 0, 0, 3, 1);
@@ -181,7 +181,7 @@ TEST_F(PsyqGpuTest, DrawSyncCallbackStoresAndReturnsPrev) {
 TEST_F(PsyqGpuTest, VSyncCallbackStoresAndReturnsPrev) {
   ctx.r[A0] = 0x80044000u;
   hle_libgpu_VSyncCallback(&ctx);
-  // First install returns previous (0 — singleton was reset in SetUp).
+  // First install returns previous (0 -- singleton was reset in SetUp).
   EXPECT_EQ(ctx.r[V0], 0u);
   // The HLE writes through to psyq_state().gpuSwapCb so bios.cpp's VBlank
   // dispatch can find the swap callback without per-game BSS configuration.

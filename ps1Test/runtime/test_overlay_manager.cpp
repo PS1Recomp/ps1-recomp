@@ -90,7 +90,7 @@ TEST(OverlayManagerTest, ConflictDeactivatesOldOverlay) {
 
   hookCalls.clear();
 
-  // Load level2 into same region — should deactivate level1
+  // Load level2 into same region -- should deactivate level1
   mgr.notifyMemWrite(0x80040000, 0x8000);
 
   EXPECT_FALSE(mgr.isActive("level1"));

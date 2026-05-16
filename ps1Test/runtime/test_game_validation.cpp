@@ -106,9 +106,9 @@ TEST_F(GameValidationTest, TypicalGameFrameTick) {
 
 TEST_F(GameValidationTest, DMALinkedListGPU) {
   // Build a simple GPU ordering table in RAM
-  // Entry at 0x1000: 1 word payload, next → end
+  // Entry at 0x1000: 1 word payload, next -> end
   mem.write32(0x1000, 0x01FFFFFF); // 1 word, next = end
-  mem.write32(0x1004, 0x20FF0000); // GP0: flat tri (blue) — just a cmd
+  mem.write32(0x1004, 0x20FF0000); // GP0: flat tri (blue) -- just a cmd
 
   // Set up DMA ch2 for linked list transfer
   dma.writeRegister(0x1F8010A0, 0x00001000); // Base = 0x1000
@@ -162,7 +162,7 @@ TEST_F(GameValidationTest, MDECDecodeSmoke) {
 }
 
 TEST_F(GameValidationTest, FullSubsystemResetDoesntCrash) {
-  // Reset everything — simulates game restart
+  // Reset everything -- simulates game restart
   mem.reset();
   gpu.reset();
   spu.reset();

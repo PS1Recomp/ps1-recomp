@@ -7,7 +7,7 @@
  * HLE here loads the syscall index into `ctx->r[T1]` and invokes the matching
  * `Bios::executeA0/B0/C0`, so v0 / a-args propagate exactly as if the original
  * MIPS wrapper had run.  The few libapi routines that issue MIPS `syscall`
- * (Enter/ExitCriticalSection) are stubbed locally — they manipulate kernel
+ * (Enter/ExitCriticalSection) are stubbed locally -- they manipulate kernel
  * state we do not model.
  */
 
@@ -23,7 +23,7 @@ void hle_libapi_EnableEvent(recomp_context *ctx);
 void hle_libapi_DisableEvent(recomp_context *ctx);
 void hle_libapi_TestEvent(recomp_context *ctx);
 
-// Critical section (SYSCALL — stubbed)
+// Critical section (SYSCALL -- stubbed)
 void hle_libapi_EnterCriticalSection(recomp_context *ctx);
 void hle_libapi_ExitCriticalSection(recomp_context *ctx);
 
@@ -58,7 +58,7 @@ void hle_libapi_GPU_cw(recomp_context *ctx);
 
 /// Register every libapi HLE in this header into the runtime registry.
 /// Called from `psyq_register_rayman_boot()` (and any other registration point
-/// that needs libapi coverage).  Idempotent across repeated calls — the global
+/// that needs libapi coverage).  Idempotent across repeated calls -- the global
 /// registry simply overwrites the slot.
 void psyq_register_libapi();
 

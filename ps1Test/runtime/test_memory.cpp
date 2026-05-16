@@ -1,4 +1,4 @@
-// Tests for ps1Runtime — Memory Subsystem
+// Tests for ps1Runtime -- Memory Subsystem
 // Validates RAM, scratchpad, BIOS, address mirroring, and byte order
 
 #include <gtest/gtest.h>
@@ -32,7 +32,7 @@ TEST(Memory, ReadWrite32LittleEndian) {
   mem.write32(0x00002000, 0xDEADBEEF);
   EXPECT_EQ(mem.read32(0x00002000), 0xDEADBEEFu);
 
-  // Verify byte order (LE: 0xDEADBEEF → EF BE AD DE)
+  // Verify byte order (LE: 0xDEADBEEF -> EF BE AD DE)
   EXPECT_EQ(mem.read8(0x00002000), 0xEF);
   EXPECT_EQ(mem.read8(0x00002001), 0xBE);
   EXPECT_EQ(mem.read8(0x00002002), 0xAD);
@@ -129,7 +129,7 @@ TEST(Memory, Reset) {
 
 TEST(Memory, UnmappedReturnsZero) {
   Memory mem;
-  // I/O port range — returns 0 for now
+  // I/O port range -- returns 0 for now
   EXPECT_EQ(mem.read32(0x1F801000), 0u);
 }
 

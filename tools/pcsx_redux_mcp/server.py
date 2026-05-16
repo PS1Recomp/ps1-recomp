@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PCSX-Redux MCP Server — SSE transport (matches Ghidra MCP pattern)
+PCSX-Redux MCP Server -- SSE transport (matches Ghidra MCP pattern)
 Runs as a persistent HTTP server on port 8078.
 
 Start: python server.py
@@ -73,7 +73,7 @@ def exec_lua(code: str, timeout: float = LUA_TIMEOUT) -> str:
             os.remove(CMD_FILE)
         except OSError:
             pass
-    return "ERROR: timeout — is emulation running and startup.lua loaded?"
+    return "ERROR: timeout -- is emulation running and startup.lua loaded?"
 
 # ---------------------------------------------------------------------------
 # VRAM conversion

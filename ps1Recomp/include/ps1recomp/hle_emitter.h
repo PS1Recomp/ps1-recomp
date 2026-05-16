@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1Recomp — HLE Stub Emitter
+// ps1Recomp -- HLE Stub Emitter
 //
 // When the analyzer config marks a function with `hle = true` (the
 // `[[hle_functions]]` table emitted by ps1Analyzer Sessao 0.4), the

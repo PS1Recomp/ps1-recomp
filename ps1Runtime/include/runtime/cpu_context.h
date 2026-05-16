@@ -8,7 +8,7 @@
  * (system control) and COP2 (GTE) registers.
  *
  * The `Register` and `COP0Reg` enums provide named aliases so that BIOS and
- * HLE code can reference registers by conventional MIPS ABI names (A0, V0, RA…)
+ * HLE code can reference registers by conventional MIPS ABI names (A0, V0, RA...)
  * rather than raw indices.
  */
 
@@ -94,7 +94,7 @@ enum COP0Reg : uint32_t {
 
 // CPU Context
 
-/// PS1 R3000A CPU state — used by recompiled code
+/// PS1 R3000A CPU state -- used by recompiled code
 /// Fields match what the InstructionEmitter and GteEmitter reference:
 ///   ctx->rN, ctx->hi, ctx->lo, ctx->cop0[N], ctx->cop2d[N], ctx->cop2c[N]
 struct CPUContext {
@@ -115,10 +115,10 @@ struct CPUContext {
   uint32_t hi;
   uint32_t lo;
 
-  // COP0 — System Control Coprocessor (16 registers used on PS1)
+  // COP0 -- System Control Coprocessor (16 registers used on PS1)
   uint32_t cop0[16];
 
-  // COP2 — GTE (Geometry Transform Engine)
+  // COP2 -- GTE (Geometry Transform Engine)
   uint32_t cop2d[32]; // Data registers (VXY0, IR0, RGBC, SXY0, MAC0, etc.)
   uint32_t cop2c[32]; // Control registers (RT11RT12, TRX, FLAG, etc.)
 

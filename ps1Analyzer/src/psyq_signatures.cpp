@@ -1,11 +1,11 @@
-// ps1Analyzer — PsyQ Signature Matcher Implementation
+// ps1Analyzer -- PsyQ Signature Matcher Implementation
 //
 // Identifies PsyQ SDK functions by SHA-256 hash of their .text bytes.
 // Two hash modes mirror the generator in tools/extract_psyq_signatures.py:
-//   * `hash_full`   — bytes verbatim. Used for tiny BIOS A0/B0/C0 wrappers
+//   * `hash_full`   -- bytes verbatim. Used for tiny BIOS A0/B0/C0 wrappers
 //                     (size <= 24) where the function index is the only
 //                     distinguishing byte and would be lost to masking.
-//   * `hash_masked` — each 32-bit word run through `maskImmediates()` first.
+//   * `hash_masked` -- each 32-bit word run through `maskImmediates()` first.
 //                     Tolerant to relocations (the link-time imm fields).
 //
 // Both inputs are run through SHA-256 and truncated to the high 64 bits;
@@ -34,7 +34,7 @@ namespace {
 
 // SHA-256 (public-domain reference, compact)
 //
-// Operates on a single buffer in one shot — adequate for the small (<= 64KB)
+// Operates on a single buffer in one shot -- adequate for the small (<= 64KB)
 // function bodies we hash. Output is the 32-byte digest in big-endian order;
 // the matcher only ever reads the high 8 bytes.
 
@@ -248,10 +248,10 @@ bool PsyQMatcher::loadSignatures(const std::string& path) {
         if (!root.contains("signature")) return true;
         const auto& sigs = toml::find<std::vector<toml::value>>(root, "signature");
 
-        // Stage every (hash → LoadedSig) into temporary multimap-style buckets.
+        // Stage every (hash -> LoadedSig) into temporary multimap-style buckets.
         // The PsyQ .OBJ archive zeroes jal/branch targets pending relocation,
         // so multiple unrelated 8-instruction wrappers (CdSync, CdReadSync,
-        // PadStop, GsSetProjection, ...) collapse to identical bytes — both
+        // PadStop, GsSetProjection, ...) collapse to identical bytes -- both
         // hash_masked AND hash_full collide across distinct base names. The
         // promote step below drops any hash key claimed by more than one base
         // name, so the live maps only ever return unambiguous identifications.
@@ -360,7 +360,7 @@ uint32_t PsyQMatcher::maskImmediates(uint32_t word) {
     // ALU-imm group (ADDI, ADDIU, SLTI, SLTIU, ANDI, ORI, XORI, LUI).
     if (op >= 0x08u && op <= 0x0Fu) return word & 0xFFFF0000u;
 
-    // Loads / stores (opcode >= 0x20 — LB, LW, SW, SWC2, ...).
+    // Loads / stores (opcode >= 0x20 -- LB, LW, SW, SWC2, ...).
     if (op >= 0x20u) return word & 0xFFFF0000u;
 
     // COP0/1/2/3 (0x10..0x13) and anything unrecognised: keep exact.
@@ -491,12 +491,12 @@ void PsyQMatcher::matchByHash(const ElfParser& elf, const FunctionFinder& finder
 
         // Hashes for 2-instruction (8-byte) PsyQ stubs collide pervasively
         // with unrelated game code (e.g. libgs trampolines `j tgt; nop` match
-        // every short prologue). Skip them — they're not reliable fingerprints.
+        // every short prologue). Skip them -- they're not reliable fingerprints.
         if (funcSize <= 8) continue;
 
         const uint8_t* bytes = sec->data + funcOffset;
 
-        // Always try hash_full first — for tiny BIOS wrappers the masked
+        // Always try hash_full first -- for tiny BIOS wrappers the masked
         // hash collides, so `full` is the only reliable signal.
         const uint64_t hf = hashFull(bytes, funcSize);
         auto fIt = m_byFull.find(hf);
@@ -507,7 +507,7 @@ void PsyQMatcher::matchByHash(const ElfParser& elf, const FunctionFinder& finder
             fullHit = true;
         }
 
-        // Otherwise (only if size > 24 — masked hashes for tinier funcs are
+        // Otherwise (only if size > 24 -- masked hashes for tinier funcs are
         // not reliable per the Python generator's classification) try masked.
         if (!hit && funcSize > FULL_MATCH_SIZE_LIMIT) {
             const uint64_t hm = hashMasked(bytes, funcSize);

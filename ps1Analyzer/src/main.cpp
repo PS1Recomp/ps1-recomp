@@ -1,4 +1,4 @@
-// ps1Analyzer — PS1 Binary Analyzer
+// ps1Analyzer -- PS1 Binary Analyzer
 // Accepts: ELF, PS-X EXE, or BIN/CUE disc images
 // Extracts functions, symbols, and relocations
 // Generates config.toml for the recompiler
@@ -67,7 +67,7 @@ int main(int argc, char *argv[]) {
     // Print summary
     fmt::print("\n=== Overlay Scan Results ===\n");
     for (const auto &c : candidates) {
-      fmt::print("  {} → RAM 0x{:08X}, {} bytes, {} funcs, MIPS {:.0f}%{}\n",
+      fmt::print("  {} -> RAM 0x{:08X}, {} bytes, {} funcs, MIPS {:.0f}%{}\n",
                  c.name, c.ramBase, c.codeSize, c.functions.size(),
                  c.mipsScore * 100.0f, c.hasPsxExeHeader ? " [PS-X EXE]" : "");
     }

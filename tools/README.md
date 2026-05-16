@@ -1,7 +1,7 @@
 # tools/
 
 Scripts and helper binaries used during development and PsyQ signature
-generation. Nothing here is required to build or run the project — the main
+generation. Nothing here is required to build or run the project -- the main
 pipeline lives in `ps1Analyzer/`, `ps1Recomp/` and `ps1Runtime/`.
 
 ## Pipeline tooling (user-facing)
@@ -33,5 +33,5 @@ pipeline lives in `ps1Analyzer/`, `ps1Recomp/` and `ps1Runtime/`.
 ## PsyQ SDK location
 
 The signature generator expects PsyQ SDK `.LIB` archives **outside the repository**
-(licensing — we do not redistribute Sony binaries). Default search root is
+(licensing -- we do not redistribute Sony binaries). Default search root is
 `$HOME/psyq_sdks/CONSOLIDATED/<version>/lib/`. Override with `--sdk-root`.

@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1Recomp — MIPS I Decoder
+// ps1Recomp -- MIPS I Decoder
 // Decodes R3000A instructions (MIPS I + COP0 + COP2/GTE)
 
 #include <cstdint>

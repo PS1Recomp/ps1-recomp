@@ -1,4 +1,4 @@
-// ps1Recomp — Overlay Handler Implementation
+// ps1Recomp -- Overlay Handler Implementation
 // Manages PS1 overlay sections with address conflict detection
 
 #include "ps1recomp/overlay_handler.h"
@@ -16,7 +16,7 @@ bool OverlayHandler::loadFromConfig(const std::string &configPath) {
     auto config = toml::parse(configPath);
 
     if (!config.contains("overlays")) {
-      // No overlays section — valid config, just empty
+      // No overlays section -- valid config, just empty
       return true;
     }
 
@@ -92,11 +92,11 @@ std::string OverlayHandler::qualifiedName(uint32_t addr) const {
   }
 
   if (conflicts.size() == 1) {
-    // Single overlay — still prefix for clarity
+    // Single overlay -- still prefix for clarity
     return fmt::format("overlay_{}__{:08X}", conflicts[0]->name, addr);
   }
 
-  // Multiple overlays at same address — caller must disambiguate
+  // Multiple overlays at same address -- caller must disambiguate
   // Return first match with prefix
   return fmt::format("overlay_{}__{:08X}", conflicts[0]->name, addr);
 }
@@ -105,7 +105,7 @@ std::string OverlayHandler::qualifiedName(uint32_t addr) const {
 
 std::string OverlayHandler::emitDispatchTable() const {
   if (m_overlays.empty()) {
-    return "// No overlays — dispatch table not needed\n";
+    return "// No overlays -- dispatch table not needed\n";
   }
 
   std::string result;

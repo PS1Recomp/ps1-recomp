@@ -3,9 +3,9 @@
  * @file psyq_state.h
  * @brief Centralised C++ home for PsyQ runtime state (Phase 2, Session 2.1).
  *
- * Until Phase 2, every piece of "PsyQ-side" state — VBlank counter, CD sync /
+ * Until Phase 2, every piece of "PsyQ-side" state -- VBlank counter, CD sync /
  * ready bytes, sector-read bookkeeping, async callbacks, GPU swap callback,
- * DrawSync OT tracking — lived in PS1 RAM at game-specific BSS addresses
+ * DrawSync OT tracking -- lived in PS1 RAM at game-specific BSS addresses
  * declared in `[psyq_addresses]` of each game TOML.  That model needs the
  * recompiled binary to actually initialise those addresses, which broke on
  * Crash Bandicoot (`cd_data_cb` is never written from MIPS, so `bios.cpp`
@@ -15,7 +15,7 @@
  * the values the HLE layer used to poke into PS1 RAM.  It is created lazily
  * by `psyq_state()` and lives until program exit.
  *
- * **Phase 2 status (post-2.4):** every former BSS slot now lives here —
+ * **Phase 2 status (post-2.4):** every former BSS slot now lives here --
  * VSync counter (2.2), CD sync/ready bytes (2.3), CD sector bookkeeping +
  * callbacks + GPU swap callback + DrawSync OT slots (2.4).  The
  * `[psyq_addresses]` block has been removed from `rayman.toml`/`crash.toml`
@@ -37,7 +37,7 @@ namespace ps1::psyq {
  * number of slots in use (2 for typical double-buffering); `index` is the
  * current write slot.  Slots beyond `count` are unused.
  *
- * The struct is intentionally shallow — Phase 2 only stores what the legacy
+ * The struct is intentionally shallow -- Phase 2 only stores what the legacy
  * BSS layout stored.  `Bios::triggerVBlankEvent` stamps every active slot
  * with status == 2 (PsyQ "drawing complete") since the runtime GPU is
  * fully synchronous; future async-render work can refine to per-slot
@@ -56,7 +56,7 @@ struct GpuDrawSync {
 /**
  * @brief Centralised PsyQ runtime state.
  *
- * Singleton — instantiated lazily on first call to `psyq_state()` and
+ * Singleton -- instantiated lazily on first call to `psyq_state()` and
  * shared by HLE handlers across `psyq_*.cpp` and the VBlank thread in
  * `main_host.cpp`.  Atomic fields are touched from multiple threads
  * (game thread + VBlank thread + CDROM IRQ thread); plain fields are
@@ -76,7 +76,7 @@ public:
   /// delivery (`Bios::triggerVBlankEvent`) on the game thread.  Phase 3.2
   /// pulled all PsyqState/event-system writes off the IRQ-context VBlank
   /// thread; only this single-byte atomic is touched there now.  Multiple
-  /// VBlanks coalesce into a single delivery — PsyQ event semantics are
+  /// VBlanks coalesce into a single delivery -- PsyQ event semantics are
   /// status-flag based (TestEvent/EnableEvent), so coalescing does not
   /// drop user-visible state.
   std::atomic<bool> vblankPending{false};
@@ -93,7 +93,7 @@ public:
   // CDROM read bookkeeping
   // Touched only from the game thread (libcd HLE entries) and the
   // CDROM IRQ handler running on the same thread (synchronous host
-  // model).  Plain integers — no atomic semantics required yet.
+  // model).  Plain integers -- no atomic semantics required yet.
   uint32_t cdRemaining = 0; ///< Sectors still pending in the active read.
   uint32_t cdDestPtr   = 0; ///< PS1 RAM addr where the next sector lands.
   uint32_t cdWordCount = 0; ///< Words per sector (512 raw, 585 with subhdr).
@@ -112,17 +112,17 @@ public:
 
   // Interrupt / callback management (libetc + libapi).  PSY-Q's libetc
   // routes everything through an indirection struct (psyz/decomp/src/libetc/
-  // intr.c — `struct intr* D_800B7080`); we collapse the same surface to
+  // intr.c -- `struct intr* D_800B7080`); we collapse the same surface to
   // these slots since the runtime models interrupts cooperatively, not via
   // real CPU IRQs.
   /// Mirror of hardware I_MASK (0x1F801074).  Real silicon decides which
   /// IRQs the CPU sees; we keep a software copy so PSY-Q SetIntrMask/
-  /// GetIntrMask round-trip the same value.  No effect on dispatch — host
+  /// GetIntrMask round-trip the same value.  No effect on dispatch -- host
   /// callbacks are drained at cooperative yield points regardless.
   uint16_t intrMask = 0;
   /// Per-IRQ-line user callback registered via `InterruptCallback(n, fn)`.
   /// Slot 0..6 follow the PSY-Q convention (VBlank, GPU, CDROM, DMA, RTC0,
-  /// RTC1, RTC2); slot 7 reserved.  Never invoked today — the only callback
+  /// RTC1, RTC2); slot 7 reserved.  Never invoked today -- the only callback
   /// the runtime actually fires is `gpuSwapCb`, queued by
   /// `Bios::triggerVBlankEvent`.  Storing it keeps the round-trip honest so
   /// PSY-Q's read-back-and-restore patterns work.

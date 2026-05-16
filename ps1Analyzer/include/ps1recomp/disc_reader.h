@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1Analyzer — Disc Reader
+// ps1Analyzer -- Disc Reader
 // Reads PS1 BIN/CUE disc images with ISO9660 filesystem support.
 // Extracts files from the disc, including the boot executable and overlays.
 

@@ -1,4 +1,4 @@
-// ps1Recomp — MIPS I Decoder Implementation
+// ps1Recomp -- MIPS I Decoder Implementation
 // Decodes R3000A instructions: MIPS I + COP0 + COP2/GTE
 
 #include "ps1recomp/mips_decoder.h"
@@ -160,7 +160,7 @@ static Instruction decodeCOP2(uint32_t raw) {
         return inst;
     }
 
-    // GTE commands (bit 25 = 1) — decode funct bits 0-5
+    // GTE commands (bit 25 = 1) -- decode funct bits 0-5
     uint8_t cmd = raw & 0x3F;
 
     switch (cmd) {

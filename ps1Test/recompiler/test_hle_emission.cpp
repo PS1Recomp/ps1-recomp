@@ -1,9 +1,9 @@
-// Tests for ps1Recomp — HLE Stub Emitter
+// Tests for ps1Recomp -- HLE Stub Emitter
 //
 // Validates the stub C++ produced for `[[hle_functions]]` entries from
 // ps1Analyzer Sessao 0.4 configs. The recompiler must, for every entry
 // with `hle = true`, skip MIPS translation and emit a stub that delegates
-// to `psyq_dispatch("<name>", ctx)` — resolved at runtime by the PsyQ
+// to `psyq_dispatch("<name>", ctx)` -- resolved at runtime by the PsyQ
 // registry in ps1Runtime.
 
 #include <algorithm>
@@ -28,7 +28,7 @@ TEST(HleEmitter, ForwardDeclIsRegistryDispatcher) {
 
 TEST(HleEmitter, ForwardDeclIsStubIndependent) {
   // The forward-decl is emitted once regardless of how many HLE entries
-  // exist — different stubs must yield identical strings.
+  // exist -- different stubs must yield identical strings.
   HleStub a{0x80012340, "func_80012340", "libgpu_PutDispEnv"};
   HleStub b{0x80020000, "func_80020000", "libcd_CdInit"};
 
@@ -44,7 +44,7 @@ TEST(HleEmitter, StubBodyLibapiVSync) {
   // The stub must:
   //   1. Carry a comment with the original PS1 address (for grep-ability)
   //   2. Have the C++ signature expected by the dispatch table
-  //   3. Delegate to psyq_dispatch("<name>", ctx) — *not* translate MIPS
+  //   3. Delegate to psyq_dispatch("<name>", ctx) -- *not* translate MIPS
   EXPECT_NE(body.find("0x801ABCDE"), std::string::npos);
   EXPECT_NE(body.find("void func_801ABCDE(uint8_t* rdram, recomp_context* ctx)"),
             std::string::npos);
@@ -65,7 +65,7 @@ TEST(HleEmitter, StubBodyDoesNotTranslateMips) {
 
 TEST(HleEmitter, StubDoesNotCallLegacyHleSymbol) {
   // The 0.5 path called `hle_<name>(ctx)` directly via extern "C". The 0.6
-  // path replaces that with the runtime dispatcher — make sure the old form
+  // path replaces that with the runtime dispatcher -- make sure the old form
   // is gone so missing impls don't fail at link time.
   HleStub stub{0x801ABCDE, "func_801ABCDE", "libapi_VSync"};
   std::string body = emitHleStub(stub);

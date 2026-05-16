@@ -35,4 +35,4 @@ _psxrecomp_listener = PCSX.Events.createEventListener("GPU::Vsync", function()
 end)
 
 PCSX.log("[psxrecomp-mcp] listener stored, polling " .. CMD_FILE .. " on GPU::Vsync")
-print("[psxrecomp-mcp] ready — listener stored as _psxrecomp_listener")
+print("[psxrecomp-mcp] ready -- listener stored as _psxrecomp_listener")

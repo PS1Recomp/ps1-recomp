@@ -13,7 +13,7 @@ This script reads that log and answers the questions you actually have:
   - Call counts grouped by library?
   - Are there any [PSYQ] WARN/FATAL lines mixed in (missing HLEs)?
 
-PPM/numpy/external deps avoided — stdlib only.
+PPM/numpy/external deps avoided -- stdlib only.
 
 Usage:
     trace_replay.py /tmp/crash_trace.log
@@ -142,7 +142,7 @@ def main() -> int:
         print(f"  filter active        : '{args.filter}'")
 
     if not calls:
-        print("  (no dispatch calls parsed — wrong format or empty log?)")
+        print("  (no dispatch calls parsed -- wrong format or empty log?)")
         return 1
 
     # Top callers by count

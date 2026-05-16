@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1Analyzer — PsyQ Signature Matcher
+// ps1Analyzer -- PsyQ Signature Matcher
 // Identifies PsyQ SDK functions by SHA-256 hash of their MIPS opcodes,
 // loaded from ps1Analyzer/data/psyq_signatures.toml.
 
@@ -141,7 +141,7 @@ private:
     std::vector<PsyQMatch> m_matches;
     std::unordered_map<std::string, PsyQFunction> m_database;
 
-    // Hash → signature. Keys are the high 64 bits of SHA-256.
+    // Hash -> signature. Keys are the high 64 bits of SHA-256.
     std::unordered_map<uint64_t, LoadedSig> m_byMasked;
     std::unordered_map<uint64_t, LoadedSig> m_byFull;
 

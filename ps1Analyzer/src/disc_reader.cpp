@@ -1,4 +1,4 @@
-// ps1Analyzer — Disc Reader Implementation
+// ps1Analyzer -- Disc Reader Implementation
 // Reads PS1 BIN/CUE disc images (Mode 2 / 2352-byte sectors)
 // Parses ISO9660 filesystem to extract files
 
@@ -132,7 +132,7 @@ bool DiscReader::parseDirectory(uint32_t lba, uint32_t size,
   while (offset < size) {
     uint8_t recordLen = dirData[offset];
     if (recordLen == 0) {
-      // Padding at end of sector — skip to next sector boundary
+      // Padding at end of sector -- skip to next sector boundary
       uint32_t nextSector =
           ((offset / SECTOR_SIZE_DATA) + 1) * SECTOR_SIZE_DATA;
       if (nextSector >= size)

@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1Analyzer — Overlay Scanner
+// ps1Analyzer -- Overlay Scanner
 // Scans PS1 disc images for dynamically-loaded code overlays.
 // Uses MIPS instruction heuristics to detect executable code in disc files
 // and infers RAM load addresses from PS-X EXE headers or LUI/ORI patterns.

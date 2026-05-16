@@ -47,7 +47,7 @@ TEST_F(CustomExceptionTest, LongjmpEmulatorRestoresRegistersAndShiftsSR) {
   for (int i = 0; i < 32; i++) ctx.r[i] = 0xDEADBEEF;
   ctx.pc = 0xCCCCCCCC;
   ctx.cop0[COP0_CAUSE] = 0;
-  ctx.cop0[COP0_SR] = 0x30; // expect shift → (0x30 & ~0xF) | (0x30 >> 2 & 0xF)
+  ctx.cop0[COP0_SR] = 0x30; // expect shift -> (0x30 & ~0xF) | (0x30 >> 2 & 0xF)
 
   hle_longjmp_emulator(ctx, mem, kBuf);
 

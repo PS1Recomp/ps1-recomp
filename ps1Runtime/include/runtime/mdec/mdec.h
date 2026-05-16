@@ -1,7 +1,7 @@
 #pragma once
 
-// ps1Runtime — MDEC (Motion Decoder)
-// PS1 hardware FMV decoder: RLE → iDCT → YCbCr → RGB
+// ps1Runtime -- MDEC (Motion Decoder)
+// PS1 hardware FMV decoder: RLE -> iDCT -> YCbCr -> RGB
 
 #include <array>
 #include <cstdint>
@@ -61,14 +61,14 @@ private:
   std::vector<uint16_t> inputBuffer_;
   std::vector<uint32_t> outputBuffer_;
 
-  // 8×8 block scratch
-  int16_t block_[64]; // current 8×8 block
+  // 8x8 block scratch
+  int16_t block_[64]; // current 8x8 block
 
   // Internal methods
   void processCommand(uint32_t cmd);
   void decodeSlice();
 
-  // RLE decode: variable-length codes → 8×8 quantized coefficients
+  // RLE decode: variable-length codes -> 8x8 quantized coefficients
   bool rleDecode(const uint16_t *&src, const uint16_t *end, int16_t *block,
                  const uint8_t *quantTable);
 
@@ -76,7 +76,7 @@ private:
   void idct(int16_t *block);
   void initCosineTable();
 
-  // YCbCr → RGB conversion (6 blocks → macroblock)
+  // YCbCr -> RGB conversion (6 blocks -> macroblock)
   void yuvToRgb15(const int16_t *cr, const int16_t *cb, const int16_t *y1,
                   const int16_t *y2, const int16_t *y3, const int16_t *y4);
   void yuvToRgb24(const int16_t *cr, const int16_t *cb, const int16_t *y1,

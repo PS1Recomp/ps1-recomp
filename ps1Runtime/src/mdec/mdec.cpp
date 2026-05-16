@@ -152,7 +152,7 @@ void MDEC::processCommand(uint32_t cmd) {
     inputBuffer_.clear();
     break;
 
-  case 3: // Set scale table (cosine table) — we use precomputed, just consume
+  case 3: // Set scale table (cosine table) -- we use precomputed, just consume
     remainingWords_ = 32;
     state_ = State::ReceivingData;
     busy_ = true;
@@ -233,7 +233,7 @@ void MDEC::idct(int16_t *block) {
   }
 }
 
-// YCbCr → RGB
+// YCbCr -> RGB
 
 int32_t MDEC::clampS(int32_t val, int32_t lo, int32_t hi) {
   return std::clamp(val, lo, hi);
@@ -245,7 +245,7 @@ uint8_t MDEC::clampU8(int32_t val) {
 
 void MDEC::yuvToRgb15(const int16_t *cr, const int16_t *cb, const int16_t *y1,
                       const int16_t *y2, const int16_t *y3, const int16_t *y4) {
-  // 4 Y blocks (each 8×8) → 16×16 pixel macroblock
+  // 4 Y blocks (each 8x8) -> 16x16 pixel macroblock
   // Output in scan-line order (left-to-right, top-to-bottom), 2 pixels per word
   const int16_t *yBlocks[4] = {y1, y2, y3, y4};
 
@@ -283,7 +283,7 @@ void MDEC::yuvToRgb15(const int16_t *cr, const int16_t *cb, const int16_t *y1,
 void MDEC::yuvToRgb24(const int16_t *cr, const int16_t *cb, const int16_t *y1,
                       const int16_t *y2, const int16_t *y3, const int16_t *y4) {
   // 24bpp: 3 bytes per pixel packed continuously into 32-bit words (scan-line order)
-  // 256 pixels × 3 bytes = 768 bytes = 192 words
+  // 256 pixels x 3 bytes = 768 bytes = 192 words
   const int16_t *yBlocks[4] = {y1, y2, y3, y4};
 
   uint32_t accum = 0;
@@ -336,9 +336,9 @@ void MDEC::decodeSlice() {
   // Enabled by env var PS1_MDEC_DEBUG=1. Logs macroblock counts so failures
   // in rleDecode() (invalid VLC IDs, misaligned RLE data) are visible.
   // Expected output per FMV frame: "N macroblocks decoded" where
-  //   N = (frame_width/16) * (frame_height/16).  For 320×240: N = 300.
-  // If N=0 → first block fails (bad DC word or missing quant table).
-  // If N>0 but << 300 → AC RLE misaligned or early end-marker.
+  //   N = (frame_width/16) * (frame_height/16).  For 320x240: N = 300.
+  // If N=0 -> first block fails (bad DC word or missing quant table).
+  // If N>0 but << 300 -> AC RLE misaligned or early end-marker.
   static const bool kMdecDebug = (std::getenv("PS1_MDEC_DEBUG") != nullptr);
 
   if (opcode == 2) {
@@ -372,7 +372,7 @@ void MDEC::decodeSlice() {
   }
 
   if (opcode == 3)
-    return; // Scale table — ignore, using precomputed
+    return; // Scale table -- ignore, using precomputed
 
   if (opcode == 1) {
     // Decode macroblocks

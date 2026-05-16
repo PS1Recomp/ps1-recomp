@@ -8,7 +8,7 @@
 //   - PadInitDirect's status-buffer refresh is checked by reading PS1 RAM
 //     after the call (status / type / button-low / button-high bytes).
 //   - Two extra tests cover the no-input fallback (returns 0xFFFFFFFF) and
-//     PadGetState's pad-type → state mapping.
+//     PadGetState's pad-type -> state mapping.
 //   - One end-to-end registry test confirms each name dispatches after
 //     `psyq_register_libetc_pad()`.
 //
@@ -59,7 +59,7 @@ protected:
 
 } // namespace
 
-// PadInit / PadStartCom / PadStopCom — bookkeeping NOPs
+// PadInit / PadStartCom / PadStopCom -- bookkeeping NOPs
 
 TEST_F(PsyqPadTest, PadInitReturnsZero) {
   ctx.r[A0] = 0;
@@ -74,22 +74,22 @@ TEST_F(PsyqPadTest, PadStartComStopComReturnZero) {
   EXPECT_EQ(ctx.r[V0], 0u);
 }
 
-// PadRead — packed (port2 << 16) | port1, active-low
+// PadRead -- packed (port2 << 16) | port1, active-low
 
 TEST_F(PsyqPadTest, PadReadIdleReturnsAllOnes) {
-  // No buttons pressed on either port → 0xFFFFFFFF.
+  // No buttons pressed on either port -> 0xFFFFFFFF.
   hle_libetc_PadRead(&ctx);
   EXPECT_EQ(ctx.r[V0], 0xFFFFFFFFu);
 }
 
 TEST_F(PsyqPadTest, PadReadPressedBitsAreCleared) {
-  // Press CROSS on port 0 → bit 14 cleared in low half.
+  // Press CROSS on port 0 -> bit 14 cleared in low half.
   input.press(input::BTN_CROSS, 0);
   hle_libetc_PadRead(&ctx);
   uint32_t expected = 0xFFFFFFFFu & ~static_cast<uint32_t>(input::BTN_CROSS);
   EXPECT_EQ(ctx.r[V0], expected);
 
-  // Add START on port 1 → bit 3 of high half cleared.
+  // Add START on port 1 -> bit 3 of high half cleared.
   input.press(input::BTN_START, 1);
   hle_libetc_PadRead(&ctx);
   expected = (~static_cast<uint32_t>(input::BTN_CROSS) & 0xFFFFu) |
@@ -109,13 +109,13 @@ TEST_F(PsyqPadTest, PadReadReflectsRelease) {
 }
 
 TEST_F(PsyqPadTest, PadReadFallsBackWhenNoBackend) {
-  // Detach the input controller — bios accessor returns nullptr.
+  // Detach the input controller -- bios accessor returns nullptr.
   bios->setInputController(nullptr);
   hle_libetc_PadRead(&ctx);
   EXPECT_EQ(ctx.r[V0], 0xFFFFFFFFu);
 }
 
-// PadInitDirect — 34-byte status buffer refresh
+// PadInitDirect -- 34-byte status buffer refresh
 
 TEST_F(PsyqPadTest, PadInitDirectSeedsBufferHeader) {
   uint32_t buf1 = 0x80120000u;
@@ -150,7 +150,7 @@ TEST_F(PsyqPadTest, PadReadRefreshesDirectBufferButtons) {
   ctx.r[A1] = 0;
   hle_libetc_PadInitDirect(&ctx);
 
-  // Press SQUARE (bit 15) on port 0 — high byte should drop bit 7.
+  // Press SQUARE (bit 15) on port 0 -- high byte should drop bit 7.
   input.press(input::BTN_SQUARE, 0);
   hle_libetc_PadRead(&ctx);
 
@@ -161,7 +161,7 @@ TEST_F(PsyqPadTest, PadReadRefreshesDirectBufferButtons) {
 }
 
 TEST_F(PsyqPadTest, PadInitDirectMarksMissingControllerInBuffer) {
-  // Detach port 1 by switching it to PadType::None — header should flip to
+  // Detach port 1 by switching it to PadType::None -- header should flip to
   // 0xFF/0xFF so the game's "no controller" branch fires.
   input.setPadType(1, input::PadType::None);
 
@@ -177,7 +177,7 @@ TEST_F(PsyqPadTest, PadInitDirectMarksMissingControllerInBuffer) {
   EXPECT_EQ(mem.read8(buf1 + 1), static_cast<uint8_t>(input::PadType::Digital));
 }
 
-// PadGetState — collapsed two-state mapping
+// PadGetState -- collapsed two-state mapping
 
 TEST_F(PsyqPadTest, PadGetStateStableWhenPadAttached) {
   ctx.r[A0] = 0;

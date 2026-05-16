@@ -1,4 +1,4 @@
-// ps1Recomp — PS1 Static Recompiler
+// ps1Recomp -- PS1 Static Recompiler
 // Translates MIPS I instructions to C++ code (1:1 literal translation)
 
 #include <cstdio>
@@ -173,7 +173,7 @@ int main(int argc, char *argv[]) {
     //   name    = "libgpu_PutDispEnv"  (the <library>_<basename> identifier)
     //
     // The recompiler skips MIPS translation for these and emits a stub that
-    // calls `psyq_dispatch("<name>", ctx)` — resolved at runtime by the PsyQ
+    // calls `psyq_dispatch("<name>", ctx)` -- resolved at runtime by the PsyQ
     // registry in ps1Runtime/src/psyq/psyq_registry.cpp.
     std::map<uint32_t, std::string> hleFunctions;
     if (config.contains("hle_functions")) {
@@ -419,7 +419,7 @@ int main(int argc, char *argv[]) {
     // HLE stub bodies for [[hle_functions]] not covered by [[functions]]
     // The analyzer emits a [[hle_functions]] entry for every hash match but
     // also strips those addresses from [[functions]] (PsyQ functions don't
-    // get MIPS bodies). So most HLE entries land here — bodies are emitted
+    // get MIPS bodies). So most HLE entries land here -- bodies are emitted
     // under the `func_<addr>` symbol the dispatch table maps to.
     for (const auto &[addr, hleName] : hleFunctions) {
       if (emittedHleAddrs.count(addr))
@@ -550,7 +550,7 @@ int main(int argc, char *argv[]) {
           }
         }
 
-        // Get function list — from config or scan for prologues
+        // Get function list -- from config or scan for prologues
         std::vector<uint32_t> ovl_funcs;
         if (ov.contains("functions")) {
           auto funcs = toml::find<std::vector<int64_t>>(ov, "functions");
@@ -645,13 +645,13 @@ int main(int argc, char *argv[]) {
             result_cpp += "\n";
           }
         } else if (ovl_data.empty()) {
-          // No binary data — emit stubs for declared functions
+          // No binary data -- emit stubs for declared functions
           for (auto fAddr : ovl_funcs) {
             std::string fName =
                 fmt::format("overlay_{}__{:08X}", ovl_name, fAddr);
             result_cpp +=
                 fmt::format("void {}(uint8_t* rdram, recomp_context* ctx) "
-                            "{{ /* Overlay stub — no binary data */ }}\n",
+                            "{{ /* Overlay stub -- no binary data */ }}\n",
                             fName);
           }
         }
@@ -747,7 +747,7 @@ int main(int argc, char *argv[]) {
     result_cpp += "    recomp_func_t fn = recomp_lookup(addr);\n";
     result_cpp += "    if (fn) { fn(rdram, ctx); return; }\n\n";
 
-    // Step 3: Normalize address (KSEG0/KSEG1 → canonical KSEG0) and retry
+    // Step 3: Normalize address (KSEG0/KSEG1 -> canonical KSEG0) and retry
     result_cpp += "    // 3. Address normalization (KSEG mirrors) and retry\n";
     result_cpp += "    uint32_t phys = addr & 0x1FFFFFFFu;\n";
     result_cpp += "    uint32_t normalized = phys | 0x80000000u;\n";
@@ -757,7 +757,7 @@ int main(int argc, char *argv[]) {
     result_cpp += "    }\n\n";
 
     // Step 4: BIOS entry points A0/B0/C0 (any KSEG mirror)
-    result_cpp += "    // 4. BIOS entry points (A0, B0, C0 — any KSEG mirror)\n";
+    result_cpp += "    // 4. BIOS entry points (A0, B0, C0 -- any KSEG mirror)\n";
     result_cpp += "    if (ctx->bios) {\n";
     result_cpp += "        if (phys == 0xA0) { ctx->bios->executeA0(); return; }\n";
     result_cpp += "        if (phys == 0xB0) { ctx->bios->executeB0(); return; }\n";
@@ -796,12 +796,12 @@ int main(int argc, char *argv[]) {
     result_cpp += "                         ((uint32_t)rdram[phys+2] << 16) | "
                   "((uint32_t)rdram[phys+3] << 24);\n";
     result_cpp += "        if (instr == 0x03E00008u) {\n";
-    result_cpp += "            return; // JR RA trampoline — no-op return\n";
+    result_cpp += "            return; // JR RA trampoline -- no-op return\n";
     result_cpp += "        }\n";
     result_cpp += "    }\n\n";
 
     // Step 7: Rate-limited fallback logging
-    result_cpp += "    // 7. Unknown target — rate-limited log (don't crash)\n";
+    result_cpp += "    // 7. Unknown target -- rate-limited log (don't crash)\n";
     result_cpp += "    static std::unordered_map<uint32_t, uint32_t> s_unknownHits;\n";
     result_cpp += "    auto& hitCount = s_unknownHits[addr];\n";
     result_cpp += "    if (hitCount < 5) {\n";
@@ -810,7 +810,7 @@ int main(int argc, char *argv[]) {
     result_cpp += "                   addr, ctx->r[31], phys);\n";
     result_cpp += "    } else if (hitCount == 5) {\n";
     result_cpp += "        fmt::print(stderr, \"[DISPATCH] Unknown target: "
-                  "0x{:08X} — suppressing further logs\\n\", addr);\n";
+                  "0x{:08X} -- suppressing further logs\\n\", addr);\n";
     result_cpp += "    }\n";
     result_cpp += "    hitCount++;\n";
     result_cpp += "}\n";

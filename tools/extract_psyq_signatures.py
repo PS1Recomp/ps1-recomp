@@ -67,7 +67,7 @@ DEFAULT_METADATA = SCRIPT_DIR.parent / "ps1Analyzer" / "data" / "psyq_metadata.t
 
 # Threshold below which masked hashes are too lossy (BIOS A0/B0/C0 wrappers
 # differ only in their function index and collide after immediate-masking).
-# See docs/sessao-0.2 — discovered while validating LIBAPI.
+# See docs/sessao-0.2 -- discovered while validating LIBAPI.
 FULL_MATCH_SIZE_LIMIT = 24
 
 
@@ -428,7 +428,7 @@ def main() -> int:
     write_toml(args.output, merged)
     sys.stderr.write(f"wrote {args.output}  ({len(merged)} unique signatures)\n")
 
-    # Echo the first 5 alphabetically — useful as a quick smoke check.
+    # Echo the first 5 alphabetically -- useful as a quick smoke check.
     print("first 5 signatures (alphabetical):")
     for name in sorted(merged)[:5]:
         s = merged[name]

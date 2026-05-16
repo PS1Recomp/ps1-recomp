@@ -34,7 +34,7 @@ mcp = FastMCP("ps1-recomp")
 
 # Code index (lazy, cached)
 
-_code_index: Optional[dict] = None   # addr_hex → line_number (1-based)
+_code_index: Optional[dict] = None   # addr_hex -> line_number (1-based)
 _code_lines: Optional[list] = None   # all lines of recompiled_out.cpp
 
 
@@ -54,7 +54,7 @@ def _ensure_index():
         m = pat.match(line)
         if m:
             name = m.group(1)
-            # Extract hex address from name (func_801B954C → 801B954C)
+            # Extract hex address from name (func_801B954C -> 801B954C)
             addr = name[5:].upper()
             _code_index[addr] = i  # 0-based line index
 
@@ -159,7 +159,7 @@ def _parse_log(stdout: str, stderr: str) -> dict:
             result["dma3_count"] += 1
 
     for line in stderr.splitlines():
-        if "LinkedList #" in line or "FillRect #" in line or "CPU→VRAM #" in line:
+        if "LinkedList #" in line or "FillRect #" in line or "CPU->VRAM #" in line:
             result["gpu_commands"].append(line.strip())
         if "NULL function pointer" in line:
             result["dispatch_nulls"] += 1
@@ -247,8 +247,8 @@ def run_game(duration: int = 20, config: str = "rayman.toml", bios_debug: bool =
 
     The report includes:
     - exit_code, frame_status (I_STAT/I_MASK every 300 frames)
-    - vsync_calls (total VSync invocations — confirms game loop alive at 60fps)
-    - dma2_count (GPU DMA Ch2 transfers — confirms rendering activity)
+    - vsync_calls (total VSync invocations -- confirms game loop alive at 60fps)
+    - dma2_count (GPU DMA Ch2 transfers -- confirms rendering activity)
     - dma3_count (CDROM DMA sectors loaded)
     - vram.regions (non-zero pixel counts in fb0, fb1, fb2, texture area)
     - vram.top_colors_fb0 (dominant colors in display framebuffer)
@@ -447,7 +447,7 @@ def find_callers(address: str, max_results: int = 30) -> str:
     out = [f"Callers of 0x{addr} ({len(results)} found):"]
     for r in results:
         out.append(
-            f"  {r['caller']} (line {r['caller_line']}) → line {r['ref_line']}: {r['code']}"
+            f"  {r['caller']} (line {r['caller_line']}) -> line {r['ref_line']}: {r['code']}"
         )
     return "\n".join(out)
 
@@ -501,9 +501,9 @@ def search_functions(pattern: str, max_results: int = 30) -> str:
     Search for functions in the recompiled code by name pattern or hex address range.
 
     Examples:
-      search_functions("801B9")          → all funcs starting with 801B9...
-      search_functions("DrawSync")       → matches if any line in func contains that
-      search_functions("801A9000-801AAFF") → funcs in address range
+      search_functions("801B9")          -> all funcs starting with 801B9...
+      search_functions("DrawSync")       -> matches if any line in func contains that
+      search_functions("801A9000-801AAFF") -> funcs in address range
 
     Returns list of matching function names + line numbers.
     """
@@ -512,7 +512,7 @@ def search_functions(pattern: str, max_results: int = 30) -> str:
         return "recompiled_out.cpp not found or index empty."
 
     # Range search: "0x801A9000-0x801AAFF"
-    range_m = re.match(r'(?:0x)?([0-9A-Fa-f]+)\s*[-–]\s*(?:0x)?([0-9A-Fa-f]+)', pattern)
+    range_m = re.match(r'(?:0x)?([0-9A-Fa-f]+)\s*[--]\s*(?:0x)?([0-9A-Fa-f]+)', pattern)
     if range_m:
         lo = int(range_m.group(1), 16)
         hi = int(range_m.group(2), 16)
@@ -522,7 +522,7 @@ def search_functions(pattern: str, max_results: int = 30) -> str:
             if lo <= int(addr, 16) <= hi
         ]
         if not results:
-            return f"No functions in range 0x{lo:08X}–0x{hi:08X}."
+            return f"No functions in range 0x{lo:08X}-0x{hi:08X}."
         return f"Functions in range ({len(results)}):\n" + "\n".join(results[:max_results])
 
     # Prefix / substring search on address
@@ -570,11 +570,11 @@ def search_code(pattern: str, context_lines: int = 2, max_matches: int = 20) -> 
     call a specific HLE function, or use a specific constant.
 
     Examples:
-      search_code("0x801CF2CC")        → find all refs to vblankCounter
+      search_code("0x801CF2CC")        -> find all refs to vblankCounter
       search_code("drainPendingCallbacks")
       search_code("JUMP_INDIRECT")
 
-    context_lines: lines of context around each match (0–5).
+    context_lines: lines of context around each match (0-5).
     """
     _ensure_index()
     if not _code_lines:
@@ -593,7 +593,7 @@ def search_code(pattern: str, context_lines: int = 2, max_matches: int = 20) -> 
             block = [f"  {j+1:6}: {_code_lines[j]}" for j in range(start, end)]
             matches.append(f"--- line {i+1} ---\n" + "\n".join(block))
             if len(matches) >= max_matches:
-                matches.append(f"[truncated — {max_matches} matches shown]")
+                matches.append(f"[truncated -- {max_matches} matches shown]")
                 break
 
     if not matches:

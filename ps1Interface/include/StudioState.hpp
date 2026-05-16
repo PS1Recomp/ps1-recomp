@@ -46,7 +46,7 @@ struct AppSettings {
     float customAccent[4] = {0.00f, 0.48f, 0.80f, 1.00f};
 };
 
-// Stream redirector (cout/cerr → Logs panel)
+// Stream redirector (cout/cerr -> Logs panel)
 
 class StreamRedirector : public std::stringbuf {
 public:

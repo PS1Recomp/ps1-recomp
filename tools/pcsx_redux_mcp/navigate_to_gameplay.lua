@@ -83,4 +83,4 @@ L = PCSX.Events.createEventListener('GPU::Vsync', function()
 end)
 
 PCSX.log("[navigate] Auto-navigation started (phase: wait_boot)")
-print("[navigate] Running — will save state to " .. SAVE_PATH .. " when gameplay is reached")
+print("[navigate] Running -- will save state to " .. SAVE_PATH .. " when gameplay is reached")

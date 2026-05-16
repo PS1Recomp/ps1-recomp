@@ -35,22 +35,22 @@ from extract_psyq_signatures import (  # noqa: E402
 
 class TestMaskImmediates:
     def test_r_type_passthrough(self):
-        # add $v0, $a0, $a1 — pure R-type, no imm to mask
+        # add $v0, $a0, $a1 -- pure R-type, no imm to mask
         word = 0x00851020
         assert mask_immediates(word) == word
 
     def test_r_type_jr(self):
-        # jr $ra (special, funct=0x08) — no imm
+        # jr $ra (special, funct=0x08) -- no imm
         word = 0x03E00008
         assert mask_immediates(word) == word
 
     def test_addiu_imm_zeroed(self):
-        # addiu $t1, $zero, 0xAD  — only the imm should disappear
+        # addiu $t1, $zero, 0xAD  -- only the imm should disappear
         word = 0x240900AD
         assert mask_immediates(word) == 0x24090000
 
     def test_lui_imm_zeroed(self):
-        # lui $at, 0x1F80 — relocations against absolute addrs hit this imm
+        # lui $at, 0x1F80 -- relocations against absolute addrs hit this imm
         word = 0x3C011F80
         assert mask_immediates(word) == 0x3C010000
 
@@ -61,7 +61,7 @@ class TestMaskImmediates:
     def test_load_store_imm_zeroed(self):
         # lw $a0, 0x1234($sp)
         assert mask_immediates(0x8FA41234) == 0x8FA40000
-        # sw $zero, 0x1814($at) — used by ResetGraph
+        # sw $zero, 0x1814($at) -- used by ResetGraph
         assert mask_immediates(0xAC201814) == 0xAC200000
         # sb / sh variants
         assert mask_immediates(0xA0201D80) == 0xA0200000
@@ -73,18 +73,18 @@ class TestMaskImmediates:
         # bne, blez, bgtz, beql, bnel
         for word in (0x14850010, 0x18800010, 0x1C800010, 0x50850010, 0x54850010):
             assert mask_immediates(word) == (word & 0xFFFF0000)
-        # REGIMM (BLTZ, BGEZ, etc.) — opcode 0x01
+        # REGIMM (BLTZ, BGEZ, etc.) -- opcode 0x01
         assert mask_immediates(0x04800010) == 0x04800000
         assert mask_immediates(0x04810010) == 0x04810000  # bgez
 
     def test_j_jal_target_zeroed(self):
-        # j 0x80100000 → encoded target = (0x80100000 >> 2) & 0x3FFFFFF
+        # j 0x80100000 -> encoded target = (0x80100000 >> 2) & 0x3FFFFFF
         assert mask_immediates(0x08040000) == 0x08000000
         # jal
         assert mask_immediates(0x0C040000) == 0x0C000000
 
     def test_cop_kept_exact(self):
-        # mfc0/mtc0/cfc2/ctc2/mtc2/mfc2 — opcode 0x10..0x13.
+        # mfc0/mtc0/cfc2/ctc2/mtc2/mfc2 -- opcode 0x10..0x13.
         # Their funct/rs/rd encoding is critical (GTE relies on it),
         # so we must NOT mask anything in COP instructions.
         for word in (0x40046800, 0x40846800, 0x48046800, 0x4884E800):
@@ -99,8 +99,8 @@ class TestMaskImmediates:
 
 
 # ---------------------------------------------------------------------------
-# merge(): same name + same masked → coalesce sources;
-#          same name + different masked → @v2 suffix
+# merge(): same name + same masked -> coalesce sources;
+#          same name + different masked -> @v2 suffix
 # ---------------------------------------------------------------------------
 
 def _sig(name, masked, full="ff"*8, size=64, sources=None,
@@ -367,7 +367,7 @@ class TestApplyMetadata:
         apply_metadata(sigs, meta)
         assert sigs["ResetGraph"].subsystem == "graphics"
         assert sigs["ResetGraph"].stub_type == "stub"
-        # Variants inherit metadata of the base name — important for @vN.
+        # Variants inherit metadata of the base name -- important for @vN.
         assert sigs["ResetGraph@v2"].subsystem == "graphics"
         assert sigs["ResetGraph@v2"].stub_type == "stub"
         # Unknown stays blank, doesn't blow up.

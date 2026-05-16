@@ -107,12 +107,12 @@ TEST_F(PsyqHleTest, VSyncReturnsCounterPostAdvance) {
 }
 
 // Phase 3.2: the VBlank thread no longer calls Bios::triggerVBlankEvent()
-// directly — it only sets `psyq_state().vblankPending = true`.  hle_VSync,
+// directly -- it only sets `psyq_state().vblankPending = true`.  hle_VSync,
 // running on the game thread, exchanges the flag at the end of its wait
 // and invokes `deliverVBlankEvent` exactly once when the flag was set.
 //
 // Two consecutive hle_VSync calls without an intervening VBlank thread
-// tick must NOT both observe the same pending flag — the first call
+// tick must NOT both observe the same pending flag -- the first call
 // drains it, the second sees `false`.  This test wires
 // `deliverVBlankEvent` to a counter to assert the flag is delivered
 // once and only once.
@@ -132,7 +132,7 @@ TEST_F(PsyqHleTest, VBlankPendingDeliveredOncePerFlagRaise) {
     EXPECT_EQ(vblankDeliveries, 1);
     EXPECT_FALSE(psyq_state().vblankPending.load(std::memory_order_acquire));
 
-    // Second hle_VSync(1) — no new VBlank thread tick happened, so the
+    // Second hle_VSync(1) -- no new VBlank thread tick happened, so the
     // flag must remain false and delivery count must NOT increment.
     // The drainCallbacks fixture-hook still bumps the counter inside the
     // wait loop so the call returns; only the deliverVBlankEvent path is

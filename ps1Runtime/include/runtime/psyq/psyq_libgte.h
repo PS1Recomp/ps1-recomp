@@ -29,7 +29,7 @@ void hle_libgte_SetGeomOffset(recomp_context *ctx);
 void hle_libgte_SetGeomScreen(recomp_context *ctx);
 void hle_libgte_SetDQA(recomp_context *ctx);
 
-// Group 1.C — control-register loaders
+// Group 1.C -- control-register loaders
 void hle_libgte_InitGeom(recomp_context *ctx);
 void hle_libgte_SetRotMatrix(recomp_context *ctx);
 void hle_libgte_SetTransMatrix(recomp_context *ctx);
@@ -38,13 +38,13 @@ void hle_libgte_SetColorMatrix(recomp_context *ctx);
 void hle_libgte_SetBackColor(recomp_context *ctx);
 void hle_libgte_SetFarColor(recomp_context *ctx);
 
-// Group 1.C — matrix builders (operate on PS1 RAM)
+// Group 1.C -- matrix builders (operate on PS1 RAM)
 void hle_libgte_RotMatrix(recomp_context *ctx);
 void hle_libgte_TransMatrix(recomp_context *ctx);
 void hle_libgte_ScaleMatrix(recomp_context *ctx);
 void hle_libgte_MulMatrix(recomp_context *ctx);
 
-// Group 1.C — per-vertex transform wrappers
+// Group 1.C -- per-vertex transform wrappers
 void hle_libgte_RotTrans(recomp_context *ctx);
 void hle_libgte_RotTransPers(recomp_context *ctx);
 

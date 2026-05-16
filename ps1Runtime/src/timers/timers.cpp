@@ -81,7 +81,7 @@ bool Timer::tick(uint32_t cycles) {
       }
     }
 
-    // Check overflow (0xFFFF → 0)
+    // Check overflow (0xFFFF -> 0)
     if (counter_ == 0) {
       reachedOverflow_ = true;
 

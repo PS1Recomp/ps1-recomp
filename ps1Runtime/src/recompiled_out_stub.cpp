@@ -1,4 +1,4 @@
-// recompiled_out_stub.cpp — CI / test build placeholder
+// recompiled_out_stub.cpp -- CI / test build placeholder
 //
 // Used by CMake when the real recompiled_out.cpp has not been generated.
 // The real file is produced by `ps1Recomp <config.toml> <output.cpp>`, which

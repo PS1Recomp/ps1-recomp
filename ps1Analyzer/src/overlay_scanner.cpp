@@ -13,7 +13,7 @@ bool OverlayScanner::isNonCodeExtension(const std::string &name) {
   static const std::vector<std::string> dataExts = {
       ".str", ".xa",  ".vag", ".tim", ".vab", ".seq", ".sep",
       ".bs",  ".mdec",".iki", ".dic", ".fnt", ".raw",
-      ".dat", // ambiguous — scan anyway if scanAllFiles
+      ".dat", // ambiguous -- scan anyway if scanAllFiles
       ".mov", ".avi", ".mp3", ".wav"};
 
   auto dot = name.rfind('.');
@@ -107,7 +107,7 @@ float OverlayScanner::computeMipsScore(const uint8_t *data, size_t size) {
       uint8_t rs = (word >> 21) & 0x1F;
       valid = (rs == 0 || rs == 4 || rs == 16); // MFC0, MTC0, RFE-like
     } else if (opcode == 0x12) {
-      // COP2 (GTE) — always valid if it's a GTE instruction
+      // COP2 (GTE) -- always valid if it's a GTE instruction
       valid = true;
     } else {
       // Standard opcodes: J(2), JAL(3), BEQ(4), BNE(5), BLEZ(6), BGTZ(7),
@@ -326,7 +326,7 @@ OverlayScanner::scanFile(const std::vector<uint8_t> &data,
     return result;
   }
 
-  // No PS-X EXE header — scan raw data for MIPS code
+  // No PS-X EXE header -- scan raw data for MIPS code
   // Try the full file first
   result.mipsScore = computeMipsScore(data.data(), data.size());
 

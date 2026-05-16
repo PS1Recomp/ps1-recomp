@@ -1,4 +1,4 @@
-# ps1Analyzer — PS1 ELF Analyzer
+# ps1Analyzer -- PS1 ELF Analyzer
 
 # Library target (for linking into tests)
 add_library(ps1Analyzer_lib

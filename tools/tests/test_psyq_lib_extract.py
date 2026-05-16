@@ -104,7 +104,7 @@ def test_real_libgpu_extracts_without_warnings(tmp_path: Path, capsys):
     import os
     sdk = os.environ.get("PSYQ_SDK_ROOT")
     if not sdk:
-        pytest.skip("PSYQ_SDK_ROOT not set — skipping local SDK regression")
+        pytest.skip("PSYQ_SDK_ROOT not set -- skipping local SDK regression")
     libfile = Path(sdk) / "v3.5" / "lib" / "LIBGPU.LIB"
     if not libfile.exists():
         pytest.skip(f"PsyQ SDK not present at {sdk}")

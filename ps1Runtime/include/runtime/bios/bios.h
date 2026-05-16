@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file bios.h
- * @brief PS1 BIOS HLE — A0/B0/C0 syscall dispatch, event system, callback queue.
+ * @brief PS1 BIOS HLE -- A0/B0/C0 syscall dispatch, event system, callback queue.
  *
  * `ps1::bios::Bios` is the High-Level Emulation of the PS1 kernel.  The
  * runtime contains no original Sony code; instead the three syscall tables
@@ -12,7 +12,7 @@
  * Threading: most state is touched only from the game thread.  CDROM IRQs
  * arrive from the SDL render thread and are pushed onto a queue
  * (`queueCdromEvent`) that the game thread drains via
- * `drainPendingCallbacks` — see Phase 3.3 for the rationale.
+ * `drainPendingCallbacks` -- see Phase 3.3 for the rationale.
  */
 
 #include "runtime/bios/event_system.h"
@@ -46,7 +46,7 @@ class DMA;
 namespace ps1::bios {
 
 /**
- * @brief HLE replacement for the PS1 kernel — syscall dispatch + events + callbacks.
+ * @brief HLE replacement for the PS1 kernel -- syscall dispatch + events + callbacks.
  *
  * Constructed once per process and held by `main_host.cpp`.  Hardware
  * subsystems (GPU/CDROM/Input/DMA) are attached after construction via
@@ -100,7 +100,7 @@ public:
 
   // Drain queued CDROM IRQs and run `triggerCdromEvent` for each on the
   // current (game) thread.  Returns the number of events drained.  Safe
-  // to call on any iteration of a polling loop — events are queued
+  // to call on any iteration of a polling loop -- events are queued
   // (push) cross-thread and drained (pop + dispatch) game-thread-only.
   std::size_t drainCdromEventQueue();
 
@@ -115,10 +115,10 @@ public:
   //
   // VBlank waits live in `psyq_state().vsyncCounter` since Phase 2.2.
   // CD sync/ready waits live in `psyq_state().cdSyncByte/cdReadyByte`
-  // since Phase 2.3 — `hle_libcd_CdSync`/`CdReady` poll those atomics
+  // since Phase 2.3 -- `hle_libcd_CdSync`/`CdReady` poll those atomics
   // cooperatively without needing per-game BSS addresses.
 
-  // Drain pending event callbacks — called from game thread at yield points
+  // Drain pending event callbacks -- called from game thread at yield points
   // (testEvent, waitEvent, VSync, etc.) to safely dispatch mode-0x1000
   // handlers.
   void drainPendingCallbacks();
@@ -139,7 +139,7 @@ public:
   // callback synchronously on the game thread; without inline drain, the
   // BSS mirror writes never happen and PsyQ polling spins on stale BSS).
   // Cross-thread pushes (cdromCtrl.tick from the SDL render thread) keep
-  // the queue's async semantics — they're drained from drainPendingCallbacks
+  // the queue's async semantics -- they're drained from drainPendingCallbacks
   // / hle_libcd_CdSync.
   void setGameThreadId(std::thread::id id) { gameThreadId_ = id; }
 
@@ -172,7 +172,7 @@ private:
   // setGameThreadId is called every push goes through the queue.
   std::thread::id gameThreadId_{};
 
-  // CDROM interrupt pending — set on the game thread by triggerCdromEvent
+  // CDROM interrupt pending -- set on the game thread by triggerCdromEvent
   // (which now runs only on the game thread post-3.3) and consumed by the
   // pump loop in drainPendingCallbacks (also game thread).  Carries the
   // INT type (1-5) or 0 if nothing pending.  Cross-thread IRQ delivery
@@ -187,13 +187,13 @@ private:
   std::mutex cdEventQueueMtx_;
   std::queue<uint8_t> cdEventQueue_;
 
-  // Deferred CD exception — set by triggerCdromEvent when a B0:0x19 handler
+  // Deferred CD exception -- set by triggerCdromEvent when a B0:0x19 handler
   // is registered.  Consumed by drainPendingCallbacks, which calls
   // triggerCustomException() at a safe point (after the game enters its
   // polling loop).
   std::atomic<uint8_t> cdExceptionPending_{0};
 
-  // Deferred VBlank exception — set by triggerVBlankEvent when a B0:0x19
+  // Deferred VBlank exception -- set by triggerVBlankEvent when a B0:0x19
   // handler is registered.  Fired from drainPendingCallbacks via
   // triggerCustomException() to avoid cross-thread register clobbering.
   std::atomic<uint8_t> vblankExceptionPending_{0};
@@ -202,15 +202,15 @@ private:
   //
   // VBlank state migrated to `psyq_state().vsyncCounter` in Phase 2.2.
   // CD sync/ready state migrated to `psyq_state().cdSyncByte`/`cdReadyByte`
-  // in Phase 2.3 — atomic uint8_t polled cooperatively by libcd HLE.
+  // in Phase 2.3 -- atomic uint8_t polled cooperatively by libcd HLE.
   // CD callbacks / sector bookkeeping + GPU swap callback migrated to
-  // `psyq_state()` in Phase 2.4 — `[psyq_addresses]` removed from TOMLs.
+  // `psyq_state()` in Phase 2.4 -- `[psyq_addresses]` removed from TOMLs.
 
   // Global custom exception handler (SetCustomExitFromException, B0:0x19).
   // The lambda is installed on the game thread and invoked on the game thread
   // via `triggerCustomException()`.  `customExceptionRegistered_` is the
   // cross-thread gate read by `triggerVBlankEvent` (VBlank thread) to decide
-  // whether to flag a deferred dispatch — std::function itself is not
+  // whether to flag a deferred dispatch -- std::function itself is not
   // safe to read concurrently with assignment.
   std::function<void()> customExceptionCallback_;
   std::atomic<bool> customExceptionRegistered_{false};
@@ -225,8 +225,8 @@ private:
 };
 
 // Restore CPU state from a PsyQ jmp_buf at `buf` (a kernel-mode address holding
-// RA, SP, FP, S0..S7, GP — total 48 bytes).  Mirrors what the PSX BIOS does
-// when `SetCustomExitFromException` fires: RA → PC, GPRs reloaded, COP0
+// RA, SP, FP, S0..S7, GP -- total 48 bytes).  Mirrors what the PSX BIOS does
+// when `SetCustomExitFromException` fires: RA -> PC, GPRs reloaded, COP0
 // Cause = 0x400, Status Register exception stack popped, V0 = 1.
 //
 // Extracted as a free function so it can be tested without spinning up Bios

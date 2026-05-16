@@ -32,9 +32,9 @@ Bios::Bios(recomp_context &ctx, cdrom::VirtualFs &fs, Memory &mem)
   // pointers (used by some games like Tomba that cache table pointers in BSS).
   //
   // Layout (growing downward from end of RAM):
-  //   A0 table: 0xC0 entries * 4 = 0x300 bytes  → starts at 0x801FFD00
-  //   B0 table: 0x60 entries * 4 = 0x180 bytes  → starts at 0x801FFE00 (was -0x200)
-  //   C0 table: 0x20 entries * 4 = 0x080 bytes  → starts at 0x801FFF80
+  //   A0 table: 0xC0 entries * 4 = 0x300 bytes  -> starts at 0x801FFD00
+  //   B0 table: 0x60 entries * 4 = 0x180 bytes  -> starts at 0x801FFE00 (was -0x200)
+  //   C0 table: 0x20 entries * 4 = 0x080 bytes  -> starts at 0x801FFF80
   uint32_t a0Addr = 0x80000000 + (2 * 1024 * 1024) - 0x500; // 0x801FFB00
   uint32_t b0Addr = 0x80000000 + (2 * 1024 * 1024) - 0x200; // 0x801FFE00
   uint32_t c0Addr = b0Addr + 0x180;                         // 0x801FFF80
@@ -92,11 +92,11 @@ void Bios::executeC0() {
 // Mapping (empirically derived from Rayman openEvent calls):
 //   Rayman opens class 0xF4000001 with 4 specs: {0x0004, 0x8000, 0x0100, 0x2000}
 //   Matching against CDROM INT types:
-//   INT1 (DataReady)   → event spec 0x0100  ← Rayman ID2 (sector read complete)
-//   INT2 (Complete)    → event spec 0x8000  ← Rayman ID1 (init/cmd done)
-//   INT3 (Acknowledge) → event spec 0x0004  ← Rayman ID0 (cmd accepted)
-//   INT4 (DataEnd)     → event spec 0x0100  ← same as DataReady
-//   INT5 (DiskError)   → event spec 0x2000  ← Rayman ID3 (error)
+//   INT1 (DataReady)   -> event spec 0x0100  <- Rayman ID2 (sector read complete)
+//   INT2 (Complete)    -> event spec 0x8000  <- Rayman ID1 (init/cmd done)
+//   INT3 (Acknowledge) -> event spec 0x0004  <- Rayman ID0 (cmd accepted)
+//   INT4 (DataEnd)     -> event spec 0x0100  <- same as DataReady
+//   INT5 (DiskError)   -> event spec 0x2000  <- Rayman ID3 (error)
 
 static constexpr uint32_t CDROM_EVENT_CLASS_1 = 0xF4000001;
 static constexpr uint32_t CDROM_EVENT_CLASS_2 = 0xF0000011;
@@ -133,7 +133,7 @@ void Bios::queueCdromEvent(uint8_t cdIntType) {
   // Inline-drain when the push originates from the game thread itself
   // (recompiled MIPS port writes -> cdromCtrl.writeRegister -> this
   // callback fires synchronously on the game thread).  Recompiled PsyQ
-  // kernel polls BSS mirrors right after the port write — without the
+  // kernel polls BSS mirrors right after the port write -- without the
   // inline drain, triggerCdromEvent would only run later (next yield
   // point) and the polling loop would observe stale mirror state.
   // Cross-thread pushes (SDL render thread via tick) skip the drain;
@@ -145,7 +145,7 @@ void Bios::queueCdromEvent(uint8_t cdIntType) {
 
 std::size_t Bios::drainCdromEventQueue() {
   // Pop everything under the mutex into a local queue, then drop the lock
-  // before dispatching — `triggerCdromEvent` may re-enter via cdrom_->tick
+  // before dispatching -- `triggerCdromEvent` may re-enter via cdrom_->tick
   // during the pump-loop pass and we don't want to recursively lock.
   std::queue<uint8_t> local;
   {
@@ -179,7 +179,7 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // out of per-game BSS into `psyq_state()` (atomic uint8_t), so VSync-style
   // cooperative polling works without configuring a memory address.  The
   // legacy cdStatusHw write was a one-way mirror with no reader after HLE
-  // coverage landed — dropped entirely.
+  // coverage landed -- dropped entirely.
   //
 
   // HLE sector copy for INT1 (DataReady)
@@ -207,14 +207,14 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // until then.  This prevents the main-thread tick from racing ahead
   // and firing dozens of INT1s that overwrite the single cdIntPending_.
   //
-  // On a real PS1 the entire interrupt → callback → ACK chain runs
+  // On a real PS1 the entire interrupt -> callback -> ACK chain runs
   // atomically within the interrupt handler.  Here we split it across
   // threads: main thread signals (cdIntPending_), game thread processes
   // (dataCb + ACK).
   //
   if (cdIntType == 1 && cdrom_) {
     cdIntPending_.store(cdIntType, std::memory_order_release);
-    // DO NOT ACK here — let the game thread's drainPendingCallbacks
+    // DO NOT ACK here -- let the game thread's drainPendingCallbacks
     // handle ACK after dispatching the callback.  This keeps the CDROM
     // in waitingForAck state so tick() won't generate more INT1s.
 
@@ -223,7 +223,7 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
     // HLE register-direct sector copy
     // When the game programs DMA Ch3 directly (no libcd HLE in flight:
     // cdRemaining == 0 and cdDataCb == 0), the channel was previously
-    // armed before the sector was ready — `DMA::executeChannel` deferred
+    // armed before the sector was ready -- `DMA::executeChannel` deferred
     // it and left the start bit set.  Now that INT1 has fired, retry
     // any armed channels so the deferred CDROM transfer runs.  Safe to
     // call unconditionally: other channels won't be triggered unless
@@ -236,14 +236,14 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
     // When the game uses libcd HLE `CdRead` (state.cdRemaining > 0,
     // cdDestPtr/cdWordCount stashed) but never registered
     // `CdReadCallback` (cdDataCb == 0), the drainPendingCallbacks pump
-    // would dispatch nothing and ACK — discarding the sector.  Copy it
+    // would dispatch nothing and ACK -- discarding the sector.  Copy it
     // ourselves to the destination CdRead stashed in psyq_state.
     if (state.cdRemaining > 0 && state.cdDataCb == 0 &&
         cdrom_->hasSectorReady() && state.cdDestPtr != 0) {
       const uint8_t *sector = cdrom_->getSectorBuffer();
       uint32_t sectorSz = cdrom_->getSectorSize();
       // Raw sector (2352 bytes): 12-sync + 4-header + 8-subheader + data.
-      // sectorSize=2048 → user data at +24; sectorSize=2340 → +12.
+      // sectorSize=2048 -> user data at +24; sectorSize=2340 -> +12.
       uint32_t dataOff = (sectorSz == 2048) ? 24u : 12u;
       uint32_t words = state.cdWordCount;
       for (uint32_t i = 0; i < words; ++i) {
@@ -269,11 +269,11 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // PsyQ interrupt handler mapping (as implemented by the game's own IRQ
   // chain):
   //
-  //   INT1 (DataReady)  → readyByte = 1          (syncByte untouched)
-  //   INT2 (Complete)   → syncByte  = 2          (readyByte untouched)
-  //   INT3 (Acknowledge)→ syncByte  = 2 (mapped!) (readyByte untouched)
-  //   INT4 (DataEnd)    → readyByte = 4          (syncByte untouched)
-  //   INT5 (DiskError)  → syncByte  = 5, readyByte = 5
+  //   INT1 (DataReady)  -> readyByte = 1          (syncByte untouched)
+  //   INT2 (Complete)   -> syncByte  = 2          (readyByte untouched)
+  //   INT3 (Acknowledge)-> syncByte  = 2 (mapped!) (readyByte untouched)
+  //   INT4 (DataEnd)    -> readyByte = 4          (syncByte untouched)
+  //   INT5 (DiskError)  -> syncByte  = 5, readyByte = 5
   //
   // CRITICAL: INT3 maps to syncByte=2 (Complete), NOT 3!  The game's
   // CdCommand function gates on syncByte==2 before issuing new commands.
@@ -297,7 +297,7 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // declares `[bss_mirrors]` cd_sync_byte / cd_ready_byte, mirror the
   // atomic value into PS1 RAM so recompiled native MIPS that polls the
   // legacy BSS slot directly (Rayman PsyQ CdReset at 0x801CF1D8 / 0x801CF1DC)
-  // observes the new state.  Single byte per slot — same width as the
+  // observes the new state.  Single byte per slot -- same width as the
   // pre-2.3 BIOS handler used to write.
   if (cdSyncMirror_ != 0)
     ctx_.mem->write8(cdSyncMirror_,
@@ -305,7 +305,7 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   if (cdReadyMirror_ != 0)
     ctx_.mem->write8(cdReadyMirror_,
                      psyqReady.load(std::memory_order_acquire));
-  BIOS_LOG("[CDROM-HLE] INT{} → psyq_state.sync={} ready={}\n", cdIntType,
+  BIOS_LOG("[CDROM-HLE] INT{} -> psyq_state.sync={} ready={}\n", cdIntType,
            psyqSync.load(std::memory_order_relaxed),
            psyqReady.load(std::memory_order_relaxed));
 
@@ -320,18 +320,18 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // processes it and then longjmps (if SetCustomExitFromException was used).
   //
   // We emulate this by DEFERRING the customExceptionExit dispatch: queue the
-  // CD interrupt type, and fire the longjmp from drainPendingCallbacks() —
+  // CD interrupt type, and fire the longjmp from drainPendingCallbacks() --
   // which the recompiler inserts into polling loops.  This gives the game time
   // to set up its polling state before the longjmp fires.
   //
   // Do NOT defer customExceptionExit for CD interrupts.
   //
   // CD commands in our implementation execute synchronously on the game
-  // thread (writeRegister → executeCommand → pushResponse → callback).
+  // thread (writeRegister -> executeCommand -> pushResponse -> callback).
   // Secondary responses (INT2) also fire synchronously via fireSecondaryNow()
   // when the game acks the primary interrupt.  The game's PsyQ polling code
   // reads the hardware interrupt flag register directly and processes the
-  // response through register I/O — it does not need (and is disrupted by)
+  // response through register I/O -- it does not need (and is disrupted by)
   // a deferred longjmp.
   //
   // The BSS state (cd_sync_byte, cd_ready_byte, cd_status_hw) is already
@@ -353,7 +353,7 @@ void Bios::triggerVBlankEvent() {
   // On a real PS1, B0:0x19 (SetCustomExitFromException) installs a jmpbuf
   // that is triggered by ANY hardware exception, including VBlank.
   // Games like Tomba! use this to implement CD command polling: they
-  // setjmp, send a CD command, and wait — the VBlank (or CD INT) fires
+  // setjmp, send a CD command, and wait -- the VBlank (or CD INT) fires
   // the longjmp which breaks them out of the wait loop.
   //
   // IMPORTANT: triggerVBlankEvent runs on the VBlank THREAD, not the game
@@ -375,7 +375,7 @@ void Bios::triggerVBlankEvent() {
   //
   // PsyQ Event Classes:
   //   0xF0000001 = VBlank IRQ (interrupt class)
-  //   0xF2000001 = Root Counter 0 (pixel clock — fires every scanline)
+  //   0xF2000001 = Root Counter 0 (pixel clock -- fires every scanline)
   //   0xF2000002 = Root Counter 1 (horizontal retrace)
   //   0xF2000003 = Root Counter 2 (system clock / 8)
   //
@@ -387,21 +387,21 @@ void Bios::triggerVBlankEvent() {
   // VBlank IRQ event
   eventSystem_.triggerEvent(0xF0000001, 0x0001);
 
-  // Root Counter 0 (pixel clock) — overflows many times per frame
+  // Root Counter 0 (pixel clock) -- overflows many times per frame
   eventSystem_.triggerEvent(0xF2000001, 0x0001); // target reached
   eventSystem_.triggerEvent(0xF2000001, 0x0002); // overflow
 
-  // Root Counter 1 (horizontal retrace) — ~263 hblanks per frame
+  // Root Counter 1 (horizontal retrace) -- ~263 hblanks per frame
   eventSystem_.triggerEvent(0xF2000002, 0x0001); // target reached
   eventSystem_.triggerEvent(0xF2000002, 0x0002); // overflow
 
-  // Root Counter 2 (system clock / 8) — fast freerun timer
+  // Root Counter 2 (system clock / 8) -- fast freerun timer
   eventSystem_.triggerEvent(0xF2000003, 0x0001);
   eventSystem_.triggerEvent(0xF2000003, 0x0002);
 
   // NOTE: triggering 0xF0000011/12/13 (SYSTEM-side root-counter events,
   // as opposed to the USER-side 0xF2000001/2/3 above) caused Rayman boot
-  // to enter a fast crash path — investigated 2026-05-05.  Game opens
+  // to enter a fast crash path -- investigated 2026-05-05.  Game opens
   // those classes during init but the path that consumes the events
   // expects them to come ordered with other system signals we don't
   // simulate.  Leaving them un-triggered keeps the game in its
@@ -429,7 +429,7 @@ void Bios::triggerVBlankEvent() {
   uint32_t swapCb = ps1::psyq::psyq_state().gpuSwapCb;
   if (swapCb != 0) {
     eventSystem_.queueCallbackWithArg(swapCb,
-                                      4); // a0 = 4 → "swap done"
+                                      4); // a0 = 4 -> "swap done"
   }
 
   // HLE PsyQ DrawSync status (GPU ordering table completion)
@@ -440,7 +440,7 @@ void Bios::triggerVBlankEvent() {
   // used by PsyQ DrawSync polling) so any future consumer reading the
   // singleton sees consistent state.  Native PsyQ DrawSync polling against
   // PS1 RAM is short-circuited by the libgpu HLE (`hle_DrawSync` returns 0
-  // unconditionally), so no BSS write is needed anymore — the matcher
+  // unconditionally), so no BSS write is needed anymore -- the matcher
   // catches DrawSync in both Rayman and Crash.
   {
     auto &draw = ps1::psyq::psyq_state().drawSync;
@@ -452,7 +452,7 @@ void Bios::triggerVBlankEvent() {
 }
 
 void Bios::drainPendingCallbacks() {
-  // Drain any cross-thread CDROM IRQs first — they may set
+  // Drain any cross-thread CDROM IRQs first -- they may set
   // cdIntPending_ / cdExceptionPending_ / event-system state, which the
   // rest of this method then consumes.  Phase 3.3.
   drainCdromEventQueue();
@@ -466,7 +466,7 @@ void Bios::drainPendingCallbacks() {
   // Now that the game is at a safe yield point (polling loop), we fire the
   // longjmp so the game's exception handler can process the CD result.
   //
-  // Check for deferred exceptions (CD or VBlank) — fire at most one per
+  // Check for deferred exceptions (CD or VBlank) -- fire at most one per
   // drainPendingCallbacks call.  CD takes priority over VBlank.
   uint8_t cdExc = cdExceptionPending_.exchange(0, std::memory_order_acquire);
   uint8_t vbExc = vblankExceptionPending_.exchange(0, std::memory_order_acquire);
@@ -479,7 +479,7 @@ void Bios::drainPendingCallbacks() {
         BIOS_LOG("[VBLANK-HLE] Firing deferred customExceptionExit\n");
       }
       triggerCustomException();
-      return; // longjmp fired — game handles it
+      return; // longjmp fired -- game handles it
     }
   }
 
@@ -494,7 +494,7 @@ void Bios::drainPendingCallbacks() {
   // After ACKing, we immediately try to advance the CDROM to deliver more
   // sectors (pumping loop), so that reads don't take one frame per sector.
   //
-  // Maximum sectors to process per call — prevents infinite loops if
+  // Maximum sectors to process per call -- prevents infinite loops if
   // something goes wrong, and limits time spent in one drain call.
   constexpr int MAX_SECTORS_PER_DRAIN = 32;
 
@@ -512,11 +512,11 @@ void Bios::drainPendingCallbacks() {
     if (intType == 0)
       break;
 
-    // Save registers — callbacks clobber temps.
+    // Save registers -- callbacks clobber temps.
     auto saved = static_cast<ps1::CPUContext>(ctx_);
 
     if (intType == 1 || intType == 4) {
-      // INT1 (DataReady) or INT4 (DataEnd) → call dataCb
+      // INT1 (DataReady) or INT4 (DataEnd) -> call dataCb
       uint32_t dataCb = state.cdDataCb;
       int32_t remaining = static_cast<int32_t>(state.cdRemaining);
       static int hleDispatch = 0;
@@ -531,7 +531,7 @@ void Bios::drainPendingCallbacks() {
         recomp_dispatch(ctx_.mem->ramPtr(), &ctx_, dataCb);
       }
     } else if (intType == 2) {
-      // INT2 (Complete) → call notifyCb
+      // INT2 (Complete) -> call notifyCb
       uint32_t notifyCb = state.cdNotifyCb;
       if (notifyCb != 0) {
         ctx_.r4 = intType;
@@ -539,8 +539,8 @@ void Bios::drainPendingCallbacks() {
         recomp_dispatch(ctx_.mem->ramPtr(), &ctx_, notifyCb);
       }
     }
-    // INT3 (Acknowledge) — handled by CdControlF's own polling loop, skip.
-    // INT5 (DiskError) — not expected in normal operation.
+    // INT3 (Acknowledge) -- handled by CdControlF's own polling loop, skip.
+    // INT5 (DiskError) -- not expected in normal operation.
 
     // ACK the interrupt so the CDROM can deliver the next sector.
     if (cdrom_ && (intType == 1 || intType == 4)) {
@@ -554,7 +554,7 @@ void Bios::drainPendingCallbacks() {
     // Pump: try to advance the CDROM so the next sector is ready
     //
     // Only pump if the game still has sectors remaining to read.
-    // When remaining <= 0, the read is complete — stop feeding cycles
+    // When remaining <= 0, the read is complete -- stop feeding cycles
     // so the CDROM transitions out of ReadingData state naturally.
     //
     if (cdrom_ && (intType == 1) && state.cdRemaining != 0) {
@@ -568,7 +568,7 @@ void Bios::drainPendingCallbacks() {
           cdrom_->tick(cdrom_->getCyclesPerSector());
         }
       } else {
-        // Read complete — stop the CDROM so it doesn't generate more INT1s.
+        // Read complete -- stop the CDROM so it doesn't generate more INT1s.
         cdrom_->stopReading();
         cdIntPending_.store(0, std::memory_order_release);
       }

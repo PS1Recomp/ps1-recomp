@@ -3,13 +3,13 @@
 
 namespace ps1::bios {
 
-// PS1 BIOS Table C (0xC0) — kernel-mode interrupt chain, exception handler
+// PS1 BIOS Table C (0xC0) -- kernel-mode interrupt chain, exception handler
 // installation, root-counter clear flags. Dispatched from Bios::executeC0()
 // in bios.cpp.
 
 void Bios::handleC0(uint32_t index) {
   switch (index) {
-  case 0x00: // InstallExceptionHandler — stub
+  case 0x00: // InstallExceptionHandler -- stub
     BIOS_LOG("[BIOS] InstallExceptionHandler() [STUB]\n");
     break;
   case 0x01: // SysEnqIntRP

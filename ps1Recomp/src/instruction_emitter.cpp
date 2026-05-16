@@ -1,4 +1,4 @@
-// ps1Recomp — Instruction Emitter Implementation
+// ps1Recomp -- Instruction Emitter Implementation
 // Translates decoded MIPS I instructions to C++ code using runtime macros
 
 #include "ps1recomp/instruction_emitter.h"
@@ -20,7 +20,7 @@ std::string InstructionEmitter::reg(uint8_t r) {
 std::string InstructionEmitter::regWrite(uint8_t r) {
   if (r == 0)
     return "/* $zero discard */"; // Will be used as: /* $zero discard */ = expr
-                                  // → becomes a comment
+                                  // -> becomes a comment
   return fmt::format("ctx->r{}", r);
 }
 
@@ -120,7 +120,7 @@ std::string InstructionEmitter::emitALU(const Instruction &inst) const {
   auto rt = reg(inst.rt);
 
   switch (inst.id) {
-  // R-type ALU — emit as unsigned to avoid C++ signed-overflow UB.
+  // R-type ALU -- emit as unsigned to avoid C++ signed-overflow UB.
   // MIPS ADDU/SUBU are explicitly modular; PSY-Q ADD/SUB also rely on
   // modular wrap in practice (no overflow trap delivered to PSX user code).
   // Casting through uint32_t makes the wraparound well-defined; the trailing
@@ -148,7 +148,7 @@ std::string InstructionEmitter::emitALU(const Instruction &inst) const {
     return assignReg(inst.rd,
                      fmt::format("({} < {}) ? 1 : 0", u32(rs), u32(rt)));
 
-  // I-type ALU — same modular-wrap reasoning as ADD/ADDU above.
+  // I-type ALU -- same modular-wrap reasoning as ADD/ADDU above.
   // Cast `inst.imm16` (signed 16-bit) to int32_t first so the sign-extension
   // happens before the unsigned conversion; the immediate is treated as a
   // signed offset by every PSY-Q caller that uses ADDIU.
@@ -624,7 +624,7 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
     // Handle branch delay slots: if this instruction has a delay slot,
     // emit the next instruction BEFORE the branch/jump.
     //
-    // IMPORTANT — MIPS delay slot semantics:
+    // IMPORTANT -- MIPS delay slot semantics:
     //   In real hardware the branch condition (or jump target register)
     //   is evaluated BEFORE the delay slot executes.  If the delay slot
     //   writes to a register that the branch/jump reads, we must save
@@ -688,7 +688,7 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
         result += fmt::format("      {}\n", branchCode);
         result += "    }\n";
       } else {
-        // No conflict — emit delay slot then branch/jump (original order)
+        // No conflict -- emit delay slot then branch/jump (original order)
         result += fmt::format("    {} // delay slot\n", delayCode);
         result += yieldCode;
         result += fmt::format("    {}\n", code);
@@ -699,7 +699,7 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
     }
 
     // Track unconditional jumps for reachability.
-    // Only JR makes subsequent code unreachable — JALR is a function call
+    // Only JR makes subsequent code unreachable -- JALR is a function call
     // that returns, so code after JALR is still reachable.
     if (inst.category == InstrCategory::Jump && inst.id == InstrId::JR) {
       skipAfterJump = 1; // delay slot was already consumed above, skip 1 more
@@ -707,7 +707,7 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
   }
 
   // Emit OOB target labels
-  // Always use recomp_dispatch for OOB — we can't trust that
+  // Always use recomp_dispatch for OOB -- we can't trust that
   // the target corresponds to a known function.
   for (uint32_t target : oob_set) {
     result += fmt::format("{}:\n", label(target));

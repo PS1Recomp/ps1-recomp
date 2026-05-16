@@ -30,8 +30,8 @@ void DMA::writeRegister(uint32_t addr, uint32_t val) {
     // DPCR expecting those channels to already be enabled (e.g. for MDEC-only
     // init during FMV) would inadvertently disable GPU DMA.
     // Force the GPU (bit 11) and OTC (bit 27) enable bits to remain set.
-    val |= (1u << 11); // Ch2 GPU — always enabled
-    val |= (1u << 27); // Ch6 OTC — always enabled
+    val |= (1u << 11); // Ch2 GPU -- always enabled
+    val |= (1u << 27); // Ch6 OTC -- always enabled
     dpcr_ = val;
     return;
   }
@@ -158,7 +158,7 @@ void DMA::executeChannel(uint32_t ch) {
 
   SyncMode sync = getSyncMode(ch);
 
-  // CDROM device→RAM: defer when no sector is buffered.  On a real PS1 the
+  // CDROM device->RAM: defer when no sector is buffered.  On a real PS1 the
   // DMA controller waits for a DRQ from the CDROM before transferring; we
   // emulate that by leaving the start bit set so a later retry (driven from
   // Bios::triggerCdromEvent INT1) will re-enter this function once the
@@ -219,7 +219,7 @@ void DMA::executeBlockTransfer(uint32_t ch) {
     uint32_t physAddr = addr & 0x1FFFFC;
 
     if (fromRam) {
-      // RAM → Device
+      // RAM -> Device
       uint32_t word = ram[physAddr] | (ram[physAddr + 1] << 8) |
                       (ram[physAddr + 2] << 16) | (ram[physAddr + 3] << 24);
 
@@ -242,7 +242,7 @@ void DMA::executeBlockTransfer(uint32_t ch) {
         break;
       }
     } else {
-      // Device → RAM
+      // Device -> RAM
       uint32_t word = 0;
 
       switch (ch) {
@@ -252,8 +252,8 @@ void DMA::executeBlockTransfer(uint32_t ch) {
           uint32_t sectorSz = cdrom_->getSectorSize();
           // Skip raw sector header to reach user data payload.
           // Raw sector (2352 bytes): 12-sync + 4-header + 8-subheader + 2048-data
-          // sectorSize=2048 → user data at offset 24
-          // sectorSize=2340 → sub-header+data at offset 12
+          // sectorSize=2048 -> user data at offset 24
+          // sectorSize=2340 -> sub-header+data at offset 12
           uint32_t dataOff = (sectorSz == 2048) ? 24 : 12;
           uint32_t offset = dataOff + i * 4;
           if (offset + 3 < 2352) {

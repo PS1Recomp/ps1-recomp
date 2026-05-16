@@ -66,7 +66,7 @@ TEST_F(CdromControllerTest, InterruptAcknowledge) {
 }
 
 TEST_F(CdromControllerTest, MsfLbaConversion) {
-  // MSF 00:02:00 = LBA 150 (pregap) → 0 data
+  // MSF 00:02:00 = LBA 150 (pregap) -> 0 data
   EXPECT_EQ(CdromController::msfToLba(0, 2, 0), 150u);
   EXPECT_EQ(CdromController::msfToLba(0, 0, 0), 0u);
   EXPECT_EQ(CdromController::msfToLba(1, 0, 0), 4500u); // 60*75

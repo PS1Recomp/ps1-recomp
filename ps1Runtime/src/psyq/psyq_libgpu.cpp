@@ -59,12 +59,12 @@ uint32_t g_drawSyncCallback = 0;
 void warnOnceFor(const char *name) {
   static std::unordered_set<std::string> seen;
   if (seen.insert(name).second)
-    fmt::print(stderr, "[PSYQ] {} stubbed (NOP) — no-op for current HLE coverage\n", name);
+    fmt::print(stderr, "[PSYQ] {} stubbed (NOP) -- no-op for current HLE coverage\n", name);
 }
 
 } // namespace
 
-// GetClut(x, y) → packed CLUT id. y occupies the high 9 bits, x the low 6
+// GetClut(x, y) -> packed CLUT id. y occupies the high 9 bits, x the low 6
 // (x is always a multiple of 16, hence the >>4).
 void hle_libgpu_GetClut(recomp_context *ctx) {
   uint32_t x = ctx->r[A0];
@@ -73,8 +73,8 @@ void hle_libgpu_GetClut(recomp_context *ctx) {
 }
 
 // SetShadeTex(p, tge): toggle the raw-texture bit of the primitive's code.
-//   tge != 0 → raw texture (no shading)
-//   tge == 0 → modulated (shaded) texture
+//   tge != 0 -> raw texture (no shading)
+//   tge == 0 -> modulated (shaded) texture
 void hle_libgpu_SetShadeTex(recomp_context *ctx) {
   uint32_t p   = ctx->r[A0];
   bool tge     = ctx->r[A1] != 0;
@@ -83,7 +83,7 @@ void hle_libgpu_SetShadeTex(recomp_context *ctx) {
   ctx->mem->write8(p + 7, code);
 }
 
-// Primitive initialisers — set len + code byte, leave colour/coords untouched.
+// Primitive initialisers -- set len + code byte, leave colour/coords untouched.
 //   POLY_F4 : 4 verts, flat shaded, untextured. code = 0x28, len = 5.
 //   POLY_FT4: 4 verts, flat shaded, textured.   code = 0x2C, len = 9.
 //   SPRT    : variable-size textured sprite.    code = 0x64, len = 4.
@@ -120,7 +120,7 @@ void hle_libgpu_SetSprt16(recomp_context *ctx) {
   writeCode(ctx, p, 0x7C);
 }
 
-// Group 1.A — display-area / VRAM-transfer / video-mode HLEs
+// Group 1.A -- display-area / VRAM-transfer / video-mode HLEs
 //
 // All take args in the standard PsyQ a0..a3 + stack-spill convention; values
 // are converted to GP0/GP1 commands and pushed via `writeGP0`/`writeGP1`.
@@ -133,7 +133,7 @@ void hle_libgpu_SetDispMask(recomp_context *ctx) {
   writeGP1(0x03000000u | (mask ? 0u : 1u));
 }
 
-// LoadImage(rect*, src*) — GP0(0xA0) + (w*h+1)/2 data words.
+// LoadImage(rect*, src*) -- GP0(0xA0) + (w*h+1)/2 data words.
 void hle_libgpu_LoadImage(recomp_context *ctx) {
   PsyqRect r = readRect(ctx, ctx->r[A0]);
   uint32_t src = ctx->r[A1];
@@ -152,9 +152,9 @@ void hle_libgpu_LoadImage(recomp_context *ctx) {
     writeGP0(ctx->mem->read32(src + i * 4));
 }
 
-// StoreImage(rect*, dst*) — GP0(0xC0); drains GPUREAD into PS1 RAM.
-// The runtime GPU implements VRAM→CPU via GPUREAD register polling. We can't
-// reach `gpuRead_` directly from here, but the GPU's CPU→VRAM/VRAM→CPU state
+// StoreImage(rect*, dst*) -- GP0(0xC0); drains GPUREAD into PS1 RAM.
+// The runtime GPU implements VRAM->CPU via GPUREAD register polling. We can't
+// reach `gpuRead_` directly from here, but the GPU's CPU->VRAM/VRAM->CPU state
 // machine processes the rect on GP0(0xC0) submission. Until a `readGPUREAD`
 // drain hook is exposed, this stub just pumps the command and leaves the
 // destination buffer untouched. Logged so misuse is visible.
@@ -169,7 +169,7 @@ void hle_libgpu_StoreImage(recomp_context *ctx) {
   warnOnceFor("libgpu_StoreImage");
 }
 
-// MoveImage(rect*, x, y) — GP0(0x80) VRAM→VRAM blit.
+// MoveImage(rect*, x, y) -- GP0(0x80) VRAM->VRAM blit.
 void hle_libgpu_MoveImage(recomp_context *ctx) {
   PsyqRect r  = readRect(ctx, ctx->r[A0]);
   uint16_t dx = static_cast<uint16_t>(ctx->r[A1]);
@@ -183,7 +183,7 @@ void hle_libgpu_MoveImage(recomp_context *ctx) {
            static_cast<uint32_t>(r.w & 0xFFFF));
 }
 
-// ClearImage(rect*, r, g, b) — GP0(0x02) FillRect.
+// ClearImage(rect*, r, g, b) -- GP0(0x02) FillRect.
 void hle_libgpu_ClearImage(recomp_context *ctx) {
   PsyqRect r = readRect(ctx, ctx->r[A0]);
   uint8_t cr = static_cast<uint8_t>(ctx->r[A1]);
@@ -229,7 +229,7 @@ void hle_libgpu_GetVideoMode(recomp_context *ctx) {
   ctx->r[V0] = static_cast<uint32_t>(g_videoMode);
 }
 
-// Group 1.A — libgs scene-graph stubs
+// Group 1.A -- libgs scene-graph stubs
 //
 // libgs is a higher-level wrapper around libgpu; neither Rayman nor Crash
 // links it. These NOP stubs keep the registry dispatch happy and warn once
@@ -267,7 +267,7 @@ void psyq_register_libgpu_extras() {
   // VSyncCallback / SetVideoMode / GetVideoMode live in libetc per
   // psyq_signatures.toml (verified for v3.5/v4.0 LIBETC).
   psyq_register("libetc_VSyncCallback",     &hle_libgpu_VSyncCallback);
-  // Crash Bandicoot calls VSyncCallbacks (plural) — same semantics in PsyQ
+  // Crash Bandicoot calls VSyncCallbacks (plural) -- same semantics in PsyQ
   // (registers a per-frame callback into psyq_state().gpuSwapCb).
   psyq_register("libetc_VSyncCallbacks",    &hle_libgpu_VSyncCallback);
   psyq_register("libetc_SetVideoMode",      &hle_libgpu_SetVideoMode);

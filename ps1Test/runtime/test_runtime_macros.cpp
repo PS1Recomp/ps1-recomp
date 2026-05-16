@@ -1,4 +1,4 @@
-// Tests for ps1Runtime — Runtime Macros
+// Tests for ps1Runtime -- Runtime Macros
 // Validates MEM_READ/WRITE macros, unaligned loads, and GTE register access
 
 #include <gtest/gtest.h>
@@ -29,7 +29,7 @@ TEST(RuntimeMacros, GteRegisterMasking) {
   ctx.reset();
 
   // Register index is masked to 0-31
-  gte_write_data(&ctx, 0x20, 0xABCD); // 32 → wraps to 0
+  gte_write_data(&ctx, 0x20, 0xABCD); // 32 -> wraps to 0
   EXPECT_EQ(gte_read_data(&ctx, 0), 0xABCDu);
 }
 
@@ -69,7 +69,7 @@ TEST(RuntimeMacros, LWLPartialMerge) {
   ctx.bios = nullptr;
   mem.write32(0x1000, 0xAABBCCDD);
 
-  // LWL shift=0 → load high byte only, keep low 3 bytes of rt
+  // LWL shift=0 -> load high byte only, keep low 3 bytes of rt
   uint32_t result = DO_LWL(&ctx, 0x11223344, 0x1000);
   EXPECT_EQ(result, (0x11223344u & 0x00FFFFFF) | (0xAABBCCDD << 24));
 }
@@ -82,7 +82,7 @@ TEST(RuntimeMacros, LWRPartialMerge) {
   ctx.bios = nullptr;
   mem.write32(0x1000, 0xAABBCCDD);
 
-  // LWR shift=3 → load low byte only, keep high 3 bytes of rt
+  // LWR shift=3 -> load low byte only, keep high 3 bytes of rt
   uint32_t result = DO_LWR(&ctx, 0x11223344, 0x1003);
   EXPECT_EQ(result, (0x11223344u & 0xFFFFFF00) | (0xAABBCCDD >> 24));
 }

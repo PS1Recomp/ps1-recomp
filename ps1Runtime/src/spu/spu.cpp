@@ -51,7 +51,7 @@ void SPU::writeRegister(uint32_t addr, uint16_t val) {
   std::lock_guard<std::mutex> lock(mutex_);
   uint32_t offset = addr - 0x1F801C00;
 
-  // Per-voice registers: 0x00-0x17F (24 voices × 0x10 each)
+  // Per-voice registers: 0x00-0x17F (24 voices x 0x10 each)
   if (offset < 0x180) {
     uint32_t voiceIdx = offset / 0x10;
     uint32_t reg = offset % 0x10;
@@ -144,7 +144,7 @@ void SPU::writeRegister(uint32_t addr, uint16_t val) {
     reverbOn_ = (reverbOn_ & 0x0000FFFF) | (static_cast<uint32_t>(val) << 16);
     break;
 
-  // ENDX — read-only, writing clears
+  // ENDX -- read-only, writing clears
   case 0x19C:
     endxFlags_ &= ~(static_cast<uint32_t>(val));
     break;
@@ -189,7 +189,7 @@ void SPU::writeRegister(uint32_t addr, uint16_t val) {
     transferCtrl_ = val;
     break;
 
-  // SPU Status — read only, ignore writes
+  // SPU Status -- read only, ignore writes
   case 0x1AE:
     break;
 
@@ -405,7 +405,7 @@ void SPU::advanceAdpcmBlock(Voice &v) {
     v.endFlag = true;
     endxFlags_ |= (1 << (&v - voices_)); // set ENDX bit
 
-    if (flags & 0x02) { // Loop flag — jump to repeat address
+    if (flags & 0x02) { // Loop flag -- jump to repeat address
       v.currentAddr = static_cast<uint32_t>(v.repeatAddr) * 8;
       v.loopFlag = true;
     } else {
@@ -436,7 +436,7 @@ void SPU::tickAdsr(Voice &v) {
   // Attack Step | Decay Shift adsrHi: Sustain Level | Release Mode | Release
   // Shift
 
-  // Simplified ADSR — use parameterized rates
+  // Simplified ADSR -- use parameterized rates
   int32_t step = 0;
 
   switch (v.adsrPhase) {

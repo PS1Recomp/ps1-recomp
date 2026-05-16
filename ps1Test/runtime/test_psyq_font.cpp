@@ -1,4 +1,4 @@
-// Tests for the libgpu Fnt* HLE family (Group 1.D — debug-font HLEs).
+// Tests for the libgpu Fnt* HLE family (Group 1.D -- debug-font HLEs).
 //
 // Strategy:
 //   - Each Fnt function is exercised in isolation against a Memory-backed
@@ -44,7 +44,7 @@ protected:
     ps1::psyq::configure(cfg);
 
     // Park the stack high in RAM so FntOpen's sp+0x10/sp+0x14 reads land in
-    // valid memory.  0x801FFF00 mirrors physical 0x1FFF00 — the same SP
+    // valid memory.  0x801FFF00 mirrors physical 0x1FFF00 -- the same SP
     // PsyQ bootloaders set at startup.
     ctx.r[SP] = 0x801FFF00u;
   }
@@ -85,7 +85,7 @@ TEST_F(PsyqFontTest, FntOpenAllocatesUniqueIdsUntilSlotCap) {
     hle_libgpu_FntOpen(&ctx);
     EXPECT_EQ(ctx.r[V0], static_cast<uint32_t>(i));
   }
-  // Overflow → clamped to last slot.
+  // Overflow -> clamped to last slot.
   hle_libgpu_FntOpen(&ctx);
   EXPECT_EQ(ctx.r[V0], 7u);
 }
@@ -106,10 +106,10 @@ TEST_F(PsyqFontTest, FntOpenStoresIsbgAndCapacity) {
   EXPECT_STREQ(psyq_font_slot_buffer(static_cast<int>(id)), "ABCD");
 }
 
-// FntPrint — formatting
+// FntPrint -- formatting
 
 TEST_F(PsyqFontTest, FntPrintAppendsLiteral) {
-  // Open with no capacity limit (n=0 → unlimited in our impl).
+  // Open with no capacity limit (n=0 -> unlimited in our impl).
   ctx.r[A0] = 0; ctx.r[A1] = 0; ctx.r[A2] = 320; ctx.r[A3] = 30;
   mem.write32(ctx.r[SP] + 0x10u, 0);
   mem.write32(ctx.r[SP] + 0x14u, 0);
@@ -142,12 +142,12 @@ TEST_F(PsyqFontTest, FntPrintFormatsIntegersAndStrings) {
   writeString(0x80100200u, "ok"); // %s arg lives in PS1 RAM
   ctx.r[A0] = id;
   ctx.r[A1] = 0x80100000u;
-  ctx.r[A2] = static_cast<uint32_t>(-7);   // %d → -7
-  ctx.r[A3] = 0xCAFEu;                     // %x → cafe
-  // 3rd variadic arg lives at sp+0x10 — but sp+0x10 is also FntOpen's isbg
+  ctx.r[A2] = static_cast<uint32_t>(-7);   // %d -> -7
+  ctx.r[A3] = 0xCAFEu;                     // %x -> cafe
+  // 3rd variadic arg lives at sp+0x10 -- but sp+0x10 is also FntOpen's isbg
   // slot, so we have to move SP forward to fresh memory before the call.
   ctx.r[SP] = 0x801FF000u;
-  mem.write32(ctx.r[SP] + 0x10u, 0x80100200u); // %s → "ok"
+  mem.write32(ctx.r[SP] + 0x10u, 0x80100200u); // %s -> "ok"
   hle_libgpu_FntPrint(&ctx);
   EXPECT_STREQ(psyq_font_slot_buffer(static_cast<int>(id)),
                "i=-7 hex=cafe s=ok pct=%");
@@ -167,7 +167,7 @@ TEST_F(PsyqFontTest, FntPrintRejectsUnopenedSlot) {
 TEST_F(PsyqFontTest, FntFlushEmitsFillRectWhenIsbgSet) {
   ctx.r[A0] = 16; ctx.r[A1] = 24;
   ctx.r[A2] = 100; ctx.r[A3] = 12;
-  mem.write32(ctx.r[SP] + 0x10u, 1); // isbg = 1 → fill background
+  mem.write32(ctx.r[SP] + 0x10u, 1); // isbg = 1 -> fill background
   mem.write32(ctx.r[SP] + 0x14u, 32);
   hle_libgpu_FntOpen(&ctx);
   uint32_t id = ctx.r[V0];
@@ -213,12 +213,12 @@ TEST_F(PsyqFontTest, FntFlushClearsBuffer) {
   EXPECT_STREQ(psyq_font_slot_buffer(static_cast<int>(id)), "");
 }
 
-// FntLoad — bookkeeping NOP
+// FntLoad -- bookkeeping NOP
 
 TEST_F(PsyqFontTest, FntLoadDoesNotCrash) {
   ctx.r[A0] = 960; ctx.r[A1] = 256;
   hle_libgpu_FntLoad(&ctx);
-  // No GP0 traffic — we don't ship a glyph table.
+  // No GP0 traffic -- we don't ship a glyph table.
   EXPECT_TRUE(gp0Sink.empty());
 }
 
@@ -239,7 +239,7 @@ TEST_F(PsyqFontTest, FntSystemReturnsPreviousDefault) {
 }
 
 TEST_F(PsyqFontTest, FntPrintSystemDefaultRoutesToFntSystemSlot) {
-  // Open two slots — we'll redirect FntPrint(-1, ...) to slot 1 via FntSystem.
+  // Open two slots -- we'll redirect FntPrint(-1, ...) to slot 1 via FntSystem.
   ctx.r[A0] = 0; ctx.r[A1] = 0; ctx.r[A2] = 320; ctx.r[A3] = 30;
   mem.write32(ctx.r[SP] + 0x10u, 0);
   mem.write32(ctx.r[SP] + 0x14u, 0);

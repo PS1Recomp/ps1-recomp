@@ -1,13 +1,13 @@
 // Tests for the Group 1.C libgte HLEs (matrix/transform helpers).
 //
 // Strategy:
-//   - Setter wrappers (SetRotMatrix, SetLightMatrix, ...) — write a known
+//   - Setter wrappers (SetRotMatrix, SetLightMatrix, ...) -- write a known
 //     MATRIX into PS1 RAM, call the HLE, verify the corresponding cop2c[]
 //     slots match what was loaded.
-//   - Matrix builders (RotMatrix, TransMatrix, ScaleMatrix, MulMatrix) —
+//   - Matrix builders (RotMatrix, TransMatrix, ScaleMatrix, MulMatrix) --
 //     pick inputs whose 1.3.12 fixed-point output is exactly determined
-//     (identity × identity, scale by 1.0, no rotation, etc.).
-//   - Per-vertex transforms (RotTrans, RotTransPers) — install identity
+//     (identity x identity, scale by 1.0, no rotation, etc.).
+//   - Per-vertex transforms (RotTrans, RotTransPers) -- install identity
 //     rotation + zero translation, feed a small SVECTOR, and check the
 //     output VECTOR matches the input (modulo sf=1 shift handled by the
 //     GTE backend).
@@ -89,10 +89,10 @@ protected:
 
 } // namespace
 
-// InitGeom — NOP
+// InitGeom -- NOP
 
 TEST_F(PsyqGteTest, InitGeomDoesNotCrash) {
-  // No state preconditions — just must return without aborting.
+  // No state preconditions -- just must return without aborting.
   hle_libgte_InitGeom(&ctx);
   SUCCEED();
 }
@@ -107,7 +107,7 @@ TEST_F(PsyqGteTest, SetRotMatrixCopiesNineShortsIntoCop2C0to4) {
     for (int j = 0; j < 3; ++j)
       mem.write16(MAT_PTR + (i * 3 + j) * 2,
                   static_cast<uint16_t>(0x1000 + i * 3 + j));
-  // Padding word at offset 18..19 — should land in high half of cop2c[GTE_RT33].
+  // Padding word at offset 18..19 -- should land in high half of cop2c[GTE_RT33].
   mem.write16(MAT_PTR + 18, 0xCAFE);
 
   ctx.r[A0] = MAT_PTR;
@@ -174,7 +174,7 @@ TEST_F(PsyqGteTest, SetFarColorWritesRFCGFCBFC) {
 // Matrix builders
 
 TEST_F(PsyqGteTest, RotMatrixZeroAnglesProducesIdentity) {
-  // r = (0, 0, 0) → cos=4096, sin=0 on every axis → M = I.
+  // r = (0, 0, 0) -> cos=4096, sin=0 on every axis -> M = I.
   writeSVector(SVEC_PTR, 0, 0, 0);
   ctx.r[A0] = SVEC_PTR;
   ctx.r[A1] = MAT_PTR;
@@ -193,9 +193,9 @@ TEST_F(PsyqGteTest, RotMatrixZeroAnglesProducesIdentity) {
 }
 
 TEST_F(PsyqGteTest, RotMatrixZ90DegreesRotatesXIntoY) {
-  // r = (0, 0, 1024) — pure 90° Z rotation.
-  // Rz(90°) = [[0,-1,0],[1,0,0],[0,0,1]] → in 1.3.12 fixed point,
-  // 1.0 = 4096, sin(90°)=4096, cos(90°)=0 within rounding.
+  // r = (0, 0, 1024) -- pure 90 deg Z rotation.
+  // Rz(90 deg) = [[0,-1,0],[1,0,0],[0,0,1]] -> in 1.3.12 fixed point,
+  // 1.0 = 4096, sin(90 deg)=4096, cos(90 deg)=0 within rounding.
   writeSVector(SVEC_PTR, 0, 0, 1024);
   ctx.r[A0] = SVEC_PTR;
   ctx.r[A1] = MAT_PTR;
@@ -205,7 +205,7 @@ TEST_F(PsyqGteTest, RotMatrixZ90DegreesRotatesXIntoY) {
   //   [    0  -4096   0]
   //   [ 4096      0   0]
   //   [    0      0 4096]
-  // Allow ±1 tolerance for cos(90°) — std::cos may round to ±1 instead of 0.
+  // Allow +/-1 tolerance for cos(90 deg) -- std::cos may round to +/-1 instead of 0.
   EXPECT_NEAR(readMatShort(MAT_PTR, 0, 0), 0, 1);
   EXPECT_NEAR(readMatShort(MAT_PTR, 0, 1), -4096, 1);
   EXPECT_NEAR(readMatShort(MAT_PTR, 1, 0), 4096, 1);
@@ -266,9 +266,9 @@ TEST_F(PsyqGteTest, MulMatrixIdentityTimesIdentityIsIdentity) {
 }
 
 TEST_F(PsyqGteTest, MulMatrixDiagonalProductDoublesCorrectly) {
-  // m0 = diag(2,2,2)  (1.3.12 → 8192 each)
+  // m0 = diag(2,2,2)  (1.3.12 -> 8192 each)
   // m1 = diag(2,2,2)
-  // m0 = m0 × m1 = diag(4,4,4)  (in 1.3.12 → 16384 each)
+  // m0 = m0 x m1 = diag(4,4,4)  (in 1.3.12 -> 16384 each)
   int16_t two = 8192;
   for (int i = 0; i < 3; ++i)
     for (int j = 0; j < 3; ++j) {
@@ -316,7 +316,7 @@ TEST_F(PsyqGteTest, RotTransAddsTranslationVector) {
   writeMatrixRotIdentity(MAT_PTR);
   ctx.r[A0] = MAT_PTR;
   hle_libgte_SetRotMatrix(&ctx);
-  // TR = (10, 20, 30) — applied as (TR << 12) + R*v, then >>12 (sf=1).
+  // TR = (10, 20, 30) -- applied as (TR << 12) + R*v, then >>12 (sf=1).
   // For v = 0 the result is exactly TR.
   ctx.cop2c[GTE_TRX] = 10;
   ctx.cop2c[GTE_TRY] = 20;
@@ -338,7 +338,7 @@ TEST_F(PsyqGteTest, RotTransPersWritesOutputsAndDoesNotCrash) {
   // H = 256, OFX = OFY = 0, DQA = DQB = 0.  The point goes through
   // perspective division but all we verify here is that the wrapper:
   //   1. populates *sxy / *p / *flag without faulting,
-  //   2. returns a value (in $v0) — we don't pin its exact magnitude.
+  //   2. returns a value (in $v0) -- we don't pin its exact magnitude.
   writeMatrixRotIdentity(MAT_PTR);
   ctx.r[A0] = MAT_PTR;
   hle_libgte_SetRotMatrix(&ctx);
@@ -375,14 +375,14 @@ TEST_F(PsyqGteTest, RegisterLibgteCoversAllNewNames) {
   const char *names[] = {
       // 0.7
       "libgte_SetGeomOffset", "libgte_SetGeomScreen", "libgte_SetDQA",
-      // 1.C — control-register loaders
+      // 1.C -- control-register loaders
       "libgte_InitGeom",       "libgte_SetRotMatrix",   "libgte_SetTransMatrix",
       "libgte_SetLightMatrix", "libgte_SetColorMatrix",
       "libgte_SetBackColor",   "libgte_SetFarColor",
-      // 1.C — matrix builders
+      // 1.C -- matrix builders
       "libgte_RotMatrix",      "libgte_TransMatrix",    "libgte_ScaleMatrix",
       "libgte_MulMatrix",
-      // 1.C — per-vertex transforms
+      // 1.C -- per-vertex transforms
       "libgte_RotTrans",       "libgte_RotTransPers",
   };
   // Set up RAM so dispatch through any entry doesn't read from address 0.

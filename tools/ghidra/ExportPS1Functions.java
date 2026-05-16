@@ -1,4 +1,4 @@
-// ExportPS1Functions.java — Ghidra Script
+// ExportPS1Functions.java -- Ghidra Script
 //
 // Java equivalent of ExportPS1Functions.py.
 // Preferred when running via Ghidra's auto-analysis (headless mode) since

@@ -1,6 +1,6 @@
 #pragma once
 
-// ps1Analyzer — ELF Parser
+// ps1Analyzer -- ELF Parser
 // Loads PS1 ELF/PS-X EXE binaries and extracts sections, symbols, and raw data
 
 #include <cstdint>

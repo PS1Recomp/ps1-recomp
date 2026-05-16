@@ -45,18 +45,18 @@ protected:
 
 } // namespace
 
-// Direct HLE behaviour — libapi (BIOS A0/B0/C0 wrappers)
+// Direct HLE behaviour -- libapi (BIOS A0/B0/C0 wrappers)
 
 TEST_F(PsyqLibapiTest, InitHeapInitializesBiosHeap) {
   ctx.r[A0] = 0x80100000u;
   ctx.r[A1] = 0x10000u;
   hle_libapi_InitHeap(&ctx);
-  // BIOS A0:0x39 — verify the wrapper actually invoked it via $t1 latch.
+  // BIOS A0:0x39 -- verify the wrapper actually invoked it via $t1 latch.
   EXPECT_EQ(ctx.r[T1], 0x39u);
 }
 
 TEST_F(PsyqLibapiTest, OpenEventDispatchesB0_08) {
-  // The 0th openEvent returns id=0, so we cannot rely on v0 being non-zero —
+  // The 0th openEvent returns id=0, so we cannot rely on v0 being non-zero --
   // assert the dispatch via $t1 and re-open to make sure events_ grew.
   ctx.r[A0] = 0xF0000003u; // ROOT_COUNTER_VBLANK class
   ctx.r[A1] = 0x0002u;     // spec
@@ -185,7 +185,7 @@ TEST_F(PsyqLibapiTest, PadApiDispatchTable) {
 }
 
 TEST_F(PsyqLibapiTest, GpuCwDispatchesA0_49) {
-  ctx.r[A0] = 0xE1000400u; // GP0 tpage command (won't go anywhere — no GPU)
+  ctx.r[A0] = 0xE1000400u; // GP0 tpage command (won't go anywhere -- no GPU)
   hle_libapi_GPU_cw(&ctx);
   EXPECT_EQ(ctx.r[T1], 0x49u);
 }

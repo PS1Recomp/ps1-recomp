@@ -16,7 +16,7 @@ Run `production_line.py status` to see the table.
 Run `production_line.py next` to see the next pending item with detail.
 Run `production_line.py check <id>` to re-check a single item.
 
-The manifest is the source of truth — edit ITEMS below to add/remove
+The manifest is the source of truth -- edit ITEMS below to add/remove
 capabilities. Implementation files referenced here should land in tools/
 or the repo root (audit_notes/, ISSUES.md, progress/).
 """
@@ -37,7 +37,7 @@ class Item:
     level: int
     title: str
     desc: str
-    check_cmd: str        # shell command — exit 0 if delivered
+    check_cmd: str        # shell command -- exit 0 if delivered
     how_to: str = ""      # one-line hint for implementing
 
     def is_done(self) -> bool:
@@ -47,9 +47,9 @@ class Item:
 
 
 # Repository production line.  Order within a level is suggested execution
-# order — earlier items unblock later ones.
+# order -- earlier items unblock later ones.
 ITEMS: list[Item] = [
-    # Level 1 — Foundation: visual regression + per-game issue tracking
+    # Level 1 -- Foundation: visual regression + per-game issue tracking
     Item("audit-notes-dir", 1,
          "audit_notes/ directory",
          "Per-game directory for reference screenshots and reverse-eng notes",
@@ -69,7 +69,7 @@ ITEMS: list[Item] = [
          "mkdir progress && README explaining naming + retention"),
 
     Item("smoke-test-tool", 1,
-         "tools/smoke_test.py — VRAM diff regression",
+         "tools/smoke_test.py -- VRAM diff regression",
          "Run game N sec, snapshot VRAM, compare against reference PPM, exit 0/1",
          "test -x tools/smoke_test.py && tools/smoke_test.py --help >/dev/null 2>&1",
          "PPM-native diff (no PIL); --config --duration --ref --tolerance args"),
@@ -80,7 +80,7 @@ ITEMS: list[Item] = [
          "test -f audit_notes/crash/title_ref.ppm",
          "Boot Crash in PCSX-Redux, save VRAM dump, convert to PPM 1024x512"),
 
-    # Level 2 — Instrumentation: trace + measure
+    # Level 2 -- Instrumentation: trace + measure
     Item("hle-trace-doc", 2,
          "PS1_HLE_TRACE documented",
          "Existing PS1_HLE_TRACE=1 env var documented in CONTRIBUTING.md (recipe + sample output)",
@@ -88,13 +88,13 @@ ITEMS: list[Item] = [
          "Add 'Debugging HLE dispatch' section to CONTRIBUTING.md"),
 
     Item("trace-replay-tool", 2,
-         "tools/trace_replay.py — trace consumer",
+         "tools/trace_replay.py -- trace consumer",
          "Parse PS1_HLE_TRACE output, summarise: call counts, last N calls, hot loops",
          "test -x tools/trace_replay.py && tools/trace_replay.py --help >/dev/null 2>&1",
          "Read stderr trace; bucket by function name; flag tight loops (>N consecutive identical)"),
 
     Item("pace-measure-tool", 2,
-         "tools/pace_measure.py — fps/dma/vsync rate",
+         "tools/pace_measure.py -- fps/dma/vsync rate",
          "Measure VSync rate, DMA throughput, GPU command rate over a window (TombaRecomp's _mdec_pace.py analog)",
          "test -x tools/pace_measure.py",
          "Wrap run_game with --duration, compute rates, emit JSON"),
@@ -111,7 +111,7 @@ ITEMS: list[Item] = [
          "test -f tools/ghidra/mcp_server.py || test -f tools/ghidra/MCP_SETUP.md",
          "Install GhidraMCP plugin in tools/ghidra/, document setup, add to .mcp.json"),
 
-    # Level 3 — Scale: framework / game split
+    # Level 3 -- Scale: framework / game split
     Item("framework-pin-file", 3,
          "framework.pin protocol",
          "Format file (similar to TombaRecomp's psxrecomp-v4.pin) so satellite repos can pin our SHA",
@@ -162,7 +162,7 @@ def cmd_next(args: argparse.Namespace) -> int:
         print(f"  how to:      {it.how_to or '(see description)'}")
         print(f"  check cmd:   {it.check_cmd}")
         return 0
-    print("All items delivered — extend ITEMS in tools/production_line.py")
+    print("All items delivered -- extend ITEMS in tools/production_line.py")
     return 0
 
 

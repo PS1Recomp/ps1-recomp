@@ -1,4 +1,4 @@
-// Tests for ps1Runtime — CPU Context
+// Tests for ps1Runtime -- CPU Context
 // Validates the PS1 CPU register context structure
 
 #include <gtest/gtest.h>
@@ -34,11 +34,11 @@ TEST(CPUContext, R0AlwaysZero) {
 }
 
 TEST(CPUContext, StructLayout) {
-  // GPRs: 32 × 4 = 128 bytes
+  // GPRs: 32 x 4 = 128 bytes
   EXPECT_EQ(sizeof(CPUContext::r), 32 * sizeof(uint32_t));
-  // COP0: 16 × 4 = 64 bytes
+  // COP0: 16 x 4 = 64 bytes
   EXPECT_EQ(sizeof(CPUContext::cop0), 16 * sizeof(uint32_t));
-  // COP2: 32 × 4 × 2 = 256 bytes
+  // COP2: 32 x 4 x 2 = 256 bytes
   EXPECT_EQ(sizeof(CPUContext::cop2d), 32 * sizeof(uint32_t));
   EXPECT_EQ(sizeof(CPUContext::cop2c), 32 * sizeof(uint32_t));
 }
@@ -67,7 +67,7 @@ TEST(CPUContext, RegisterReadWrite) {
   ctx.r[SP] = ctx.r[SP] + static_cast<uint32_t>(-0x20);
   EXPECT_EQ(ctx.r[SP], 0x801FFFD0u);
 
-  // Simulate: jal → saves return address in $ra
+  // Simulate: jal -> saves return address in $ra
   ctx.r[RA] = 0x80050004;
   EXPECT_EQ(ctx.r[RA], 0x80050004u);
 
@@ -107,7 +107,7 @@ TEST(CPUContext, GteDataRegisters) {
   CPUContext ctx;
   ctx.reset();
 
-  // VXY0 (reg 0) — X,Y of vertex 0
+  // VXY0 (reg 0) -- X,Y of vertex 0
   ctx.cop2d[0] = 0x00640032; // X=100, Y=50 (packed)
   EXPECT_EQ(ctx.cop2d[0], 0x00640032u);
 
@@ -124,15 +124,15 @@ TEST(CPUContext, GteControlRegisters) {
   CPUContext ctx;
   ctx.reset();
 
-  // FLAG (reg 31) — overflow/saturation flags
+  // FLAG (reg 31) -- overflow/saturation flags
   ctx.cop2c[31] = 0x7F87E000;
   EXPECT_EQ(ctx.cop2c[31], 0x7F87E000u);
 
-  // RT11RT12 (reg 0) — rotation matrix
+  // RT11RT12 (reg 0) -- rotation matrix
   ctx.cop2c[0] = 0x10000000;
   EXPECT_EQ(ctx.cop2c[0], 0x10000000u);
 
-  // H (reg 26) — projection distance
+  // H (reg 26) -- projection distance
   ctx.cop2c[26] = 0x00000100;
   EXPECT_EQ(ctx.cop2c[26], 0x00000100u);
 }

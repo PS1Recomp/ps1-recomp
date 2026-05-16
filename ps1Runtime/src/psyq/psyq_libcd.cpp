@@ -45,7 +45,7 @@ constexpr uint32_t CDR_PORT3 = 0x1F801803; // IE / IF
 // Number of parameter bytes the controller consumes for each command.  Anything
 // missing here defaults to 0, which is correct for stat-only commands.  The
 // hardware FIFO is cleared after each command, so over-pushing a few extra
-// bytes on commands we haven't tabulated would be benign — but pushing fewer
+// bytes on commands we haven't tabulated would be benign -- but pushing fewer
 // than required would leave the controller waiting for parameters it never
 // sees (e.g. CdlSetloc without M:S:F).
 constexpr int paramCountForCmd(uint8_t com) {
@@ -101,7 +101,7 @@ void issueCommand(cdrom::CdromController *cdrom, uint8_t com) {
 // CdInit
 //
 // HLE replacement for the native PsyQ CdInit.  We deliberately bypass the
-// retry loop / B0:42 verification that "Init failed" comes from — the
+// retry loop / B0:42 verification that "Init failed" comes from -- the
 // hardware controller is trivially reset and INT3+INT2 are delivered
 // synchronously, so the state machine ends in cdSyncByte=2 and CdInit
 // always succeeds.
@@ -179,7 +179,7 @@ void hle_libcd_CdRead(recomp_context *ctx) {
       cdrom->writeRegister(CDR_PORT2, mode);
       cdrom->writeRegister(CDR_PORT1, CDL_SETMODE);
 
-      // CdlReadN — current Setloc target, no parameters.
+      // CdlReadN -- current Setloc target, no parameters.
       issueCommand(cdrom, CDL_READN);
     }
   }
@@ -191,7 +191,7 @@ void hle_libcd_CdRead(recomp_context *ctx) {
 //
 // The CDROM IRQ path (Bios::triggerCdromEvent) writes to
 // psyq_state().cdSyncByte / cdReadyByte atomically.  These helpers poll the
-// atomic with a 100 µs sleep between checks, draining BIOS callbacks per
+// atomic with a 100 us sleep between checks, draining BIOS callbacks per
 // iteration so any pending mode-0x1000 handler runs on the game thread.  The
 // 5 s deadline matches the previous Bios::waitForCdSync timeout.
 //
@@ -200,7 +200,7 @@ namespace {
 template <typename Atomic>
 uint8_t waitOnCdAtomic(Atomic &slot) {
   // Reset to "pending" so we observe the NEXT CDROM event, not the previous
-  // one — same semantics the prior cv-based path enforced explicitly.
+  // one -- same semantics the prior cv-based path enforced explicitly.
   slot.store(0, std::memory_order_release);
   auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
   while (std::chrono::steady_clock::now() < deadline) {
@@ -221,9 +221,9 @@ uint8_t waitOnCdAtomic(Atomic &slot) {
 // In our model every CdControl-style call is synchronous (the controller
 // fires INT3+INT2 inline), so by the time the game polls CdSync the state
 // is usually already CdlComplete (2).  When mode=0 the caller wants to
-// block until the next completion event — we poll psyq_state().cdSyncByte
-// cooperatively and surface the new value (2 or 5; 0 → timeout maps to
-// CdlNoIntr).  When mode≠0 (poll), we return Complete unconditionally
+// block until the next completion event -- we poll psyq_state().cdSyncByte
+// cooperatively and surface the new value (2 or 5; 0 -> timeout maps to
+// CdlNoIntr).  When mode!=0 (poll), we return Complete unconditionally
 // because synchronous CD command dispatch guarantees the prior command
 // already finished.
 //
@@ -262,8 +262,8 @@ void hle_libcd_CdSync(recomp_context *ctx) {
 //
 // Same shape as CdSync but for data-ready (INT1/INT4) interrupts.  Phase 2.3
 // migrated the ready byte into psyq_state().cdReadyByte; mode=0 (block) does
-// the cooperative poll, mode≠0 (poll) reads the current value (or returns
-// CdlDataReady if nothing has arrived — keeps callers that poll
+// the cooperative poll, mode!=0 (poll) reads the current value (or returns
+// CdlDataReady if nothing has arrived -- keeps callers that poll
 // non-blocking and then hit CdGetSector from deadlocking).
 //
 void hle_libcd_CdReady(recomp_context *ctx) {
@@ -338,7 +338,7 @@ void hle_libcd_CdControlF(recomp_context *ctx) {
 // Streaming reads land in game RAM via the BIOS HLE sector copy (driven
 // from triggerCdromEvent INT1 + drainPendingCallbacks), so by the time the
 // game asks CdGetSector for the buffer there's nothing buffered on our
-// side to hand back.  Returning 0 reports "not ready" — the typical caller
+// side to hand back.  Returning 0 reports "not ready" -- the typical caller
 // (XA streamer) falls through; the data callback on INT1 is the real path.
 //
 void hle_libcd_CdGetSector(recomp_context *ctx) {

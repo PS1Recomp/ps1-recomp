@@ -1,4 +1,4 @@
-// Tests for ps1Analyzer — PsyQ Signature Matcher
+// Tests for ps1Analyzer -- PsyQ Signature Matcher
 // Validates database, name matching, prefix classification, and stub assignment
 
 #include <gtest/gtest.h>
@@ -286,7 +286,7 @@ static void writeLE32(std::vector<uint8_t>& buf, size_t offset, uint32_t val) {
 // specific offsets relative to 0x80010000.
 static std::string createSyntheticELF(
         const std::string& path,
-        // (name, address) pairs — these are func_ style (no symbols)
+        // (name, address) pairs -- these are func_ style (no symbols)
         const std::vector<std::pair<std::string,uint32_t>>& funcs,
         // (address, instruction_word) pairs to inject
         const std::vector<std::pair<uint32_t,uint32_t>>& instrs) {
@@ -349,17 +349,17 @@ static std::string createSyntheticELF(
 
 // Note: the prior Pass3 byte-pattern detection tests
 // (Pass3DetectsSpuInitBySPURegWrite, Pass3DetectsCdInitByBIOSCallIndex)
-// were removed in Sessao 0.4 — the InstrPattern/ByteSig matcher is gone.
+// were removed in Sessao 0.4 -- the InstrPattern/ByteSig matcher is gone.
 // Equivalent coverage now lives in test_psyq_hash_matching.cpp, which uses
 // real SHA-256 hashes from psyq_signatures.toml.
 
 TEST(PsyQMatcher, Pass3DoesNotMatchUnrelatedFunction) {
-    // A function with only NOPs — should NOT match any signature
+    // A function with only NOPs -- should NOT match any signature
     constexpr uint32_t FUNC_ADDR = 0x80070000;
 
     createSyntheticELF("/tmp/ps1recomp_test_psyq_p3_nop.elf",
         {{"func_80070000", FUNC_ADDR}},
-        {} /* no injected instructions — all NOPs */);
+        {} /* no injected instructions -- all NOPs */);
 
     ElfParser elf;
     ASSERT_TRUE(elf.load("/tmp/ps1recomp_test_psyq_p3_nop.elf"));
