@@ -1,16 +1,22 @@
 #pragma once
-
-// ps1Runtime — GTE (Geometry Transform Engine) Runtime
-// Implements all 22 GTE commands with PS1-accurate fixed-point math.
-//
-// Key concepts:
-//   - Fixed-point 1.3.12 format for matrices/vectors (16-bit signed)
-//   - 1.31.0 (signed 32-bit) for translation vectors
-//   - MAC0-MAC3: 32-bit accumulators (no clamp on overflow)
-//   - IR0-IR3: 16-bit intermediate results (clamped)
-//   - FLAG register (cop2c[31]): overflow/underflow/divide flags
-//   - sf bit: shift fraction (>> 12 when sf=1)
-//   - lm bit: saturate negative to 0 when lm=1
+/**
+ * @file gte.h
+ * @brief PS1 GTE (Geometry Transform Engine) — 3D coprocessor on COP2.
+ *
+ * Implements all 22 GTE commands with PS1-accurate fixed-point math.
+ * Recompiled MIPS reaches the GTE through `cop2` register reads/writes and
+ * `cfc2`/`ctc2`/`mfc2`/`mtc2` plus the COP2 command word; ps1Recomp's
+ * `gte_emitter.cpp` maps each command to the matching helper here.
+ *
+ * Key conventions:
+ *   - Matrices/vectors are 1.3.12 fixed-point (signed 16-bit).
+ *   - Translation vectors are 1.31.0 (signed 32-bit).
+ *   - MAC0–MAC3 are 32-bit accumulators with no clamp on overflow.
+ *   - IR0–IR3 are 16-bit intermediate results, clamped.
+ *   - FLAG (`cop2c[31]`) carries overflow / underflow / divide bits.
+ *   - `sf` bit: shift-fraction (`>> 12` when set).
+ *   - `lm` bit: saturate negative IR values to 0 when set.
+ */
 
 #include <cstdint>
 #include <runtime/cpu_context.h>

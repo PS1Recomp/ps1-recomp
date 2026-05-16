@@ -1,7 +1,7 @@
 find_package(SDL2 REQUIRED)
 find_package(OpenGL REQUIRED)
 
-# ── Runtime Library (shared between exe and tests) ──────
+# Runtime library (shared between exe and tests)
 add_library(ps1Runtime_lib STATIC
     src/gte.cpp
     src/cdrom/cue_parser.cpp
@@ -48,7 +48,7 @@ target_link_libraries(ps1Runtime_lib
     PUBLIC fmt::fmt
 )
 
-# ── Generate Recompiled Output (Phase 5 E2E Pipeline) ────
+# Recompiled output generation (manual; see CONTRIBUTING.md)
 # Auto-generation from spinningCube is disabled when using custom game configs.
 # To regenerate manually:
 #   cd build && ./ps1Recomp/ps1Recomp crash_config.toml ../ps1Runtime/src/recompiled_out.cpp
@@ -62,7 +62,7 @@ target_link_libraries(ps1Runtime_lib
 #     COMMENT "Auto-generating recompiled_out.cpp via ps1Analyzer and ps1Recomp"
 # )
 
-# ── Runtime Executable ──────────────────────────────────
+# Runtime executable
 # PS1RECOMP_USE_STUB: force stub mode even when recompiled_out.cpp exists.
 # Useful for CI pipelines and contributors who don't have a game ROM.
 option(PS1RECOMP_USE_STUB "Use stub recompiled_out instead of real game" OFF)

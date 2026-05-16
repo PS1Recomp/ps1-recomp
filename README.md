@@ -27,7 +27,7 @@ ps1Runtime   →  Native PC executable (SDL2 + OpenGL)
 | **ps1Recomp** | `ps1Recomp/` | Decodes MIPS R3000A instructions and emits literal C++ translation (1:1 per instruction), handles GTE coprocessor and jump tables |
 | **ps1Runtime** | `ps1Runtime/` | Simulates PS1 hardware: BIOS HLE, GPU (OpenGL 3.3), SPU (SDL2 audio), CD-ROM, DMA, GTE, MDEC, Timers, Input |
 | **ps1Interface** | `ps1Interface/` | GUI studio for loading ELFs, exploring functions, editing configs, and previewing recompiled C++ (ImGui + SDL2) |
-| **ps1Test** | `ps1Test/` | 555 unit + integration tests covering all runtime subsystems |
+| **ps1Test** | `ps1Test/` | 557 unit + integration tests covering all runtime subsystems |
 
 ## Project Structure
 
@@ -57,7 +57,7 @@ ps1-recomp/
 │       ├── StudioState.cpp    ps1Analyzer backend integration
 │       ├── GUI.cpp            Panel rendering and keyboard shortcuts
 │       └── ui/StyleManager.cpp
-├── ps1Test/           Unit tests (GTest): 386 tests across all subsystems
+├── ps1Test/           Unit tests (GTest): 557 tests across all subsystems
 ├── third_party/       External dependencies: ELFIO, toml11, fmt, googletest
 ├── tools/
 │   ├── extract_psyq_signatures.py   Build the PsyQ signature DB from PsyQ SDK .LIB files
@@ -238,7 +238,7 @@ emulator** — it is a recompiler whose architecture works end-to-end, plus a ru
 covers enough of the PS1 hardware to boot real games. The current state, honestly:
 
 - **Pipeline**: stable. Analyzer → recompiler → runtime → native binary works for any PS1
-  ELF/EXE. Stub-mode build (no ROM) is the CI baseline (555/555 tests green).
+  ELF/EXE. Stub-mode build (no ROM) is the CI baseline (557/557 tests green).
 - **Rayman (USA)**: was the primary validation target through Phases 0–3. With prior
   imperative HLE patches it ran at ~59fps with correct VRAM content. Those patches were
   retired during open-source preparation; the regen-fresh path now relies entirely on the

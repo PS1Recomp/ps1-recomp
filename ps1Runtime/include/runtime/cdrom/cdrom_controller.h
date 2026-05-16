@@ -1,8 +1,17 @@
 #pragma once
-
-// ps1Runtime — CD-ROM Controller
-// PS1 CD-ROM hardware: command FIFO, response FIFO, sector buffer, state
-// machine
+/**
+ * @file cdrom_controller.h
+ * @brief PS1 CD-ROM drive: command FIFO, response FIFO, sector buffer, state machine.
+ *
+ * `ps1::cdrom::CdromController` implements the side of the CD-ROM that the
+ * game's libcd code talks to via I/O registers at `0x1F801800`-`0x1F801803`.
+ * Disc data is sourced from `ps1::cdrom::VirtualFs` (CUE/BIN or ISO 9660).
+ *
+ * Threading: `writeRegister`/`readRegister` run on the game thread; `tick`
+ * runs on the SDL render thread.  IRQs raised from either thread are
+ * funnelled through `interruptCallback` and ultimately queued for delivery
+ * on the game thread by `Bios::queueCdromEvent` (Phase 3.3).
+ */
 
 #include <array>
 #include <cstdint>
@@ -35,7 +44,13 @@ enum CdromInt : uint8_t {
   INT_ERROR = 5
 };
 
-// CD-ROM Controller
+/**
+ * @brief PS1 CD-ROM drive state machine + register interface.
+ *
+ * Owns the command/parameter/response FIFOs, the active sector buffer, and
+ * the read/seek/play state machine.  Attach a `VirtualFs` before issuing
+ * any read commands; without one, reads return "no disc".
+ */
 class CdromController {
 public:
   CdromController();

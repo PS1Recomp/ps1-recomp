@@ -139,7 +139,7 @@ ps1Analyzer/    ELF parsing, function detection, PsyQ signature matching
 ps1Recomp/      MIPS R3000A → C++ translation, jump table detection, GTE emission
 ps1Runtime/     PS1 hardware simulation (GPU, BIOS HLE, SPU, DMA, CD-ROM, GTE, MDEC…)
 ps1Interface/   Optional GUI studio (ImGui) — build with -DPS1RECOMP_BUILD_INTERFACE=ON
-ps1Test/        Google Test suite (63 files, 555 tests)
+ps1Test/        Google Test suite (63 files, 557 tests)
 tools/          Python automation: PsyQ signature extraction, diagnostics, Ghidra integration
 configs/        Per-game TOML configs (gitignored except examples)
 third_party/    Git submodules (ELFIO, toml11, fmt, googletest)

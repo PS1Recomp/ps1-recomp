@@ -267,7 +267,7 @@ ps1-recomp/
 │       ├── main_host.cpp   game loop, VBlank thread, SDL2 host
 │       └── recompiled_out{,_stub}.cpp   generated game code
 ├── ps1Interface/       optional ImGui studio (off by default)
-├── ps1Test/            555 Google Test cases
+├── ps1Test/            557 Google Test cases
 │   ├── analyzer/
 │   ├── recompiler/
 │   ├── runtime/

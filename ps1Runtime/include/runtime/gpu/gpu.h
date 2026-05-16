@@ -1,4 +1,17 @@
 #pragma once
+/**
+ * @file gpu.h
+ * @brief PS1 GPU command processor, 1 MB VRAM, and OpenGL renderer surface.
+ *
+ * `ps1::gpu::GPU` ingests the GP0 (rendering) and GP1 (display control)
+ * command streams written by the game (directly or via DMA channel 2), keeps
+ * the 1024×512 VRAM in sync, and exposes the active display region for the
+ * SDL2/OpenGL host to upload as a texture.
+ *
+ * Threading: the game thread writes GP0/GP1 and DMA; the SDL render thread
+ * reads `getDisplayVRAM()` after `snapshotDisplayBuffer()` is called from
+ * the VBlank tick on the game thread.  Internal state is single-writer.
+ */
 
 #include <cstdint>
 #include <deque>
@@ -31,6 +44,13 @@ struct TexCoord {
   uint8_t v;
 };
 
+/**
+ * @brief PS1 GPU state machine + 1024×512 VRAM + draw/display environment.
+ *
+ * Owns the entire GPU side of the system: GP0/GP1 command parsing, primitive
+ * rasterisation into VRAM, drawing-area and texture-window registers, and
+ * the per-frame display-region snapshot consumed by the OpenGL renderer.
+ */
 class GPU {
 public:
   GPU();

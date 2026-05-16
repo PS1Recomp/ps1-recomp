@@ -1,4 +1,19 @@
 #pragma once
+/**
+ * @file bios.h
+ * @brief PS1 BIOS HLE — A0/B0/C0 syscall dispatch, event system, callback queue.
+ *
+ * `ps1::bios::Bios` is the High-Level Emulation of the PS1 kernel.  The
+ * runtime contains no original Sony code; instead the three syscall tables
+ * (A, B, C) are implemented as native C++ in `syscall_a.cpp`, `syscall_b.cpp`
+ * and `syscall_c.cpp`, with file I/O, heap, and event-system helpers split
+ * into their own translation units.
+ *
+ * Threading: most state is touched only from the game thread.  CDROM IRQs
+ * arrive from the SDL render thread and are pushed onto a queue
+ * (`queueCdromEvent`) that the game thread drains via
+ * `drainPendingCallbacks` — see Phase 3.3 for the rationale.
+ */
 
 #include "runtime/bios/event_system.h"
 #include "runtime/bios/file_io.h"
@@ -30,6 +45,14 @@ class DMA;
 
 namespace ps1::bios {
 
+/**
+ * @brief HLE replacement for the PS1 kernel — syscall dispatch + events + callbacks.
+ *
+ * Constructed once per process and held by `main_host.cpp`.  Hardware
+ * subsystems (GPU/CDROM/Input/DMA) are attached after construction via
+ * `setGPU`/`setCdromController`/etc., so the BIOS can drive them when a
+ * recompiled syscall lands on its table.
+ */
 class Bios {
 public:
   Bios(recomp_context &ctx, cdrom::VirtualFs &fs, Memory &mem);
