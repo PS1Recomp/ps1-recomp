@@ -120,15 +120,19 @@ std::string InstructionEmitter::emitALU(const Instruction &inst) const {
   auto rt = reg(inst.rt);
 
   switch (inst.id) {
-  // R-type ALU
+  // R-type ALU — emit as unsigned to avoid C++ signed-overflow UB.
+  // MIPS ADDU/SUBU are explicitly modular; PSY-Q ADD/SUB also rely on
+  // modular wrap in practice (no overflow trap delivered to PSX user code).
+  // Casting through uint32_t makes the wraparound well-defined; the trailing
+  // `(int32_t)` cast is a no-op bit reinterpret on a 2's-complement target.
   case InstrId::ADD:
   case InstrId::ADDU:
     return assignReg(inst.rd,
-                     fmt::format("(int32_t)({} + {})", s32(rs), s32(rt)));
+                     fmt::format("(int32_t)({} + {})", u32(rs), u32(rt)));
   case InstrId::SUB:
   case InstrId::SUBU:
     return assignReg(inst.rd,
-                     fmt::format("(int32_t)({} - {})", s32(rs), s32(rt)));
+                     fmt::format("(int32_t)({} - {})", u32(rs), u32(rt)));
   case InstrId::AND:
     return assignReg(inst.rd, fmt::format("{} & {}", rs, rt));
   case InstrId::OR:
@@ -144,11 +148,16 @@ std::string InstructionEmitter::emitALU(const Instruction &inst) const {
     return assignReg(inst.rd,
                      fmt::format("({} < {}) ? 1 : 0", u32(rs), u32(rt)));
 
-  // I-type ALU
+  // I-type ALU — same modular-wrap reasoning as ADD/ADDU above.
+  // Cast `inst.imm16` (signed 16-bit) to int32_t first so the sign-extension
+  // happens before the unsigned conversion; the immediate is treated as a
+  // signed offset by every PSY-Q caller that uses ADDIU.
   case InstrId::ADDI:
   case InstrId::ADDIU:
-    return assignReg(inst.rt, fmt::format("(int32_t)({} + {})",
-                                          s32(reg(inst.rs)), inst.imm16));
+    return assignReg(inst.rt,
+                     fmt::format("(int32_t)({} + (uint32_t)(int32_t){})",
+                                 u32(reg(inst.rs)),
+                                 static_cast<int32_t>(inst.imm16)));
   case InstrId::ANDI:
     return assignReg(inst.rt, fmt::format("{} & 0x{:04X}", reg(inst.rs),
                                           static_cast<uint16_t>(inst.imm16)));
