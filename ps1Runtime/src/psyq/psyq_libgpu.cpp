@@ -277,6 +277,27 @@ void psyq_register_libgpu_extras() {
   psyq_register("libgs_GsDefDispBuff",      &hle_libgs_GsDefDispBuff);
   psyq_register("libgs_GsSetWorkBase",      &hle_libgs_GsSetWorkBase);
   psyq_register("libgs_GsSortClear",        &hle_libgs_GsSortClear);
+
+  // Crash Bandicoot extras: bit-pack helpers psyz/decomp/src/libgpu/prim.c
+  // shows are trivial.  GetTPage packs (tp,abr,x,y) into a u_short; SetDrawMode
+  // sets the first two words of a DR_MODE struct (mode word + tex window).
+  psyq_register("libgpu_GetTPage", [](recomp_context *ctx) {
+    int tp  = static_cast<int>(ctx->r[A0]);
+    int abr = static_cast<int>(ctx->r[A1]);
+    int x   = static_cast<int>(ctx->r[A2]);
+    int y   = static_cast<int>(ctx->r[A3]);
+    uint32_t r = ((tp & 3) << 7) | ((abr & 3) << 5) |
+                 ((y & 0x100) >> 4) | ((x & 0x3FF) >> 6) | ((y & 0x200) << 2);
+    ctx->r[V0] = r & 0xFFFFu;
+  });
+  psyq_register("libgpu_SetDrawMode", [](recomp_context *ctx) {
+    // DR_MODE { u_long tag; u_long code[2]; } — set len=2, codes are GP0 cmds.
+    uint32_t p = ctx->r[A0];
+    if (p == 0) return;
+    ctx->mem->write8(p + 3, 2); // length in tag's high byte
+    ctx->mem->write32(p + 4, 0xE1000000u); // GP0(0xE1) draw mode placeholder
+    ctx->mem->write32(p + 8, 0xE2000000u); // GP0(0xE2) tex window placeholder
+  });
 }
 
 } // namespace ps1::psyq

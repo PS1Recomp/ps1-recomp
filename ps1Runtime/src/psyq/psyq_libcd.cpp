@@ -417,6 +417,12 @@ void psyq_register_libcd() {
   psyq_register("libcd_CdMix",           &hle_libcd_CdMix);
   psyq_register("libcd_CdReadBreak",     &hle_libcd_CdReadBreak);
   psyq_register("libcd_StSetMask",       &hle_libcd_StSetMask);
+  // CD_datasync internal: blocking sync used by Crash boot path.  Our HLE
+  // delivers sectors synchronously via the BIOS HLE-sector-copy path, so
+  // returning 0 (= "ready, no error") satisfies the caller's check.
+  psyq_register("libcd_CD_datasync", [](recomp_context *ctx) {
+    ctx->r[V0] = 0;
+  });
 }
 
 } // namespace ps1::psyq
