@@ -722,6 +722,16 @@ int main(int argc, char *argv[]) {
     result_cpp += "    return (it != recomp_func_table.end()) ? it->second : nullptr;\n";
     result_cpp += "}\n\n";
 
+    // Override registration: lets main_host.cpp replace any function entry
+    // with a C++ stub.  Used for env-gated per-game patches (e.g. Crash
+    // PS1_SKIP_31BF8) where a single MIPS function needs to be NOP'd
+    // without modifying the generated source.  Forward-declared in
+    // `runtime/ps1_runtime_macros.h`-adjacent headers.
+    result_cpp += "void recomp_register_override(uint32_t addr, recomp_func_t fn) {\n";
+    result_cpp += "    if (!recomp_table_ready) recomp_init_dispatch_table();\n";
+    result_cpp += "    recomp_func_table[addr] = fn;\n";
+    result_cpp += "}\n\n";
+
     // Main dispatch function
     result_cpp += "void recomp_dispatch(uint8_t* rdram, recomp_context* ctx, "
                   "uint32_t addr) {\n";

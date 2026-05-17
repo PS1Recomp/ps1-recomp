@@ -413,6 +413,20 @@ int main(int argc, char *argv[]) {
   recomp_init_dispatch_table();
   fmt::print("[Dispatch] Table initialized.\n");
 
+  // Per-game function overrides (env-gated)
+  // Crash Bandicoot SLUS-00005 hangs inside `func_80031BF8` -> `func_80031EB4`
+  // -> ... -> `func_80015978` (hash-bucket walk @ 0x8005C530 with no chain
+  // terminator -- the table is populated by GOOL bytecode our runtime does
+  // not yet interpret).  Enabling `PS1_SKIP_31BF8=1` short-circuits that
+  // call so the GTE setup loop in `func_80015B58` can complete and the
+  // game can reach its main render loop.  See ISSUES.md #1.
+  if (const char *e = std::getenv("PS1_SKIP_31BF8"); e && *e && *e != '0') {
+    recomp_register_override(0x80031BF8, [](uint8_t *, recomp_context *ctx) {
+      ctx->r[ps1::V0] = 0;
+    });
+    fmt::print("[Override] PS1_SKIP_31BF8 active: func_80031BF8 -> NOP\n");
+  }
+
 
   // BSS mirror addresses (per-game polling slots)
   // Phase 2.2 retired the per-game VBlank counter BSS slot in favor of
