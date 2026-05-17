@@ -452,6 +452,24 @@ void Bios::triggerVBlankEvent() {
 }
 
 void Bios::drainPendingCallbacks() {
+  // Diagnostic — env-gated via `PS1_DRAIN_TRACE=N` (period). Prints
+  // every Nth entry + every Nth exit so we can tell whether the
+  // function is being re-entered, returns cleanly, or hangs inside.
+  // Used to debug the Crash Bandicoot iter-3+ stall (ISSUES.md #1).
+  static const long period = []() {
+    const char *e = std::getenv("PS1_DRAIN_TRACE");
+    return (e && *e) ? std::strtol(e, nullptr, 0) : 0;
+  }();
+  static std::atomic<long> enter{0};
+  static std::atomic<long> exit{0};
+  if (period > 0) {
+    long n = enter.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (n % period == 0) {
+      fmt::print(stderr, "[DRAIN] enter#{} (exits={})\n",
+                 n, exit.load(std::memory_order_relaxed));
+    }
+  }
+
   // Drain any cross-thread CDROM IRQs first -- they may set
   // cdIntPending_ / cdExceptionPending_ / event-system state, which the
   // rest of this method then consumes.  Phase 3.3.
@@ -479,6 +497,12 @@ void Bios::drainPendingCallbacks() {
         BIOS_LOG("[VBLANK-HLE] Firing deferred customExceptionExit\n");
       }
       triggerCustomException();
+      if (period > 0) {
+        long n = exit.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (n % period == 0) {
+          fmt::print(stderr, "[DRAIN] exit#{} via customException\n", n);
+        }
+      }
       return; // longjmp fired -- game handles it
     }
   }
@@ -572,6 +596,12 @@ void Bios::drainPendingCallbacks() {
         cdrom_->stopReading();
         cdIntPending_.store(0, std::memory_order_release);
       }
+    }
+  }
+  if (period > 0) {
+    long n = exit.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (n % period == 0) {
+      fmt::print(stderr, "[DRAIN] exit#{}\n", n);
     }
   }
 }
