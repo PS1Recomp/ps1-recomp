@@ -242,15 +242,20 @@ covers enough of the PS1 hardware to boot real games. The current state, honestl
 - **Rayman (USA)**: was the primary validation target through Phases 0-3. With prior
   imperative HLE patches it ran at ~59fps with correct VRAM content. Those patches were
   retired during open-source preparation; the regen-fresh path now relies entirely on the
-  PsyQ hash-based HLE coverage and has not been re-validated end-to-end since the patch
-  removal.
-- **Crash Bandicoot 1 (USA)**: experimental. Boots through PsyQ init, then stalls in a
-  game-side hash table walk; a signature-matcher bug for short libcd wrappers is the next
-  known blocker (see `PLANNING.md` Phase 4 notes).
+  PsyQ hash-based HLE coverage and has a brightness gap (see `ISSUES.md` #2 -- not
+  re-validated end-to-end since patch removal).
+- **Crash Bandicoot 1 (USA)**: experimental but boots. Reaches the main game loop and
+  runs the full PsyQ render pipeline (`DrawOTag` ~435 calls/sec, `MulMatrix` ~870/sec,
+  `VSync` ~58 fps) with an env-gated workaround (`PS1_SKIP_31BF8=1`) that NOPs a GOOL
+  state machine call which would otherwise hang in an unpopulated hash table walk.
+  Permanent fix (porting the NS chunk subsystem) is the next roadmap item in
+  `PLANNING.md`. The bypass keeps the engine running so we can study the next layer
+  while the proper fix is in progress.
 - **Other games**: not exercised yet. The architecture is meant to be game-agnostic; adding
   a new title is mostly a matter of providing a TOML config and running the analyzer.
 
 For an honest, gap-by-gap account of what works and what does not, see `ARCHITECTURE.md`.
+For specific game blockers and verification metrics, see `ISSUES.md`.
 
 ## License
 
