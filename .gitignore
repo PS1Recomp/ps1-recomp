@@ -46,9 +46,6 @@ __pycache__/
 # Local artifacts
 .venv/
 *.AppImage
-ItaloDellAreti.pdf
-
-# AI session state (not for upstream)
 .claude/
 .mcp.json
 
