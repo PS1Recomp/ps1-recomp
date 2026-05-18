@@ -5,6 +5,19 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# AddressSanitizer (debug aid — heap/stack/global overflow detection).
+# Enable with: cmake -B build-asan -DPS1RECOMP_ASAN=ON
+# Run with:    ASAN_OPTIONS=detect_leaks=0 ./build-asan/ps1Runtime/ps1Runtime ...
+# Cost: ~2x runtime, ~3x memory.  Catches the precise file:line where a
+# heap corruption originates — the right tool for "free(): corrupted
+# unsorted chunks" type failures (see ISSUES.md #1 for context).
+option(PS1RECOMP_ASAN "Build with AddressSanitizer + UBSan" OFF)
+if(PS1RECOMP_ASAN)
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address,undefined)
+    message(STATUS "ASan + UBSan enabled — runtime will be ~2x slower")
+endif()
+
 # Third-party libraries
 add_subdirectory(third_party/ELFIO)
 add_subdirectory(third_party/toml11)
