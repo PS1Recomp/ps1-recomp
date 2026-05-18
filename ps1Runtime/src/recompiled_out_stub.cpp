@@ -17,3 +17,8 @@ void recomp_init_dispatch_table() {
 void recomp_dispatch(uint8_t* /*rdram*/, recomp_context* /*ctx*/, uint32_t /*addr*/) {
     // no-op: no game loaded
 }
+
+using recomp_func_t = void (*)(uint8_t*, recomp_context*);
+void recomp_register_override(uint32_t /*addr*/, recomp_func_t /*fn*/) {
+    // no-op: no game loaded, overrides have nothing to override
+}
