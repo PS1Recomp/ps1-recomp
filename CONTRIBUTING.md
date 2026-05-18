@@ -132,11 +132,64 @@ and do not require a game ROM.
 
 ---
 
+## Debugging HLE Dispatch
+
+When a game stalls or behaves unexpectedly, the first question is usually
+"which PsyQ function did it call last, and with what arguments?". Two env
+vars in the runtime help answer that.
+
+### `PS1_HLE_TRACE=1`
+
+Logs every `psyq_dispatch` call to stderr, including the first three argument
+registers and the return address:
+
+```
+[PSYQ] libcd_CdInit (a0=00000000 a1=00000000 a2=00000000 RA=8005C53C)
+[PSYQ] libapi_HookEntryInt (a0=801FFEE0 a1=00000044 a2=00000000 RA=80044A18)
+[PSYQ] libetc_SetIntrMask (a0=00000000 a1=00000044 a2=00000000 RA=80044A24)
+...
+```
+
+Use it when a game hangs silently — the last line tells you which HLE was
+running when control didn't return. Output volume can be high for the
+main loop; pipe to a file and analyse with `tools/trace_replay.py`.
+
+```bash
+PS1_HLE_TRACE=1 ./build/ps1Runtime/ps1Runtime --config configs/crash.toml \
+  2> /tmp/crash_trace.log
+
+tools/trace_replay.py /tmp/crash_trace.log --tail 20
+```
+
+### `PS1_HLE_PERMISSIVE=1`
+
+When a PsyQ function is identified by hash but has no native HLE
+implementation registered, the default behaviour is `abort()`. With
+`PS1_HLE_PERMISSIVE=1` the runtime logs `[PSYQ] WARN: function 'X' missing
+HLE — NOP` once per name and continues. Useful while incrementally adding
+new HLE coverage — the game proceeds far enough to surface the *next*
+missing function.
+
+### Both together
+
+For initial bring-up of a new game, run with both set:
+
+```bash
+PS1_HLE_TRACE=1 PS1_HLE_PERMISSIVE=1 \
+  ./build/ps1Runtime/ps1Runtime --config configs/<game>.toml \
+  2> /tmp/<game>_trace.log
+```
+
+The combination tells you (a) which functions are called in order and
+(b) which ones still need an HLE body.
+
+---
+
 ## Project Structure
 
 ```
 ps1Analyzer/    ELF parsing, function detection, PsyQ signature matching
-ps1Recomp/      MIPS R3000A → C++ translation, jump table detection, GTE emission
+ps1Recomp/      MIPS R3000A -> C++ translation, jump table detection, GTE emission
 ps1Runtime/     PS1 hardware simulation (GPU, BIOS HLE, SPU, DMA, CD-ROM, GTE, MDEC…)
 ps1Interface/   Optional GUI studio (ImGui) — build with -DPS1RECOMP_BUILD_INTERFACE=ON
 ps1Test/        Google Test suite (63 files, 557 tests)
@@ -145,7 +198,7 @@ configs/        Per-game TOML configs (gitignored except examples)
 third_party/    Git submodules (ELFIO, toml11, fmt, googletest)
 ```
 
-The pipeline flows: `ps1Analyzer` → `ps1Recomp` → `ps1Runtime`.
+The pipeline flows: `ps1Analyzer` -> `ps1Recomp` -> `ps1Runtime`.
 
 ---
 
