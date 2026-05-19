@@ -4,6 +4,7 @@
 
 #include "runtime/psyq/psyq_hle.h"
 #include "runtime/cpu_context.h"
+#include "runtime/emuptr.h"
 #include "runtime/memory.h"
 #include "runtime/psyq/psyq_state.h"
 #include <gtest/gtest.h>
@@ -30,6 +31,7 @@ protected:
         mem.reset();
         ctx.reset();
         ctx.mem = &mem;
+        emuptr_set_ram(mem.ramPtr());
         ctx.r[SP] = 0x801FF000; // stack pointer
         gp0Words.clear();
         gp1Words.clear();
@@ -48,6 +50,7 @@ protected:
 
     void TearDown() override {
         psyq_state().reset();
+        emuptr_set_ram(nullptr);
     }
 };
 

@@ -20,6 +20,7 @@
 #include <runtime/cdrom/virtual_fs.h>
 #include <runtime/cpu_context.h>
 #include <runtime/dma/dma.h>
+#include <runtime/emuptr.h>
 #include <runtime/gpu/gpu.h>
 #include <runtime/gpu/renderer_opengl.h>
 #include <runtime/input/input.h>
@@ -170,6 +171,10 @@ int main(int argc, char *argv[]) {
   ps1::mdec::MDEC mdec;
   ps1::cdrom::CdromController cdromCtrl;
   ps1::cdrom::VirtualFs fs;
+
+  // Bind emuptr<T> to this Memory instance so hand-written HLE bodies
+  // (psyq_hle.cpp etc.) resolve PS1 addresses through the live RAM buffer.
+  ps1::emuptr_set_ram(memory.ramPtr());
 
   // Wire Memory I/O routing
   memory.setGPU(&gpu);

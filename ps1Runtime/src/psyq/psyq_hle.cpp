@@ -1,4 +1,5 @@
 #include "runtime/psyq/psyq_hle.h"
+#include "runtime/emuptr.h"
 #include "runtime/memory.h"
 #include "runtime/psyq/psyq_state.h"
 #include <chrono>
@@ -190,30 +191,41 @@ void hle_DrawOTag(recomp_context *ctx) {
 //     +17 isrgb24  (uint8)  24bpp enable
 //     +18 pad[2]
 //
+namespace {
+struct DispEnv {
+  int16_t disp_x, disp_y;     // 0, 2 -- VRAM display area origin
+  int16_t disp_w, disp_h;     // 4, 6
+  int16_t screen_x, screen_y; // 8, 10
+  int16_t screen_w, screen_h; // 12, 14
+  uint8_t isinter;            // 16
+  uint8_t isrgb24;            // 17
+  uint8_t pad[2];             // 18, 19
+};
+static_assert(sizeof(DispEnv) == 20, "PsyQ DispEnv is 20 bytes");
+} // namespace
+
 void hle_SetDefDispEnv(recomp_context *ctx) {
-  uint32_t envPtr = ctx->r[A0];
-  int16_t  x  = static_cast<int16_t>(ctx->r[A1]);
-  int16_t  y  = static_cast<int16_t>(ctx->r[A2]);
-  int16_t  w  = static_cast<int16_t>(ctx->r[A3]);
+  ps1::emuptr<DispEnv> env(ctx->r[A0]);
+  int16_t x = static_cast<int16_t>(ctx->r[A1]);
+  int16_t y = static_cast<int16_t>(ctx->r[A2]);
+  int16_t w = static_cast<int16_t>(ctx->r[A3]);
   // h is on the stack (5th argument)
-  int16_t  h  = static_cast<int16_t>(ctx->mem->read32(ctx->r[SP] + 16));
+  int16_t h = static_cast<int16_t>(ctx->mem->read32(ctx->r[SP] + 16));
 
-  ctx->mem->write16(envPtr +  0, static_cast<uint16_t>(x));
-  ctx->mem->write16(envPtr +  2, static_cast<uint16_t>(y));
-  ctx->mem->write16(envPtr +  4, static_cast<uint16_t>(w));
-  ctx->mem->write16(envPtr +  6, static_cast<uint16_t>(h));
-  // screen rect defaults to full display
-  ctx->mem->write16(envPtr +  8, 0);
-  ctx->mem->write16(envPtr + 10, 0);
-  ctx->mem->write16(envPtr + 12, static_cast<uint16_t>(w));
-  ctx->mem->write16(envPtr + 14, static_cast<uint16_t>(h));
-  // flags: non-interlaced, RGB15
-  ctx->mem->write8(envPtr + 16, 0); // isinter
-  ctx->mem->write8(envPtr + 17, 0); // isrgb24
-  ctx->mem->write8(envPtr + 18, 0);
-  ctx->mem->write8(envPtr + 19, 0);
+  env->disp_x   = x;
+  env->disp_y   = y;
+  env->disp_w   = w;
+  env->disp_h   = h;
+  env->screen_x = 0;
+  env->screen_y = 0;
+  env->screen_w = w;
+  env->screen_h = h;
+  env->isinter  = 0; // non-interlaced
+  env->isrgb24  = 0; // RGB15
+  env->pad[0]   = 0;
+  env->pad[1]   = 0;
 
-  ctx->r[V0] = envPtr;
+  ctx->r[V0] = static_cast<uint32_t>(env);
 }
 
 // PutDispEnv
