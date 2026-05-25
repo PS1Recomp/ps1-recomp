@@ -300,9 +300,9 @@ std::string InstructionEmitter::emitStore(const Instruction &inst) const {
   case InstrId::SW:
     return fmt::format("MEM_WRITE32(ctx, {} + {}, {});", s32(base), offset, rt);
   case InstrId::SWL:
-    return fmt::format("DO_SWL(ctx, {} + {}, {});", s32(base), offset, rt);
+    return fmt::format("DO_SWL(ctx, {}, {} + {});", rt, s32(base), offset);
   case InstrId::SWR:
-    return fmt::format("DO_SWR(ctx, {} + {}, {});", s32(base), offset, rt);
+    return fmt::format("DO_SWR(ctx, {}, {} + {});", rt, s32(base), offset);
   default:
     return fmt::format("// UNKNOWN STORE: {}", MipsDecoder::instrName(inst.id));
   }

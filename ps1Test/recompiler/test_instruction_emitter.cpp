@@ -180,6 +180,23 @@ TEST(InstructionEmitter, UnalignedLoadStore) {
   EXPECT_NE(code.find("DO_LWR"), std::string::npos);
 }
 
+// SWL/SWR signature is (ctx, rt, addr) -- same convention as DO_LWL/LWR.
+// Regression for a swapped-args emitter bug that wrecked CdIntToPos output
+// in Crash Bandicoot (LBA 18 -> BCD 0x105731 instead of 0x000218).
+TEST(InstructionEmitter, UnalignedStoreArgOrder) {
+  auto emitter = makeEmitter();
+  // SWL $v0, 75($sp) -- opcode 0x2A
+  auto swl = emitter.emitInstruction(
+      MipsDecoder::decode(encI(0x2A, 29, 2, 75)), 0);
+  EXPECT_NE(swl.find("DO_SWL(ctx, ctx->r2"), std::string::npos)
+      << "DO_SWL must receive rt before addr; got: " << swl;
+  // SWR $v0, 72($sp) -- opcode 0x2E
+  auto swr = emitter.emitInstruction(
+      MipsDecoder::decode(encI(0x2E, 29, 2, 72)), 0);
+  EXPECT_NE(swr.find("DO_SWR(ctx, ctx->r2"), std::string::npos)
+      << "DO_SWR must receive rt before addr; got: " << swr;
+}
+
 // Branch Tests
 
 TEST(InstructionEmitter, BranchBEQ) {
