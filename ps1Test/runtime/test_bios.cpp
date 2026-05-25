@@ -49,14 +49,14 @@ TEST_F(BiosTest, StrcmpReturnsCorrectly) {
   writeString(0x80000200, "banana");
 
   // Test equal
-  ctx.r[T1] = 0x16; // strcmp A0
+  ctx.r[T1] = 0x17; // strcmp A0
   ctx.r[A0] = 0x80000000;
   ctx.r[A1] = 0x80000100;
   bios->executeA0();
   EXPECT_EQ(ctx.r[V0], 0);
 
   // Test not equal
-  ctx.r[T1] = 0x16;
+  ctx.r[T1] = 0x17;
   ctx.r[A0] = 0x80000000;
   ctx.r[A1] = 0x80000200;
   bios->executeA0();
@@ -66,7 +66,7 @@ TEST_F(BiosTest, StrcmpReturnsCorrectly) {
 TEST_F(BiosTest, StrcpyCopiesString) {
   writeString(0x80000000, "hello world");
 
-  ctx.r[T1] = 0x15;       // strcpy A0
+  ctx.r[T1] = 0x19;       // strcpy A0
   ctx.r[A0] = 0x80000100; // dest
   ctx.r[A1] = 0x80000000; // src
   bios->executeA0();
@@ -78,7 +78,7 @@ TEST_F(BiosTest, StrcpyCopiesString) {
 TEST_F(BiosTest, StrlenCountsCorrectly) {
   writeString(0x80000000, "test length");
 
-  ctx.r[T1] = 0x17; // strlen A0
+  ctx.r[T1] = 0x1B; // strlen A0
   ctx.r[A0] = 0x80000000;
   bios->executeA0();
 

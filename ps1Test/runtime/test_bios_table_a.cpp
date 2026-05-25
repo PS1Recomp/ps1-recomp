@@ -43,7 +43,7 @@ TEST_F(BiosTableATest, Strlen) {
   writeString(0x1000, "hello world");
   ctx.r[A0] = 0x1000;
 
-  ctx.r[T1] = 0x17;
+  ctx.r[T1] = 0x1B;
   bios->executeA0(); // strlen
   EXPECT_EQ(ctx.r[V0], 11);
 }
@@ -53,7 +53,7 @@ TEST_F(BiosTableATest, Strcpy) {
   ctx.r[A0] = 0x1000; // dst
   ctx.r[A1] = 0x2000; // src
 
-  ctx.r[T1] = 0x15;
+  ctx.r[T1] = 0x19;
   bios->executeA0(); // strcpy
   EXPECT_EQ(readString(0x1000), "copy this");
   EXPECT_EQ(ctx.r[V0], 0x1000);
@@ -67,21 +67,21 @@ TEST_F(BiosTableATest, Strcmp) {
   // Equal
   ctx.r[A0] = 0x1000;
   ctx.r[A1] = 0x2000;
-  ctx.r[T1] = 0x16;
+  ctx.r[T1] = 0x17;
   bios->executeA0(); // strcmp
   EXPECT_EQ(ctx.r[V0], 0);
 
   // Less than
   ctx.r[A0] = 0x1000;
   ctx.r[A1] = 0x3000;
-  ctx.r[T1] = 0x16;
+  ctx.r[T1] = 0x17;
   bios->executeA0(); // strcmp
   EXPECT_LT(static_cast<int32_t>(ctx.r[V0]), 0);
 
   // Greater than
   ctx.r[A0] = 0x3000;
   ctx.r[A1] = 0x1000;
-  ctx.r[T1] = 0x16;
+  ctx.r[T1] = 0x17;
   bios->executeA0(); // strcmp
   EXPECT_GT(static_cast<int32_t>(ctx.r[V0]), 0);
 }
@@ -92,7 +92,7 @@ TEST_F(BiosTableATest, Strcat) {
 
   ctx.r[A0] = 0x1000;
   ctx.r[A1] = 0x2000;
-  ctx.r[T1] = 0x19;
+  ctx.r[T1] = 0x15;
   bios->executeA0(); // strcat
 
   EXPECT_EQ(readString(0x1000), "foobar");
@@ -105,12 +105,12 @@ TEST_F(BiosTableATest, Strncmp) {
   ctx.r[A0] = 0x1000;
   ctx.r[A1] = 0x2000;
   ctx.r[A2] = 5;
-  ctx.r[T1] = 0x1A;
+  ctx.r[T1] = 0x18;
   bios->executeA0();       // strncmp
   EXPECT_EQ(ctx.r[V0], 0); // "apple" == "apple" for first 5 chars
 
   ctx.r[A2] = 6;
-  ctx.r[T1] = 0x1A;
+  ctx.r[T1] = 0x18;
   bios->executeA0();
   EXPECT_LT(static_cast<int32_t>(ctx.r[V0]), 0); // "apple" < "applet"
 }
@@ -121,20 +121,20 @@ TEST_F(BiosTableATest, IndexAndRindex) {
   // index (find first 'a')
   ctx.r[A0] = 0x1000;
   ctx.r[A1] = 'a';
-  ctx.r[T1] = 0x1B;
+  ctx.r[T1] = 0x1C;
   bios->executeA0(); // index
   EXPECT_EQ(ctx.r[V0], 0x1001);
 
   // rindex (find last 'a')
   ctx.r[A0] = 0x1000;
   ctx.r[A1] = 'a';
-  ctx.r[T1] = 0x1C;
+  ctx.r[T1] = 0x1D;
   bios->executeA0(); // rindex
   EXPECT_EQ(ctx.r[V0], 0x1005);
 
   // NotFound
   ctx.r[A1] = 'z';
-  ctx.r[T1] = 0x1B;
+  ctx.r[T1] = 0x1C;
   bios->executeA0();
   EXPECT_EQ(ctx.r[V0], 0);
 }

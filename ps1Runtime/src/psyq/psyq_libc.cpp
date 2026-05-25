@@ -160,19 +160,20 @@ void hle_libc_memset(recomp_context *ctx)  { dispatchA(ctx, 0x2B); }
 void hle_libc_memmove(recomp_context *ctx) { dispatchA(ctx, 0x2C); }
 void hle_libc_memcmp(recomp_context *ctx)  { dispatchA(ctx, 0x2D); }
 
-// String routines
-void hle_libc_strcpy(recomp_context *ctx)  { dispatchA(ctx, 0x15); }
-void hle_libc_strcmp(recomp_context *ctx)  { dispatchA(ctx, 0x16); }
-void hle_libc_strlen(recomp_context *ctx)  { dispatchA(ctx, 0x17); }
-void hle_libc_strncpy(recomp_context *ctx) { dispatchA(ctx, 0x18); }
-void hle_libc_strcat(recomp_context *ctx)  { dispatchA(ctx, 0x19); }
-void hle_libc_strncmp(recomp_context *ctx) { dispatchA(ctx, 0x1A); }
+// String routines (psx-spx/openbios A-table layout)
+void hle_libc_strcat(recomp_context *ctx)  { dispatchA(ctx, 0x15); }
+void hle_libc_strncat(recomp_context *ctx) { dispatchA(ctx, 0x16); }
+void hle_libc_strcmp(recomp_context *ctx)  { dispatchA(ctx, 0x17); }
+void hle_libc_strncmp(recomp_context *ctx) { dispatchA(ctx, 0x18); }
+void hle_libc_strcpy(recomp_context *ctx)  { dispatchA(ctx, 0x19); }
+void hle_libc_strncpy(recomp_context *ctx) { dispatchA(ctx, 0x1A); }
+void hle_libc_strlen(recomp_context *ctx)  { dispatchA(ctx, 0x1B); }
 
 // Math / RNG
 void hle_libc_abs(recomp_context *ctx)  { dispatchA(ctx, 0x10); }
 void hle_libc_labs(recomp_context *ctx) { dispatchA(ctx, 0x11); }
-void hle_libc_rand(recomp_context *ctx) { dispatchA(ctx, 0x1E); }
-void hle_libc_srand(recomp_context *ctx) { dispatchA(ctx, 0x1F); }
+void hle_libc_rand(recomp_context *ctx) { dispatchA(ctx, 0x2F); }
+void hle_libc_srand(recomp_context *ctx) { dispatchA(ctx, 0x30); }
 
 //  atoi(s) -- leading whitespace skip, optional sign, decimal digits only.
 //  Stops at first non-digit (no overflow detection beyond int32_t wrap, to

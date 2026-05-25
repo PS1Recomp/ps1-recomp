@@ -109,66 +109,66 @@ TEST_F(PsyqLibcTest, MemcmpDispatchesA0_2D) {
   EXPECT_NE(ctx.r[V0], 0u); // strings differ at byte 3
 }
 
-// String routines -- delegate to bios A0:0x15..0x1A
+// String routines -- delegate to bios A0:0x15..0x1B (psx-spx/openbios layout)
 
-TEST_F(PsyqLibcTest, StrcpyDispatchesA0_15) {
-  writeString(0x80100000u, "hello");
-  ctx.r[A0] = 0x80100100u;
-  ctx.r[A1] = 0x80100000u;
-  hle_libc_strcpy(&ctx);
-  EXPECT_EQ(ctx.r[T1], 0x15u);
-  EXPECT_EQ(readString(0x80100100u), "hello");
-}
-
-TEST_F(PsyqLibcTest, StrcmpDispatchesA0_16) {
-  writeString(0x80100000u, "abc");
-  writeString(0x80100100u, "abc");
-  ctx.r[A0] = 0x80100000u;
-  ctx.r[A1] = 0x80100100u;
-  hle_libc_strcmp(&ctx);
-  EXPECT_EQ(ctx.r[T1], 0x16u);
-  EXPECT_EQ(ctx.r[V0], 0u);
-}
-
-TEST_F(PsyqLibcTest, StrlenDispatchesA0_17) {
-  writeString(0x80100000u, "hello world");
-  ctx.r[A0] = 0x80100000u;
-  hle_libc_strlen(&ctx);
-  EXPECT_EQ(ctx.r[T1], 0x17u);
-  EXPECT_EQ(ctx.r[V0], 11u);
-}
-
-TEST_F(PsyqLibcTest, StrncpyDispatchesA0_18) {
-  writeString(0x80100000u, "hello");
-  ctx.r[A0] = 0x80100100u;
-  ctx.r[A1] = 0x80100000u;
-  ctx.r[A2] = 3;
-  hle_libc_strncpy(&ctx);
-  EXPECT_EQ(ctx.r[T1], 0x18u);
-  EXPECT_EQ(mem.read8(0x80100100u), 'h');
-  EXPECT_EQ(mem.read8(0x80100101u), 'e');
-  EXPECT_EQ(mem.read8(0x80100102u), 'l');
-}
-
-TEST_F(PsyqLibcTest, StrcatDispatchesA0_19) {
+TEST_F(PsyqLibcTest, StrcatDispatchesA0_15) {
   writeString(0x80100000u, "foo");
   writeString(0x80100100u, "bar");
   ctx.r[A0] = 0x80100000u;
   ctx.r[A1] = 0x80100100u;
   hle_libc_strcat(&ctx);
-  EXPECT_EQ(ctx.r[T1], 0x19u);
+  EXPECT_EQ(ctx.r[T1], 0x15u);
   EXPECT_EQ(readString(0x80100000u), "foobar");
 }
 
-TEST_F(PsyqLibcTest, StrncmpDispatchesA0_1A) {
+TEST_F(PsyqLibcTest, StrcmpDispatchesA0_17) {
+  writeString(0x80100000u, "abc");
+  writeString(0x80100100u, "abc");
+  ctx.r[A0] = 0x80100000u;
+  ctx.r[A1] = 0x80100100u;
+  hle_libc_strcmp(&ctx);
+  EXPECT_EQ(ctx.r[T1], 0x17u);
+  EXPECT_EQ(ctx.r[V0], 0u);
+}
+
+TEST_F(PsyqLibcTest, StrncmpDispatchesA0_18) {
   writeString(0x80100000u, "abcdef");
   writeString(0x80100100u, "abcXYZ");
   ctx.r[A0] = 0x80100000u;
   ctx.r[A1] = 0x80100100u;
   ctx.r[A2] = 3;
   hle_libc_strncmp(&ctx);
-  EXPECT_EQ(ctx.r[T1], 0x1Au);
+  EXPECT_EQ(ctx.r[T1], 0x18u);
   EXPECT_EQ(ctx.r[V0], 0u); // first 3 bytes equal
+}
+
+TEST_F(PsyqLibcTest, StrcpyDispatchesA0_19) {
+  writeString(0x80100000u, "hello");
+  ctx.r[A0] = 0x80100100u;
+  ctx.r[A1] = 0x80100000u;
+  hle_libc_strcpy(&ctx);
+  EXPECT_EQ(ctx.r[T1], 0x19u);
+  EXPECT_EQ(readString(0x80100100u), "hello");
+}
+
+TEST_F(PsyqLibcTest, StrncpyDispatchesA0_1A) {
+  writeString(0x80100000u, "hello");
+  ctx.r[A0] = 0x80100100u;
+  ctx.r[A1] = 0x80100000u;
+  ctx.r[A2] = 3;
+  hle_libc_strncpy(&ctx);
+  EXPECT_EQ(ctx.r[T1], 0x1Au);
+  EXPECT_EQ(mem.read8(0x80100100u), 'h');
+  EXPECT_EQ(mem.read8(0x80100101u), 'e');
+  EXPECT_EQ(mem.read8(0x80100102u), 'l');
+}
+
+TEST_F(PsyqLibcTest, StrlenDispatchesA0_1B) {
+  writeString(0x80100000u, "hello world");
+  ctx.r[A0] = 0x80100000u;
+  hle_libc_strlen(&ctx);
+  EXPECT_EQ(ctx.r[T1], 0x1Bu);
+  EXPECT_EQ(ctx.r[V0], 11u);
 }
 
 // Math / RNG -- delegate to bios A0:0x10/0x11/0x1E/0x1F
@@ -183,10 +183,10 @@ TEST_F(PsyqLibcTest, AbsDispatchesA0_10) {
 TEST_F(PsyqLibcTest, RandIsDeterministicAfterSrand) {
   ctx.r[A0] = 12345u;
   hle_libc_srand(&ctx);
-  EXPECT_EQ(ctx.r[T1], 0x1Fu);
+  EXPECT_EQ(ctx.r[T1], 0x30u);
 
   hle_libc_rand(&ctx);
-  EXPECT_EQ(ctx.r[T1], 0x1Eu);
+  EXPECT_EQ(ctx.r[T1], 0x2Fu);
   uint32_t r1 = ctx.r[V0];
 
   // Re-seed and re-roll -- same seed must produce the same first sample.

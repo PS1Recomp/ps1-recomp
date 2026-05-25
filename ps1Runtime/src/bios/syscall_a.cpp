@@ -81,56 +81,7 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = val ? val : 1;
     break;
   }
-  case 0x15: { // strcpy
-    uint32_t dst = ctx_.r[A0];
-    uint32_t src = ctx_.r[A1];
-    char c;
-    do {
-      c = ctx_.mem->read8(src++);
-      ctx_.mem->write8(dst++, c);
-    } while (c != '\0');
-    ctx_.r[V0] = ctx_.r[A0];
-    break;
-  }
-  case 0x16: { // strcmp
-    uint32_t s1 = ctx_.r[A0];
-    uint32_t s2 = ctx_.r[A1];
-    char c1, c2;
-    do {
-      c1 = ctx_.mem->read8(s1++);
-      c2 = ctx_.mem->read8(s2++);
-      if (c1 != c2)
-        break;
-    } while (c1 != '\0');
-    ctx_.r[V0] = c1 - c2;
-    break;
-  }
-  case 0x17: { // strlen
-    uint32_t s = ctx_.r[A0];
-    uint32_t len = 0;
-    while (ctx_.mem->read8(s++) != '\0')
-      len++;
-    ctx_.r[V0] = len;
-    break;
-  }
-  case 0x18: { // strncpy
-    uint32_t dst = ctx_.r[A0];
-    uint32_t src = ctx_.r[A1];
-    uint32_t n = ctx_.r[A2];
-    uint32_t i = 0;
-    char c;
-    while (i < n && (c = ctx_.mem->read8(src++)) != '\0') {
-      ctx_.mem->write8(dst++, c);
-      i++;
-    }
-    while (i < n) {
-      ctx_.mem->write8(dst++, '\0');
-      i++;
-    }
-    ctx_.r[V0] = ctx_.r[A0];
-    break;
-  }
-  case 0x19: { // strcat
+  case 0x15: { // strcat(dst, src)
     uint32_t dst = ctx_.r[A0];
     uint32_t src = ctx_.r[A1];
     while (ctx_.mem->read8(dst) != '\0')
@@ -143,7 +94,36 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = ctx_.r[A0];
     break;
   }
-  case 0x1A: { // strncmp
+  case 0x16: { // strncat(dst, src, n)
+    uint32_t dst = ctx_.r[A0];
+    uint32_t src = ctx_.r[A1];
+    uint32_t n = ctx_.r[A2];
+    while (ctx_.mem->read8(dst) != '\0')
+      dst++;
+    uint32_t i = 0;
+    char c;
+    while (i < n && (c = ctx_.mem->read8(src++)) != '\0') {
+      ctx_.mem->write8(dst++, c);
+      i++;
+    }
+    ctx_.mem->write8(dst, '\0');
+    ctx_.r[V0] = ctx_.r[A0];
+    break;
+  }
+  case 0x17: { // strcmp
+    uint32_t s1 = ctx_.r[A0];
+    uint32_t s2 = ctx_.r[A1];
+    char c1, c2;
+    do {
+      c1 = ctx_.mem->read8(s1++);
+      c2 = ctx_.mem->read8(s2++);
+      if (c1 != c2)
+        break;
+    } while (c1 != '\0');
+    ctx_.r[V0] = c1 - c2;
+    break;
+  }
+  case 0x18: { // strncmp
     uint32_t s1 = ctx_.r[A0];
     uint32_t s2 = ctx_.r[A1];
     uint32_t n = ctx_.r[A2];
@@ -161,7 +141,44 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = c1 - c2;
     break;
   }
-  case 0x1B: { // index (strchr)
+  case 0x19: { // strcpy
+    uint32_t dst = ctx_.r[A0];
+    uint32_t src = ctx_.r[A1];
+    char c;
+    do {
+      c = ctx_.mem->read8(src++);
+      ctx_.mem->write8(dst++, c);
+    } while (c != '\0');
+    ctx_.r[V0] = ctx_.r[A0];
+    break;
+  }
+  case 0x1A: { // strncpy
+    uint32_t dst = ctx_.r[A0];
+    uint32_t src = ctx_.r[A1];
+    uint32_t n = ctx_.r[A2];
+    uint32_t i = 0;
+    char c;
+    while (i < n && (c = ctx_.mem->read8(src++)) != '\0') {
+      ctx_.mem->write8(dst++, c);
+      i++;
+    }
+    while (i < n) {
+      ctx_.mem->write8(dst++, '\0');
+      i++;
+    }
+    ctx_.r[V0] = ctx_.r[A0];
+    break;
+  }
+  case 0x1B: { // strlen
+    uint32_t s = ctx_.r[A0];
+    uint32_t len = 0;
+    while (ctx_.mem->read8(s++) != '\0')
+      len++;
+    ctx_.r[V0] = len;
+    break;
+  }
+  case 0x1C:    // index (BSD alias for strchr)
+  case 0x1E: { // strchr
     uint32_t s = ctx_.r[A0];
     char c = static_cast<char>(ctx_.r[A1]);
     char curr;
@@ -178,7 +195,8 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = res;
     break;
   }
-  case 0x1C: { // rindex (strrchr)
+  case 0x1D:    // rindex (BSD alias for strrchr)
+  case 0x1F: { // strrchr
     uint32_t s = ctx_.r[A0];
     char c = static_cast<char>(ctx_.r[A1]);
     char curr;
@@ -193,7 +211,7 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = res;
     break;
   }
-  case 0x1D: { // memchr
+  case 0x2E: { // memchr
     uint32_t s = ctx_.r[A0];
     uint8_t c = ctx_.r[A1] & 0xFF;
     uint32_t n = ctx_.r[A2];
@@ -207,11 +225,11 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = res;
     break;
   }
-  case 0x1E: // rand
+  case 0x2F: // rand
     sRandSeed = sRandSeed * 1103515245 + 12345;
     ctx_.r[V0] = (sRandSeed >> 16) & 0x7FFF;
     break;
-  case 0x1F: // srand
+  case 0x30: // srand
     sRandSeed = ctx_.r[A0];
     break;
 
