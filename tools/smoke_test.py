@@ -2,9 +2,10 @@
 """Game-bring-up smoke test -- boot, capture VRAM, diff against reference.
 
 Workflow:
-  1. Launch `ps1Runtime` with a config for N seconds.
-  2. The runtime writes its final VRAM as a PPM to /tmp (or whatever
-     `--capture` points to).
+  1. Launch `ps1Runtime` with a config and `PS1_VRAM_DUMP_PATH=<capture>`
+     in the environment; SIGTERM after `--duration` seconds.
+  2. The runtime catches SIGTERM, exits its main loop, and writes the
+     final 1024x512 VRAM as a P6 PPM to the env-var path.
   3. Compare the capture against a reference PPM (the "oracle" captured
      externally from PCSX-Redux into `audit_notes/<game>/title_ref.ppm`).
   4. Exit 0 if mean per-channel absolute difference is within tolerance,
@@ -25,6 +26,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import struct
 import subprocess
 import sys
@@ -106,15 +108,19 @@ def brightness(rgb: bytes) -> float:
 
 def run_game(runtime: Path, config: Path, duration: int,
              capture_out: Path) -> int:
-    """Launch ps1Runtime for `duration` seconds, copying VRAM to capture_out.
+    """Launch ps1Runtime for `duration` seconds with PS1_VRAM_DUMP_PATH set.
 
-    Returns the runtime's exit code. /tmp/vram_final.ppm is the runtime's
-    default final-frame dump; we copy it to capture_out so the test owns
-    its artefact.
+    SIGTERM after `duration` so the runtime can dump VRAM in its shutdown
+    path. Returns 0 on graceful termination, the runtime's exit code if it
+    exits on its own.
     """
     cmd = [str(runtime), "--config", str(config)]
+    capture_out.parent.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env["PS1_VRAM_DUMP_PATH"] = str(capture_out)
     print(f"[smoke] launching: {' '.join(cmd)} (duration={duration}s)")
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            env=env)
     try:
         proc.wait(timeout=duration)
         rc = proc.returncode
@@ -126,14 +132,11 @@ def run_game(runtime: Path, config: Path, duration: int,
             proc.kill()
         rc = 0  # natural timeout, treat as success of the test window
 
-    # Runtime drops final VRAM at /tmp/vram_final.ppm by convention.
-    src = Path("/tmp/vram_final.ppm")
-    if not src.exists():
-        print(f"[smoke] WARN: runtime did not produce {src}", file=sys.stderr)
-        return rc
-    capture_out.parent.mkdir(parents=True, exist_ok=True)
-    capture_out.write_bytes(src.read_bytes())
-    print(f"[smoke] captured VRAM -> {capture_out}")
+    if not capture_out.exists():
+        print(f"[smoke] WARN: runtime did not produce {capture_out}",
+              file=sys.stderr)
+    else:
+        print(f"[smoke] captured VRAM -> {capture_out}")
     return rc
 
 

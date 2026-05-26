@@ -6,6 +6,9 @@
 #include <SDL2/SDL.h>
 #include <atomic>
 #include <chrono>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -114,6 +117,39 @@ static constexpr uint32_t CYCLES_PER_FRAME = CPU_CLOCK / 60; // ~564480
 static constexpr uint32_t CYCLES_PER_SCANLINE = 3413; // ~3413 cycles per hblank
 static constexpr uint32_t SCANLINES_PER_FRAME = 263;  // NTSC
 
+// SIGTERM/SIGINT raises this so `tools/smoke_test.py` (and `timeout`) can
+// stop the runtime gracefully -- giving the main loop a chance to dump VRAM
+// before the OS reaps us.
+static volatile std::sig_atomic_t g_shutdown_requested = 0;
+static void onTerminate(int) { g_shutdown_requested = 1; }
+
+// Serialize full 1024x512 VRAM (ABGR1555) as a P6 PPM at `path`.
+// Used by tools/smoke_test.py as the regression contract for game bring-up.
+static bool dumpVramPpm(const ps1::gpu::GPU &gpu, const char *path) {
+  std::FILE *f = std::fopen(path, "wb");
+  if (!f) {
+    fmt::print(stderr, "[VRAM-DUMP] open failed: {}\n", path);
+    return false;
+  }
+  constexpr uint32_t W = ps1::gpu::GPU::VRAM_WIDTH;
+  constexpr uint32_t H = ps1::gpu::GPU::VRAM_HEIGHT;
+  std::fprintf(f, "P6\n%u %u\n255\n", W, H);
+  const ps1::gpu::Color16 *vram = gpu.getVRAM();
+  std::vector<uint8_t> row(W * 3);
+  for (uint32_t y = 0; y < H; ++y) {
+    for (uint32_t x = 0; x < W; ++x) {
+      uint16_t p = vram[y * W + x].raw;
+      row[x * 3 + 0] = static_cast<uint8_t>((p & 0x1F) << 3);
+      row[x * 3 + 1] = static_cast<uint8_t>(((p >> 5) & 0x1F) << 3);
+      row[x * 3 + 2] = static_cast<uint8_t>(((p >> 10) & 0x1F) << 3);
+    }
+    std::fwrite(row.data(), 1, row.size(), f);
+  }
+  std::fclose(f);
+  fmt::print("[VRAM-DUMP] wrote {} ({}x{})\n", path, W, H);
+  return true;
+}
+
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     std::cerr << "Usage: ps1Runtime <ps1_elf_or_iso> [disc_image] [--config "
@@ -121,6 +157,9 @@ int main(int argc, char *argv[]) {
               << "       ps1Runtime --config game.toml\n";
     return 1;
   }
+
+  std::signal(SIGTERM, onTerminate);
+  std::signal(SIGINT, onTerminate);
 
   // Parse arguments: support --config flag anywhere
   std::string input_path;
@@ -627,9 +666,18 @@ int main(int argc, char *argv[]) {
       running = false;
     }
 
+    if (g_shutdown_requested) {
+      fmt::print("[Main] Shutdown signal received at frame {}\n", frameCount);
+      running = false;
+    }
+
     // Frame pacing: SDL_GL_SetSwapInterval(1) provides VSync-based pacing
     // via the blocking SDL_GL_SwapWindow call in renderFrame().
     // No additional SDL_Delay needed -- it would double the frame time.
+  }
+
+  if (const char *vramDump = std::getenv("PS1_VRAM_DUMP_PATH")) {
+    dumpVramPpm(gpu, vramDump);
   }
 
   // Cleanup
