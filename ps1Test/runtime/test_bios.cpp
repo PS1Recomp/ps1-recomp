@@ -1,3 +1,4 @@
+#include <vector>
 #include "runtime/bios/bios.h"
 #include "runtime/psyq/psyq_state.h"
 #include "runtime/cdrom/virtual_fs.h"
@@ -162,6 +163,83 @@ TEST_F(BiosTest, DrainPendingCallbacksRefusesToReenter) {
 
   EXPECT_EQ(g_reentryDispatches, 1)
       << "nested drain dispatched the callback again";
+  st.reset();
+}
+
+// Which callbacks the per-frame interrupt tick delivers.
+//
+// libsnd's `SsStart` in VSync tick mode hooks the sequencer onto IRQ line 0
+// (VBlank) through `InterruptCallback(0, _SsTrapIntrVSync)`; a tick that only
+// walks the timer lines never runs it and the music never plays.  The SPU
+// library's transfer-completion poller arrives through `DMACallback(4, fn)`,
+// not `InterruptCallback` -- it has to keep running once it lands in the DMA
+// table, or the sound effects stop.
+namespace {
+std::vector<uint32_t> g_dispatched;
+void recordingHook(recomp_context * /*ctx*/, uint32_t addr) {
+  g_dispatched.push_back(addr);
+}
+} // namespace
+
+TEST_F(BiosTest, DrainTicksVBlankLineCallbackOncePerFrame) {
+  auto &st = ps1::psyq::psyq_state();
+  st.reset();
+  st.intrCallback[0] = 0x8004B828;
+  st.vsyncCounter.store(1, std::memory_order_release);
+  g_dispatched.clear();
+  g_testRecompDispatchHook = &recordingHook;
+
+  bios->drainPendingCallbacks();
+  bios->drainPendingCallbacks(); // same frame: no second tick
+
+  g_testRecompDispatchHook = nullptr;
+  ASSERT_EQ(g_dispatched.size(), 1u);
+  EXPECT_EQ(g_dispatched[0], 0x8004B828u);
+  st.reset();
+}
+
+TEST_F(BiosTest, DrainPollsDmaCompletionCallbacks) {
+  auto &st = ps1::psyq::psyq_state();
+  st.reset();
+  st.dmaCallback[4] = 0x800466A0;
+  st.vsyncCounter.store(1, std::memory_order_release);
+  g_dispatched.clear();
+  g_testRecompDispatchHook = &recordingHook;
+
+  bios->drainPendingCallbacks();
+
+  g_testRecompDispatchHook = nullptr;
+  ASSERT_EQ(g_dispatched.size(), 1u);
+  EXPECT_EQ(g_dispatched[0], 0x800466A0u);
+  st.reset();
+}
+
+// Callbacks run on libetc's interrupt stack, as PSY-Q's `startIntr` arranges,
+// not on whatever $sp the interrupted code holds.  Crash's level decompressor
+// points $sp into the compressed buffer and reads the table just below it; a
+// callback frame pushed there corrupted the stream and the loop never ended.
+namespace {
+uint32_t g_callbackSp = 0;
+void spRecordingHook(recomp_context *ctx, uint32_t /*addr*/) {
+  g_callbackSp = ctx->r29;
+}
+} // namespace
+
+TEST_F(BiosTest, CallbacksRunOnTheInterruptStack) {
+  auto &st = ps1::psyq::psyq_state();
+  st.reset();
+  st.intrStackTop = 0x8005494C;
+  st.intrCallback[0] = 0x8004B828;
+  st.vsyncCounter.store(1, std::memory_order_release);
+  g_callbackSp = 0;
+  g_testRecompDispatchHook = &spRecordingHook;
+
+  const uint32_t interruptedSp = ctx.r29;
+  bios->drainPendingCallbacks();
+
+  g_testRecompDispatchHook = nullptr;
+  EXPECT_EQ(g_callbackSp, 0x8005494Cu);
+  EXPECT_EQ(ctx.r29, interruptedSp) << "interrupted $sp not restored";
   st.reset();
 }
 

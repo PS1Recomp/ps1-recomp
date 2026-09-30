@@ -21,6 +21,7 @@ void PsyqState::reset() {
   rcntTickAddr = 0;
   gpuEnvAddr = 0;
   rcntTicksPerVBlank = 0;
+  intrStackTop = 0;
 }
 
 PsyqState &psyq_state() {

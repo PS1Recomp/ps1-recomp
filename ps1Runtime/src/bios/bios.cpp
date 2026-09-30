@@ -530,26 +530,36 @@ void Bios::drainPendingCallbacksSlow() {
   // rest of this method then consumes.  Phase 3.3.
   drainCdromEventQueue();
 
-  // Tick libetc InterruptCallback handlers for the timer IRQs (I_STAT bits
-  // 4-6) once per VBlank.  Real root counters fire far more often, but the
-  // handlers registered here are completion pollers (e.g. Crash's sound
-  // engine ticks Timer0 to poll SPU transfer status and
-  // DeliverEvent(0xF0000009, 0x20)).  Delivered here rather than in
-  // triggerVBlankEvent because that only runs inside hle_VSync -- loading
-  // loops (Crash's NS_waitForAllLoads) spin without calling VSync while
-  // waiting for the very event these handlers deliver.
+  // Tick libetc InterruptCallback / DMACallback handlers once per VBlank.
+  // Delivered here rather than in triggerVBlankEvent because that only runs
+  // inside hle_VSync -- loading loops (Crash's NS_waitForAllLoads) spin
+  // without calling VSync while waiting for the very event these handlers
+  // deliver.
+  //
+  // - Line 0 (VBlank): libsnd's SsStart in VSync tick mode hooks the music
+  //   sequencer here (`_SsTrapIntrVSync`).  Once per VBlank is its real rate.
+  // - Lines 4-6 (root counters): real counters fire far more often; the
+  //   handlers seen so far only poll for completion.
+  // - DMA channels: transfers complete synchronously in this runtime, so a
+  //   completion callback is always due by the next frame.  Crash's SPU
+  //   library polls transfer status this way and delivers
+  //   DeliverEvent(0xF0000009, 0x20), which the level loader waits on.
   {
     auto &st = ps1::psyq::psyq_state();
     uint32_t frame = st.vsyncCounter.load(std::memory_order_relaxed);
     if (frame != lastIntrTickFrame_) {
       lastIntrTickFrame_ = frame;
-      for (std::size_t irq = 4; irq <= 6; ++irq) {
-        uint32_t cb = st.intrCallback[irq];
+      auto deliver = [&](uint32_t cb) {
         if (cb != 0) {
           eventSystem_.queueCallback(cb);
           ++drainDispatched_;
         }
-      }
+      };
+      deliver(st.intrCallback[0]);
+      for (std::size_t irq = 4; irq <= 6; ++irq)
+        deliver(st.intrCallback[irq]);
+      for (uint32_t cb : st.dmaCallback)
+        deliver(cb);
     }
   }
 

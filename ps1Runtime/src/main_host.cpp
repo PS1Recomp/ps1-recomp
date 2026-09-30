@@ -937,6 +937,9 @@ int main(int argc, char *argv[]) {
         st.rcntTickAddr = readU32("rcnt_tick_addr");
         st.rcntTicksPerVBlank = readU32("rcnt_ticks_per_vblank");
         st.gpuEnvAddr = readU32("gpu_env_addr");
+        st.intrStackTop = readU32("intr_stack_top");
+        if (st.intrStackTop != 0)
+          fmt::print("[timing] interrupt stack top at 0x{:08X}\n", st.intrStackTop);
         if (st.gpuEnvAddr != 0)
           fmt::print("[timing] libgpu env block at 0x{:08X}\n", st.gpuEnvAddr);
         if (st.rcntTickAddr != 0 && st.rcntTicksPerVBlank != 0)
