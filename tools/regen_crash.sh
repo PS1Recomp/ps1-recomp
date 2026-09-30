@@ -36,9 +36,10 @@ OUT_CPP="$PROJECT_DIR/ps1Runtime/src/recompiled_out.cpp"
 # 0x8001AC60 — jumptable target inside the GTE pointer setup
 # 0x80025628 — jumptable target inside the post-NSD init dispatch
 #              (revealed after SWL/SWR emitter fix populated chunk[25])
-# 0x800466A0 — sound engine Timer0 tick (SPU completion poller). Registered
-#              via InterruptCallback(4, fn); only reached through the IRQ
-#              vector so the prologue scan over-merges it into func_8004636C.
+# 0x800466A0 — SPU transfer completion poller. Registered via
+#              DMACallback(4, fn) (DMA channel 4 = SPU); only reached through
+#              the callback table so the prologue scan over-merges it into
+#              func_8004636C.
 #              Delivers Event(0xF0000009, 0x20) that NS_waitForAllLoads
 #              slots 10/11 poll via TestEvent(9).
 # 0x800256DC — sibling of 0x80025628 in the post-NSD dispatch family
@@ -104,7 +105,7 @@ echo "[regen_crash] correcting analyzer function sizes"
 # 0x80043498 / 0x80043984 are 8-instr wrappers in the dropped collision
 # group (Task #25); 0x8003E754 is a trampoline through the libetc vtable
 # (statically 0 in the binary). Route them to the HLE bodies explicitly.
-echo "[regen_crash] appending [[hle_functions]]: CdSync/CdReadSync/InterruptCallback"
+echo "[regen_crash] appending [[hle_functions]]: CdSync/CdReadSync/InterruptCallback/DMACallback"
 cat >> "$OUT_TOML" <<'EOF'
 
 [[hle_functions]]
@@ -121,9 +122,21 @@ address = "0x80043984"
 hle = true
 stub_type = "recompile"
 
+# The three libetc wrappers at 0x8003E6F4/24/54 differ only in the vtable
+# offset they call through (start/set/cb), so the masked signature cannot
+# tell them apart.  0x8003E724 is InterruptCallback (vtable +8) and 0x8003E754
+# is DMACallback (vtable +4) -- the SPU library's transfer poller arrives
+# through the latter, libsnd's VSync sequencer tick through the former.
 [[hle_functions]]
 subsystem = "Other"
 name = "libetc_InterruptCallback"
+address = "0x8003E724"
+hle = true
+stub_type = "recompile"
+
+[[hle_functions]]
+subsystem = "Other"
+name = "libetc_DMACallback"
 address = "0x8003E754"
 hle = true
 stub_type = "recompile"
