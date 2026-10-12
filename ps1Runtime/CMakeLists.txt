@@ -20,6 +20,7 @@ add_library(ps1Runtime_lib STATIC
     src/bios/heap.cpp
     src/bios/event_system.cpp
     src/bios/file_io.cpp
+    src/bios/card_fs.cpp
     src/gpu/gpu.cpp
     src/gpu/renderer_opengl.cpp
     src/spu/spu.cpp

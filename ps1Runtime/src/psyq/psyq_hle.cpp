@@ -694,10 +694,28 @@ void hle_PutDrawEnv(recomp_context *ctx) {
                  (twCode3 << 5) | twCode2);
 
   // GP0(0xE6): mask bit setting. sys.c:575 -- SetDrawEnv2 always pushes this
-  // literal, with no dependency on any DRAWENV field (env->isbg's RECT push,
-  // sys.c:576-619, is a separate, conditional tail this function does not
-  // model -- out of scope for Task 4b's three gaps).
+  // literal, with no dependency on any DRAWENV field.
   g_cfg.writeGP0(0xE6000000u);
+
+  // Background clear, sys.c:576-619: with env->isbg set, fill the clip rect
+  // (w/h clamped to 0..info-1) with env->r0/g0/b0.  A 64-aligned x and w use
+  // GP0(02h), which ignores the offset; anything else a GP0(60h) rectangle,
+  // which applies it, so the rect is shifted back by env->ofs first.  Crash's
+  // level-load card relies on it to clear the map frame behind it.
+  if (ctx->mem->read8(envPtr + 24) != 0) {
+    const uint32_t color = static_cast<uint32_t>(ctx->mem->read8(envPtr + 27)) << 16 |
+                           static_cast<uint32_t>(ctx->mem->read8(envPtr + 26)) << 8 |
+                           ctx->mem->read8(envPtr + 25);
+    const uint16_t w = cw < 0 ? 0 : static_cast<uint16_t>(std::min<int>(cw, kInfoW - 1));
+    const uint16_t h = ch < 0 ? 0 : static_cast<uint16_t>(std::min<int>(ch, kInfoH - 1));
+    const bool aligned = ((cx & 0x3F) | (w & 0x3F)) == 0;
+    const int16_t rx = aligned ? cx : static_cast<int16_t>(cx - ox);
+    const int16_t ry = aligned ? cy : static_cast<int16_t>(cy - oy);
+    g_cfg.writeGP0((aligned ? 0x02000000u : 0x60000000u) | color);
+    g_cfg.writeGP0(static_cast<uint32_t>(static_cast<uint16_t>(ry)) << 16 |
+                   static_cast<uint16_t>(rx));
+    g_cfg.writeGP0(static_cast<uint32_t>(h) << 16 | w);
+  }
 }
 
 } // namespace ps1::psyq

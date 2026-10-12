@@ -285,3 +285,57 @@ TEST(IndirectSite, JalrRecordsTheCallSiteAddress) {
             std::string::npos)
       << out;
 }
+
+// Computed jump through $ra
+//
+// Ground truth is func_80036340, one of Crash's hand-written polygon
+// renderers.  It parks $sp as a data register, then picks one of several
+// 128-byte blocks inside itself with
+//
+//   lui $ra, 0x8003 / addiu $ra, $ra, 0x64D4   ; base 0x800364D4
+//   sll $sp, $at, 7 / addu $ra, $ra, $sp       ; + index * 128
+//   jr  $ra
+//
+// Emitting that `jr $ra` as a C++ return left the function mid-body with $sp
+// still holding data (0x100): CORE_Loop came back on a stack in low memory,
+// and level 0x0A spun forever in an object traversal whose saved registers
+// that stack kept overwriting.
+namespace {
+constexpr uint32_t kRenderer = 0x80036340;
+constexpr uint32_t kBlockBase = 0x800364D4;
+constexpr size_t kRendererLen = (0x80036BF4u - kRenderer) / 4;
+
+std::vector<uint32_t> raComputedJumpFunction() {
+  std::vector<uint32_t> f(kRendererLen, kNop);
+  const size_t at = 80;
+  f[at + 0] = lui(31, 0x8003);
+  f[at + 1] = addiu(31, 31, 0x64D4);
+  f[at + 2] = sll(29, 1, 7);
+  f[at + 3] = addu(31, 31, 29);
+  f[at + 4] = jr(31);
+  return f;
+}
+} // namespace
+
+TEST(RaComputedJump, EveryStridedBlockInsideTheFunctionIsReported) {
+  auto targets = detectInternalReturnTargets(raComputedJumpFunction(), kRenderer);
+  const uint32_t end = kRenderer + kRendererLen * 4;
+  for (uint32_t t = kBlockBase; t < end; t += 128)
+    EXPECT_NE(std::find(targets.begin(), targets.end(), t), targets.end())
+        << std::hex << t;
+}
+
+TEST(RaComputedJump, JrRaJumpsInsideInsteadOfReturning) {
+  ps1recomp::InstructionEmitter em;
+  ps1recomp::RecompFunction f;
+  f.name = "func_80036340";
+  f.address = kRenderer;
+  f.instructions = raComputedJumpFunction();
+  f.isLabelTarget.assign(f.instructions.size(), false);
+  f.size = static_cast<uint32_t>(f.instructions.size() * 4);
+
+  const std::string out = em.emitFunction(f);
+  EXPECT_NE(out.find("if (ctx->r31 == 0x80036554u) goto L_80036554;"),
+            std::string::npos)
+      << out;
+}

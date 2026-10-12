@@ -122,14 +122,13 @@ public:
   uint16_t intrMask = 0;
   /// Per-IRQ-line user callback registered via `InterruptCallback(n, fn)`.
   /// Slot 0..6 follow the PSY-Q convention (VBlank, GPU, CDROM, DMA, RTC0,
-  /// RTC1, RTC2); slot 7 reserved.  Never invoked today -- the only callback
-  /// the runtime actually fires is `gpuSwapCb`, queued by
-  /// `Bios::triggerVBlankEvent`.  Storing it keeps the round-trip honest so
-  /// PSY-Q's read-back-and-restore patterns work.
+  /// RTC1, RTC2); slot 7 reserved.  `Bios::drainPendingCallbacks` ticks
+  /// lines 0 and 4..6 once per VBlank.
   static constexpr std::size_t kIntrSlots = 8;
   uint32_t intrCallback[kIntrSlots] = {};
-  /// Per-channel DMA callback registered via `DMACallback(n, fn)`.  Same
-  /// shape and reasoning as `intrCallback`.
+  /// Per-channel DMA callback registered via `DMACallback(n, fn)`.  Polled
+  /// once per VBlank: DMA completes synchronously here, so the completion
+  /// callback is always due by then.
   uint32_t dmaCallback[kIntrSlots] = {};
   /// Master enable toggled by `StopCallback` / `RestartCallback`.  Read by
   /// `CheckCallback` only; does not gate dispatch.
@@ -165,6 +164,14 @@ public:
   /// It lives in the game's BSS, so only the game TOML knows where -- the HLE
   /// cannot derive it. Zero disables the initialisation.
   uint32_t gpuEnvAddr = 0;
+
+  /// Top of libetc's private interrupt stack.  PSY-Q's `startIntr` points the
+  /// interrupt context's $sp here, so callbacks never run on the interrupted
+  /// code's stack.  That matters: hand-written loops (Crash's level
+  /// decompressor) repurpose $sp as a data pointer, and a callback frame
+  /// pushed below it lands on live data.  Lives in the game's BSS, so only
+  /// the game TOML knows where.  Zero dispatches on the interrupted $sp.
+  uint32_t intrStackTop = 0;
 
   // Test helpers
   /// Reset every field to its default-constructed value.  Tests call

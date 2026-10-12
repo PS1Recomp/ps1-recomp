@@ -12,7 +12,7 @@ TEST(ElfLoader, LoadsSectionsCorrectly) {
   Memory memory;
   ElfParser parser;
 
-  if (!parser.load("../test_roms/example08_spinningCube.elf")) {
+  if (!parser.load(PS1RECOMP_TEST_ROMS "/example08_spinningCube.elf")) {
     GTEST_SKIP() << "Test ROM not found. Skipping.";
   }
 

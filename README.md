@@ -165,6 +165,25 @@ startup, so it is always visible in the log of a run.
 Each press is echoed to stderr as `[pad] <key> -> <button>`, which separates a
 button that reached the pad from one that never got there.
 
+<kbd>F2</kbd> turns the PS1 dithering pattern off and on.
+
+### Gamepads (XInput)
+
+Any controller SDL2 recognises works: Xbox 360/One/Series pads, XInput-mode
+third-party pads (e.g. GuliKit KingKong), and most DualShock/DualSense pads.
+Plug it in before or after starting the game. The window title then shows its
+name. Buttons map by position:
+
+| Gamepad (Xbox names) | PS1 pad |
+|---|---|
+| A / B / X / Y | Cross / Circle / Square / Triangle |
+| LB / RB, LT / RT | L1 / R1, L2 / R2 |
+| Stick clicks | L3 / R3 |
+| Back / Start | Select / Start |
+| D-pad, left stick | D-Pad |
+
+Input is read only while the game window has focus.
+
 ### Memory cards
 
 Two cards are created under `memcards/` on first run, 128 KB each and formatted
@@ -260,27 +279,7 @@ Runs the game for N seconds and outputs a JSON report with frame rate, VRAM pixe
 
 The project is the subject of an ongoing undergraduate thesis. **It is not a finished
 emulator** -- it is a recompiler whose architecture works end-to-end, plus a runtime that
-covers enough of the PS1 hardware to boot real games. The current state, honestly:
-
-- **Pipeline**: stable. Analyzer -> recompiler -> runtime -> native binary works for any PS1
-  ELF/EXE. Stub-mode build (no ROM) is the CI baseline (557/557 tests green).
-- **Rayman (USA)**: was the primary validation target through Phases 0-3. With prior
-  imperative HLE patches it ran at ~59fps with correct VRAM content. Those patches were
-  retired during open-source preparation; the regen-fresh path now relies entirely on the
-  PsyQ hash-based HLE coverage and has a brightness gap (see `ISSUES.md` #2 -- not
-  re-validated end-to-end since patch removal).
-- **Crash Bandicoot 1 (USA)**: experimental but boots. Reaches the main game loop and
-  runs the full PsyQ render pipeline (`DrawOTag` ~435 calls/sec, `MulMatrix` ~870/sec,
-  `VSync` ~58 fps) with an env-gated workaround (`PS1_SKIP_31BF8=1`) that NOPs a GOOL
-  state machine call which would otherwise hang in an unpopulated hash table walk.
-  Permanent fix (porting the NS chunk subsystem) is the next roadmap item in
-  `PLANNING.md`. The bypass keeps the engine running so we can study the next layer
-  while the proper fix is in progress.
-- **Other games**: not exercised yet. The architecture is meant to be game-agnostic; adding
-  a new title is mostly a matter of providing a TOML config and running the analyzer.
-
-For an honest, gap-by-gap account of what works and what does not, see `ARCHITECTURE.md`.
-For specific game blockers and verification metrics, see `ISSUES.md`.
+covers enough of the PS1 hardware to boot real games. 
 
 ## License
 

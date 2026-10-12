@@ -519,3 +519,38 @@ TEST(SpuKeyLatch, KeyOffAloneStillReleasesTheVoice) {
 
   EXPECT_EQ(spu.debugVoiceState(0).adsrPhase, AdsrPhase::Release);
 }
+
+TEST(SpuKeyLatch, LaterWritesInTheSameWindowDoNotCancelAKeyOn) {
+  // KON/KOFF are trigger registers: a 1 bit keys the voice, a 0 bit does
+  // nothing.  SpuSetKey writes both halves on every note, so when the music
+  // sequencer keys voice 0 in the same audio window that a sound effect keyed
+  // voice 16, its `0x18A = 0` must not erase the effect's key-on.
+  SPU spu;
+  spu.reset();
+
+  spu.writeRegister(0x1F801D8A, 0x0001); // sound effect: key on voice 16
+  spu.writeRegister(0x1F801D88, 0x0001); // music: key on voice 0 ...
+  spu.writeRegister(0x1F801D8A, 0x0000); // ... writing the high half as 0
+
+  int16_t buffer[2] = {};
+  spu.generateSamples(buffer, 0);
+
+  EXPECT_EQ(spu.debugVoiceState(16).adsrPhase, AdsrPhase::Attack);
+  EXPECT_EQ(spu.debugVoiceState(0).adsrPhase, AdsrPhase::Attack);
+}
+
+TEST(SpuKeyLatch, KeyOffBitsAccumulateAcrossWrites) {
+  SPU spu;
+  spu.reset();
+
+  int16_t buffer[2] = {};
+  spu.writeRegister(0x1F801D88, 0x0003); // key on voices 0 and 1
+  spu.generateSamples(buffer, 0);
+
+  spu.writeRegister(0x1F801D8C, 0x0001); // key off voice 0
+  spu.writeRegister(0x1F801D8C, 0x0002); // key off voice 1
+  spu.generateSamples(buffer, 0);
+
+  EXPECT_EQ(spu.debugVoiceState(0).adsrPhase, AdsrPhase::Release);
+  EXPECT_EQ(spu.debugVoiceState(1).adsrPhase, AdsrPhase::Release);
+}

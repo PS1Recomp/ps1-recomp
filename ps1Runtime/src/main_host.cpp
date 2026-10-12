@@ -4,6 +4,7 @@
 
 #include "runtime/ps1_runtime_macros.h"
 #include <SDL2/SDL.h>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -403,11 +404,34 @@ static const KeyBinding kPadBindings[] = {
     {SDLK_BACKSPACE, ps1::input::BTN_SELECT, "Backspace", "Select"},
 };
 
+static void printControllerBindings() {
+  fmt::print("[pad] controller layout (by position, Xbox names):\n"
+             "[pad]   A / B / X / Y   -> Cross / Circle / Square / Triangle\n"
+             "[pad]   LB / RB         -> L1 / R1\n"
+             "[pad]   LT / RT         -> L2 / R2\n"
+             "[pad]   LS / RS click   -> L3 / R3\n"
+             "[pad]   Back / Start    -> Select / Start\n"
+             "[pad]   D-pad, left stick -> D-pad\n");
+}
+
+// The window title doubles as the "controller connected" notice: the
+// runtime has no on-screen overlay.
+static void announceController(SDL_GameController *pad) {
+  const char *name = SDL_GameControllerName(pad);
+  fmt::print("[Input] GameController: {}\n", name ? name : "?");
+  printControllerBindings();
+  SDL_SetWindowTitle(SDL_GL_GetCurrentWindow(),
+                     fmt::format("ps1Recomp - controller: {}",
+                                 name ? name : "connected")
+                         .c_str());
+}
+
 static void printPadBindings() {
   fmt::print("[pad] keyboard layout:\n");
   for (const auto &b : kPadBindings)
     fmt::print("[pad]   {:<12} -> {}\n", b.keyName, b.padName);
   fmt::print("[pad]   {:<12} -> {}\n", "Esc", "quit");
+  fmt::print("[pad]   {:<12} -> {}\n", "F2", "dithering on/off");
 }
 
 static void mapKeyToButton(SDL_Keycode key, ps1::input::InputController &input,
@@ -425,6 +449,69 @@ static void mapKeyToButton(SDL_Keycode key, ps1::input::InputController &input,
       input.release(b.button, 0);
     return;
   }
+}
+
+// SDL GameController (XInput, DualShock, ...): buttons by position, so the
+// face buttons land where a PlayStation pad has them.
+static uint16_t controllerButton(uint8_t b) {
+  using namespace ps1::input;
+  switch (b) {
+  case SDL_CONTROLLER_BUTTON_A: return BTN_CROSS;
+  case SDL_CONTROLLER_BUTTON_B: return BTN_CIRCLE;
+  case SDL_CONTROLLER_BUTTON_X: return BTN_SQUARE;
+  case SDL_CONTROLLER_BUTTON_Y: return BTN_TRIANGLE;
+  case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: return BTN_L1;
+  case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: return BTN_R1;
+  case SDL_CONTROLLER_BUTTON_LEFTSTICK: return BTN_L3;
+  case SDL_CONTROLLER_BUTTON_RIGHTSTICK: return BTN_R3;
+  case SDL_CONTROLLER_BUTTON_BACK: return BTN_SELECT;
+  case SDL_CONTROLLER_BUTTON_START: return BTN_START;
+  case SDL_CONTROLLER_BUTTON_DPAD_UP: return BTN_UP;
+  case SDL_CONTROLLER_BUTTON_DPAD_DOWN: return BTN_DOWN;
+  case SDL_CONTROLLER_BUTTON_DPAD_LEFT: return BTN_LEFT;
+  case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: return BTN_RIGHT;
+  }
+  return 0;
+}
+
+// Crash reads a digital pad, so the left stick drives the d-pad and the
+// triggers act as L2/R2.  Only crossings press or release, so a held key or
+// d-pad direction is not cancelled by a resting stick.
+static void mapControllerAxis(uint8_t axis, int16_t value,
+                              ps1::input::InputController &input,
+                              uint16_t &held) {
+  using namespace ps1::input;
+  constexpr int16_t kStick = 12000, kTrigger = 8000;
+  uint16_t mask = 0, want = 0;
+  switch (axis) {
+  case SDL_CONTROLLER_AXIS_LEFTX:
+    mask = BTN_LEFT | BTN_RIGHT;
+    want = value < -kStick ? BTN_LEFT : value > kStick ? BTN_RIGHT : 0;
+    break;
+  case SDL_CONTROLLER_AXIS_LEFTY:
+    mask = BTN_UP | BTN_DOWN;
+    want = value < -kStick ? BTN_UP : value > kStick ? BTN_DOWN : 0;
+    break;
+  case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
+    mask = BTN_L2;
+    want = value > kTrigger ? BTN_L2 : 0;
+    break;
+  case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:
+    mask = BTN_R2;
+    want = value > kTrigger ? BTN_R2 : 0;
+    break;
+  default:
+    return;
+  }
+  for (uint16_t bit = 1; bit != 0; bit = static_cast<uint16_t>(bit << 1)) {
+    if (!(mask & bit) || ((held & bit) != 0) == ((want & bit) != 0))
+      continue;
+    if (want & bit)
+      input.press(bit, 0);
+    else
+      input.release(bit, 0);
+  }
+  held = static_cast<uint16_t>((held & ~mask) | want);
 }
 
 // Constants
@@ -710,8 +797,7 @@ int main(int argc, char *argv[]) {
     if (SDL_IsGameController(i)) {
       gamepad = SDL_GameControllerOpen(i);
       if (gamepad) {
-        fmt::print("[Input] GameController: {}\n",
-                   SDL_GameControllerName(gamepad));
+        announceController(gamepad);
         break;
       }
     }
@@ -937,6 +1023,9 @@ int main(int argc, char *argv[]) {
         st.rcntTickAddr = readU32("rcnt_tick_addr");
         st.rcntTicksPerVBlank = readU32("rcnt_ticks_per_vblank");
         st.gpuEnvAddr = readU32("gpu_env_addr");
+        st.intrStackTop = readU32("intr_stack_top");
+        if (st.intrStackTop != 0)
+          fmt::print("[timing] interrupt stack top at 0x{:08X}\n", st.intrStackTop);
         if (st.gpuEnvAddr != 0)
           fmt::print("[timing] libgpu env block at 0x{:08X}\n", st.gpuEnvAddr);
         if (st.rcntTickAddr != 0 && st.rcntTicksPerVBlank != 0)
@@ -1061,7 +1150,12 @@ int main(int argc, char *argv[]) {
     const auto now = steady_clock::now();
     if (now < next)
       return;
-    next = now + microseconds(16667); // ~60 Hz
+    // ~60 Hz on a fixed schedule: stepping from `now` let every late poll push
+    // the next tick back, measured as 58.1 VBlanks/s.  A long stall resyncs
+    // rather than replaying a burst of ticks.
+    next += microseconds(16667);
+    if (now - next > milliseconds(100))
+      next = now + microseconds(16667);
 
     // Hardware tick, paced by the wall clock rather than by presentation.
     g_hwTicks.fetch_add(1, std::memory_order_relaxed);
@@ -1287,7 +1381,23 @@ int main(int argc, char *argv[]) {
         prev = m;
         prevTicks = ticks;
       }
+      // `PS1_POKE=<addr>:<from>:<to>` rewrites a guest word whenever it holds
+      // <from> -- e.g. redirect the level the game asks for, to test any level
+      // without playing up to it.
+      static const auto poke = []() -> std::array<uint32_t, 3> {
+        const char *e = std::getenv("PS1_POKE");
+        std::array<uint32_t, 3> v{};
+        if (e && std::sscanf(e, "%x:%x:%x", &v[0], &v[1], &v[2]) != 3)
+          v = {};
+        return v;
+      }();
+      if (poke[0] != 0 && memory.read32(poke[0]) == poke[1]) {
+        memory.write32(poke[0], poke[2]);
+        fmt::print(stderr, "[poke] 0x{:08X}: 0x{:X} -> 0x{:X}\n", poke[0],
+                   poke[1], poke[2]);
+      }
       gpu.snapshotDisplayBuffer();
+      input.latchFrame();
       bios.updatePadBuffers();
     }
   };
@@ -1347,9 +1457,13 @@ int main(int argc, char *argv[]) {
   }
 
   bool running = true;
+  uint16_t stickHeld = 0; // d-pad bits currently held by the left stick
+  uint32_t presentedVBlank = 0;
   while (running) {
-    // 1. Poll SDL2 Events
+    // 1. Poll SDL2 Events.  Wait at most 1 ms for one, so a key press reaches
+    // the pad within a millisecond instead of after the next presented frame.
     SDL_Event event;
+    SDL_WaitEventTimeout(nullptr, 1);
     while (SDL_PollEvent(&event)) {
       switch (event.type) {
       case SDL_QUIT:
@@ -1358,12 +1472,44 @@ int main(int argc, char *argv[]) {
       case SDL_KEYDOWN:
         if (event.key.keysym.sym == SDLK_ESCAPE) {
           running = false;
+        } else if (event.key.keysym.sym == SDLK_F2 && !event.key.repeat) {
+          gpu.setDedither(!gpu.dedither());
+          fmt::print("[display] dithering {}\n",
+                     gpu.dedither() ? "off" : "on (game default)");
         } else {
           mapKeyToButton(event.key.keysym.sym, input, true);
         }
         break;
       case SDL_KEYUP:
         mapKeyToButton(event.key.keysym.sym, input, false);
+        break;
+      case SDL_CONTROLLERBUTTONDOWN:
+      case SDL_CONTROLLERBUTTONUP:
+        if (uint16_t btn = controllerButton(event.cbutton.button)) {
+          if (event.type == SDL_CONTROLLERBUTTONDOWN)
+            input.press(btn, 0);
+          else
+            input.release(btn, 0);
+        }
+        break;
+      case SDL_CONTROLLERAXISMOTION:
+        mapControllerAxis(event.caxis.axis, event.caxis.value, input,
+                          stickHeld);
+        break;
+      case SDL_CONTROLLERDEVICEADDED: // plugged in after start-up
+        if (!gamepad && (gamepad = SDL_GameControllerOpen(event.cdevice.which)))
+        {
+          announceController(gamepad);
+        }
+        break;
+      case SDL_CONTROLLERDEVICEREMOVED:
+        if (gamepad && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(
+                           gamepad)) == event.cdevice.which) {
+          SDL_GameControllerClose(gamepad);
+          gamepad = nullptr;
+          fmt::print("[Input] GameController disconnected\n");
+          SDL_SetWindowTitle(SDL_GL_GetCurrentWindow(), "ps1Recomp");
+        }
         break;
       }
     }
@@ -1376,7 +1522,13 @@ int main(int argc, char *argv[]) {
     // motion, worse the more there was to draw.  It now rides the game
     // thread's own 60 Hz pump; see vblankTick.
 
-    // 2. Render
+    // 2. Render -- only when the guest has produced a new frame.
+    const uint32_t vblankNow =
+        ps1::psyq::psyq_state().vsyncCounter.load(std::memory_order_acquire);
+    if (vblankNow == presentedVBlank && !g_shutdown_requested &&
+        !gameFinished.load(std::memory_order_acquire))
+      continue;
+    presentedVBlank = vblankNow;
     if (!renderer.processEvents()) {
       running = false;
       continue;
@@ -1452,9 +1604,7 @@ int main(int argc, char *argv[]) {
       running = false;
     }
 
-    // Frame pacing: SDL_GL_SetSwapInterval(1) provides VSync-based pacing
-    // via the blocking SDL_GL_SwapWindow call in renderFrame().
-    // No additional SDL_Delay needed -- it would double the frame time.
+    // Frame pacing comes from the guest VBlank (step 2), not from vsync.
   }
 
   if (const char *vramDump = std::getenv("PS1_VRAM_DUMP_PATH")) {

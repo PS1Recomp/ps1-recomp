@@ -31,6 +31,10 @@ in vec2 TexCoord;
 uniform sampler2D vramTex;
 // Uniform storing (X / 1024.0, Y / 512.0, W / 1024.0, H / 512.0)
 uniform vec4 uDisplayArea;
+// Screen pixels per PS1 pixel, per axis.
+uniform vec2 uScale;
+
+const vec2 kVram = vec2(1024.0, 512.0);
 
 void main() {
     // Map normalized TexCoord (0..1) to the actual Display Area in VRAM
@@ -38,8 +42,17 @@ void main() {
         uDisplayArea.x + TexCoord.x * uDisplayArea.z,
         uDisplayArea.y + TexCoord.y * uDisplayArea.w
     );
-    
-    FragColor = texture(vramTex, displayCoord);
+
+    // Sharp bilinear: each PS1 pixel stays a flat block, and only the ~1
+    // screen pixel where two blocks meet is blended -- even block widths at
+    // non-integer scales, without the blur of plain bilinear.
+    vec2 texel = displayCoord * kVram - 0.5;
+    vec2 f = clamp((fract(texel) - 0.5) * uScale + 0.5, 0.0, 1.0);
+    vec2 coord = floor(texel) + 0.5 + f;
+    // Stay inside the display area so the other framebuffer never bleeds in.
+    vec2 lo = uDisplayArea.xy * kVram + 0.5;
+    vec2 hi = (uDisplayArea.xy + uDisplayArea.zw) * kVram - 0.5;
+    FragColor = texture(vramTex, clamp(coord, lo, hi) / kVram);
 }
 )";
 
@@ -75,7 +88,10 @@ bool RendererOpenGL::init(const std::string &windowTitle) {
     return false;
   }
 
-  SDL_GL_SetSwapInterval(1); // VSync on
+  // Not blocking on vsync: the host loop presents each new guest frame as soon
+  // as it exists and polls input in between (main_host.cpp).  A Wayland
+  // compositor still paces and tear-proofs what reaches the screen.
+  SDL_GL_SetSwapInterval(0);
 
   GLuint vs = compileShader(GL_VERTEX_SHADER, VERTEX_SHADER_SRC);
   GLuint fs = compileShader(GL_FRAGMENT_SHADER, FRAGMENT_SHADER_SRC);
@@ -167,9 +183,9 @@ void RendererOpenGL::setupTexture() {
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-                  GL_NEAREST); // PS1 is pixelated
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  // Linear, so the shader's sharp-bilinear blend has something to blend.
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
   // Allocate empty texture 1024x512
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB5_A1, GPU::VRAM_WIDTH, GPU::VRAM_HEIGHT,
@@ -181,10 +197,13 @@ void RendererOpenGL::renderFrame() {
     return;
 
   int w, h;
-  SDL_GetWindowSize(window_, &w, &h);
+  SDL_GL_GetDrawableSize(window_, &w, &h); // pixels, not points (HiDPI)
   glViewport(0, 0, w, h);
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
+
+  const Viewport vp = fitViewport(w, h);
+  glViewport(vp.x, vp.y, vp.w, vp.h);
 
   // Upload display snapshot (captured at VBlank) to texture.
   // Always upload regardless of the display-enable flag: our HLE BIOS does not
@@ -235,6 +254,9 @@ void RendererOpenGL::renderFrame() {
 
   GLint loc = glGetUniformLocation(shaderProgram_, "uDisplayArea");
   glUniform4f(loc, uX, uY, uW, uH);
+  glUniform2f(glGetUniformLocation(shaderProgram_, "uScale"),
+              static_cast<float>(vp.w) / currentW,
+              static_cast<float>(vp.h) / currentH);
 
   glBindVertexArray(vao_);
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);

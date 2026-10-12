@@ -4,6 +4,7 @@
 // PS1 Controller (Digital Pad, DualShock) and Memory Card via SIO
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -77,6 +78,14 @@ public:
 
   uint8_t flagByte() const { return flag_; }
 
+  /// FLAG bit3: the directory has not been touched since insertion.
+  bool changed() const { return (flag_ & 0x08) != 0; }
+
+  /// Whole-sector access for the BIOS card functions, which talk to the card
+  /// a sector at a time.  `sector` must be < NUM_SECTORS.
+  void readSector(uint32_t sector, uint8_t *dst) const;
+  void writeSector(uint32_t sector, const uint8_t *src);
+
 private:
   // The card answers a fixed script per command, so the state is just "which
   // command" plus "how many bytes into it".  See psx-spx,
@@ -115,6 +124,11 @@ public:
   void release(uint16_t btn, int port = 0);
   uint16_t buttonState(int port = 0) const;
 
+  /// Call once per VBlank, before the pad is sampled: buttons pressed since
+  /// the previous call read as pressed until the next one, so a tap shorter
+  /// than a frame is not lost.
+  void latchFrame();
+
   // Analog sticks (0x00-0xFF, 0x80 = center)
   void setAnalog(int port, uint8_t lx, uint8_t ly, uint8_t rx, uint8_t ry);
 
@@ -147,6 +161,9 @@ private:
   };
 
   PortState ports_[2];
+  // press() runs on the host event thread, latchFrame() on the game thread.
+  std::atomic<uint16_t> tapped_[2] = {0, 0}; // pressed since the last latch
+  uint16_t shown_[2] = {0, 0};               // taps visible this frame
 
   // SIO state
   uint32_t joyData_ = 0;
