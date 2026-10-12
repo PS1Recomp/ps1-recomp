@@ -86,41 +86,6 @@ void Bios::executeC0() {
 
 // Printf Implementation
 
-// CDROM Event Triggering
-//
-// The PS1 BIOS CDROM interrupt handler translates CDROM INT types
-// into event system notifications.  In a real PS1 the IRQ handler
-// at 0x80000080 would do this, but we HLE it here.
-//
-// Mapping (empirically derived from Rayman openEvent calls):
-//   Rayman opens class 0xF4000001 with 4 specs: {0x0004, 0x8000, 0x0100, 0x2000}
-//   Matching against CDROM INT types:
-//   INT1 (DataReady)   -> event spec 0x0100  <- Rayman ID2 (sector read complete)
-//   INT2 (Complete)    -> event spec 0x8000  <- Rayman ID1 (init/cmd done)
-//   INT3 (Acknowledge) -> event spec 0x0004  <- Rayman ID0 (cmd accepted)
-//   INT4 (DataEnd)     -> event spec 0x0100  <- same as DataReady
-//   INT5 (DiskError)   -> event spec 0x2000  <- Rayman ID3 (error)
-
-static constexpr uint32_t CDROM_EVENT_CLASS_1 = 0xF4000001;
-static constexpr uint32_t CDROM_EVENT_CLASS_2 = 0xF0000011;
-
-static uint32_t cdIntToEventSpec(uint8_t intType) {
-  switch (intType) {
-  case 1:
-    return 0x0100; // INT1 DataReady
-  case 2:
-    return 0x8000; // INT2 Complete
-  case 3:
-    return 0x0004; // INT3 Acknowledge
-  case 4:
-    return 0x0100; // INT4 DataEnd (same class as DataReady)
-  case 5:
-    return 0x2000; // INT5 DiskError
-  default:
-    return 0;
-  }
-}
-
 void Bios::queueCdromEvent(uint8_t cdIntType) {
   // Push under a short mutex.  This is the only cross-thread CDROM IRQ
   // entry-point: `cdromCtrl.setInterruptCallback` (wired in main_host.cpp)
@@ -166,11 +131,11 @@ std::size_t Bios::drainCdromEventQueue() {
 }
 
 void Bios::triggerCdromEvent(uint8_t cdIntType) {
-  uint32_t spec = cdIntToEventSpec(cdIntType);
-  if (spec == 0)
+  // INT1..INT5.  No BIOS event is delivered for these: the F4000001h /
+  // F0000011h classes games open next to CdInit belong to the memory card.
+  if (cdIntType < 1 || cdIntType > 5)
     return;
-  BIOS_LOG("[BIOS] triggerCdromEvent: INT{} -> spec 0x{:04X}\n", cdIntType,
-           spec);
+  BIOS_LOG("[BIOS] triggerCdromEvent: INT{}\n", cdIntType);
 
   // HLE PsyQ CDROM interrupt handler variables
   //
@@ -344,8 +309,6 @@ void Bios::triggerCdromEvent(uint8_t cdIntType) {
   // updated above, which is sufficient for the polling code to detect
   // command completion.
 
-  eventSystem_.triggerEvent(CDROM_EVENT_CLASS_1, spec);
-  eventSystem_.triggerEvent(CDROM_EVENT_CLASS_2, spec);
 }
 
 void Bios::triggerVBlankEvent() {

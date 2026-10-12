@@ -27,6 +27,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <queue>
 #include <thread>
 
@@ -35,6 +36,7 @@ class GPU;
 }
 namespace ps1::input {
 class InputController;
+class MemoryCard;
 }
 namespace ps1::cdrom {
 class CdromController;
@@ -295,6 +297,32 @@ private:
   input::InputController *input_ = nullptr;
   cdrom::CdromController *cdrom_ = nullptr;
   ::ps1::DMA *dma_ = nullptr;
+
+  // Memory card BIOS functions (syscall_b.cpp).  I/O completes at once and
+  // reports through the SwCARD/HwCARD events.
+  enum class CardOp { Info, Read, Write };
+  uint32_t cardRequest(uint32_t port, CardOp op, uint32_t sector, uint32_t addr);
+  bool cardChangeAcked_ = false;     // _new_card: ignore the change flag once
+  uint8_t cardStatus_[2] = {1, 1};   // _card_status per slot
+
+  // Memory card files ("bu00:"/"bu10:").  Their handles start above FileIO's
+  // so one fd space covers both devices.
+  struct CardFile {
+    bool open = false;
+    int slot = 0;
+    int block = -1; // first block
+    uint32_t pos = 0;
+    uint32_t size = 0;
+  };
+  static constexpr int32_t kCardFdBase = 16;
+  CardFile cardFiles_[16];
+  std::string cardSearch_; // firstfile/nextfile pattern, without the device
+  int cardSearchSlot_ = 0;
+  int cardSearchNext_ = 0;
+  input::MemoryCard *cardForPath(const std::string &path, std::string &name);
+  int32_t cardOpen(const std::string &path, uint32_t mode);
+  int32_t cardTransfer(int32_t fd, uint32_t addr, int32_t len, bool write);
+  uint32_t cardFindNext(uint32_t direntry);
 
   // Pad buffer state (InitPAD / StartPAD)
   uint32_t padBuf1Addr_ = 0;
