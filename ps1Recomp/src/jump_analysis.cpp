@@ -178,11 +178,26 @@ detectInternalReturnTargets(const std::vector<uint32_t> &instrs,
   const uint32_t funcEnd = funcAddr + static_cast<uint32_t>(instrs.size() * 4);
 
   std::vector<uint32_t> targets;
+  auto add = [&](uint32_t addr) {
+    if (addr >= funcAddr && addr < funcEnd && (addr & 3u) == 0 &&
+        std::find(targets.begin(), targets.end(), addr) == targets.end())
+      targets.push_back(addr);
+  };
   uint32_t hi = 0;
   bool haveHi = false;
+  uint32_t base = 0; // last in-function `$ra` constant, for a scaled add
+  bool haveBase = false;
+  uint8_t shiftOf[32] = {}; // `sll $rd, $rt, sa` seen last for each $rd
+  bool shifted[32] = {};
 
   for (uint32_t word : instrs) {
     Instruction inst = MipsDecoder::decode(word);
+
+    if (inst.id == InstrId::SLL && inst.rd != 0) {
+      shiftOf[inst.rd] = inst.shamt;
+      shifted[inst.rd] = true;
+      continue;
+    }
 
     if (inst.id == InstrId::LUI && inst.rt == kRa) {
       hi = static_cast<uint32_t>(static_cast<uint16_t>(inst.imm16)) << 16;
@@ -195,11 +210,21 @@ detectInternalReturnTargets(const std::vector<uint32_t> &instrs,
       if (!haveHi)
         continue;
       haveHi = false;
-      uint32_t addr = hi + static_cast<uint32_t>(inst.imm16);
-      if (addr < funcAddr || addr >= funcEnd || (addr & 3u) != 0)
-        continue;
-      if (std::find(targets.begin(), targets.end(), addr) == targets.end())
-        targets.push_back(addr);
+      base = hi + static_cast<uint32_t>(inst.imm16);
+      haveBase = base >= funcAddr && base < funcEnd;
+      add(base);
+      continue;
+    }
+
+    // `addu $ra, $ra, $rx` with $rx = index << n: a computed jump into a
+    // table of 2^n-byte blocks starting at the constant (func_80036340).
+    if (inst.id == InstrId::ADDU && inst.rd == kRa && haveBase &&
+        (inst.rs == kRa || inst.rt == kRa)) {
+      const uint8_t idx = inst.rs == kRa ? inst.rt : inst.rs;
+      if (shifted[idx] && shiftOf[idx] >= 2 && shiftOf[idx] < 16)
+        for (uint32_t a = base; a < funcEnd; a += 1u << shiftOf[idx])
+          add(a);
+      haveBase = false;
     }
   }
 
