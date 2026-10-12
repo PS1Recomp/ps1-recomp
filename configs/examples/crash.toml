@@ -1,0 +1,29 @@
+# Crash Bandicoot (USA, SCUS-94900) -- runtime configuration.
+# Copy to configs/crash.toml.  Put your own disc image, extracted from a disc
+# you own, under test_roms/ with the paths below (or edit them).
+[game]
+name = "Crash Bandicoot"
+serial = "SCUS-94900"
+
+[disc]
+cue_path = "test_roms/Crash Bandicoot /Crash Bandicoot (USA).cue"
+exe_path = "test_roms/Crash Bandicoot /Crash Bandicoot (USA).bin.boot.exe"
+
+# PsyQ CDROM register pointer table (game BSS).  CdInit fills it but fails on
+# boot timing; pre-initialising it lets the CD subsystem work regardless.
+[memory_init]
+"0x80055864" = "0x1F801800"
+"0x80055868" = "0x1F801801"
+"0x8005586C" = "0x1F801802"
+"0x80055870" = "0x1F801803"
+
+[timing]
+# ticks_elapsed: Root Counter 2 handler func_80034504 increments this word;
+# target 0x1000 at sysclk/8 is ~16 ticks per VBlank.
+rcnt_tick_addr = "0x80034520"
+rcnt_ticks_per_vblank = 16
+# libgpu's environment block that ResetGraph builds.
+gpu_env_addr = "0x80054A6C"
+# Top of libetc's interrupt stack (startIntr: 0x80053970 + 0xFDC).  Callbacks
+# run there; without it level loads can hang in the decompressor.
+intr_stack_top = "0x8005494C"
