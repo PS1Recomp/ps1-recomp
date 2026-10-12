@@ -738,6 +738,58 @@ TEST_F(PsyqGpuTest, PutDrawEnvEncodesDfeBitFromEnv) {
       << "env->dfe (offset 23) must reach GP0(E1) bit 10, per get_mode";
 }
 
+// PutDrawEnv's background clear (SetDrawEnv2, psyz sys.c:576-619): with
+// env->isbg set, the clip rect is filled with env->r0/g0/b0 -- GP0(02h) when x
+// and w are 64-aligned, else a GP0(60h) rectangle shifted back by the offset.
+// The HLE left it out, so Crash's level-load card was drawn over the last map
+// frame instead of a cleared screen.
+TEST_F(PsyqGpuTest, PutDrawEnvIsbgFillsAnAlignedClipWithGp0FillRect) {
+  const uint32_t env = 0x80100000u;
+  writeRect(env, 0, 12, 512, 216);
+  mem.write16(env + 8, 0);
+  mem.write16(env + 10, 12);
+  mem.write8(env + 24, 1);    // isbg
+  mem.write8(env + 25, 0x11); // r0
+  mem.write8(env + 26, 0x22); // g0
+  mem.write8(env + 27, 0x33); // b0
+
+  ctx.r[A0] = env;
+  hle_PutDrawEnv(&ctx);
+
+  ASSERT_GE(gp0.size(), 3u);
+  const size_t n = gp0.size();
+  EXPECT_EQ(gp0[n - 3], 0x02332211u);
+  EXPECT_EQ(gp0[n - 2], (12u << 16) | 0u);
+  EXPECT_EQ(gp0[n - 1], (216u << 16) | 512u);
+}
+
+TEST_F(PsyqGpuTest, PutDrawEnvIsbgUsesARectangleForAnUnalignedClip) {
+  const uint32_t env = 0x80100000u;
+  writeRect(env, 8, 12, 300, 216);
+  mem.write16(env + 8, 8);
+  mem.write16(env + 10, 12);
+  mem.write8(env + 24, 1);
+
+  ctx.r[A0] = env;
+  hle_PutDrawEnv(&ctx);
+
+  const size_t n = gp0.size();
+  ASSERT_GE(n, 3u);
+  EXPECT_EQ(gp0[n - 3], 0x60000000u);
+  EXPECT_EQ(gp0[n - 2], 0u) << "clip.x/y minus ofs";
+  EXPECT_EQ(gp0[n - 1], (216u << 16) | 300u);
+}
+
+TEST_F(PsyqGpuTest, PutDrawEnvWithoutIsbgEmitsNoClear) {
+  const uint32_t env = 0x80100000u;
+  writeRect(env, 0, 0, 512, 240);
+  ctx.r[A0] = env;
+  hle_PutDrawEnv(&ctx);
+  for (uint32_t w : gp0)
+    EXPECT_NE(w >> 24, 0x02u);
+  EXPECT_EQ(gp0.back(), 0xE6000000u);
+}
+
 // Registry wiring
 
 TEST_F(PsyqGpuTest, RegistryDispatchesAllNewNames) {

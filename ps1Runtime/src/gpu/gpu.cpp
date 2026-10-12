@@ -956,7 +956,7 @@ static int edgeFunction(const Vertex &a, const Vertex &b, const Vertex &c) {
 }
 
 Color16 GPU::applyDither(Color16 baseColor, int x, int y) {
-  if (!ditherEnable_) {
+  if (!ditherEnable_ || dedither_) {
     return baseColor;
   }
 
@@ -1198,12 +1198,21 @@ void GPU::rasterizeTexturedTriangle(Vertex v0, Vertex v1, Vertex v2,
   int maxX = std::min({drawAreaX2_, std::max({v0.x, v1.x, v2.x})});
   int maxY = std::min({drawAreaY2_, std::max({v0.y, v1.y, v2.y})});
 
+  // A textured polygon's Texpage attribute sets the draw mode, semi-
+  // transparency mode included, as GP0(E1h) does (psx-spx, "GP0(E1h)").
+  blendMode_ = (tpage >> 5) & 3;
+  currentTexpage_ = tpage & 0x1FF;
+
   uint32_t tpX = (tpage & 0xF) * 64;
   uint32_t tpY = ((tpage >> 4) & 1) * 256;
   uint32_t depth = (tpage >> 7) & 3;
 
   uint32_t clutX = (clut & 0x3F) * 16;
   uint32_t clutY = (clut >> 6) & 0x1FF;
+
+  const int cR = (color.raw & 0x1F) << 3;
+  const int cG = ((color.raw >> 5) & 0x1F) << 3;
+  const int cB = ((color.raw >> 10) & 0x1F) << 3;
 
   for (int y = minY; y <= maxY; ++y) {
     for (int x = minX; x <= maxX; ++x) {
@@ -1252,12 +1261,21 @@ void GPU::rasterizeTexturedTriangle(Vertex v0, Vertex v1, Vertex v2,
 
         uint32_t idx = (y % VRAM_HEIGHT) * VRAM_WIDTH + (x % VRAM_WIDTH);
 
-        if (isRaw) {
-          vram_[idx] = texColor;
-        } else {
-          // For modulated textures, we apply dither onto texture read.
-          vram_[idx] = applyDither(texColor, p.x, p.y);
+        Color16 finalColor = texColor;
+        if (!isRaw) {
+          // Modulate: texel * colour / 128 per channel (0x80 = identity).
+          const int mR = std::clamp((((texColor.raw & 0x1F) << 3) * cR) / 128, 0, 255);
+          const int mG = std::clamp(((((texColor.raw >> 5) & 0x1F) << 3) * cG) / 128, 0, 255);
+          const int mB = std::clamp(((((texColor.raw >> 10) & 0x1F) << 3) * cB) / 128, 0, 255);
+          finalColor.raw = static_cast<uint16_t>(
+              ((mR >> 3) & 0x1F) | (((mG >> 3) & 0x1F) << 5) |
+              (((mB >> 3) & 0x1F) << 10) | (texColor.raw & 0x8000));
+          finalColor = applyDither(finalColor, p.x, p.y);
         }
+        // Only texels with the semi-transparency flag blend.
+        if (blend && (texColor.raw & 0x8000))
+          finalColor = applyBlend(finalColor, vram_[idx]);
+        vram_[idx] = finalColor;
       }
     }
   }
@@ -1776,6 +1794,9 @@ void GPU::rasterizeGouraudTexturedTriangle(Vertex v0, Vertex v1, Vertex v2,
   int maxX = std::min(drawAreaX2_, std::max({v0.x, v1.x, v2.x}));
   int maxY = std::min(drawAreaY2_, std::max({v0.y, v1.y, v2.y}));
 
+  blendMode_ = (tpage >> 5) & 3; // Texpage attribute sets the draw mode
+  currentTexpage_ = tpage & 0x1FF;
+
   uint32_t tpX = (tpage & 0xF) * 64;
   uint32_t tpY = ((tpage >> 4) & 1) * 256;
   uint32_t depth = (tpage >> 7) & 3;
@@ -1854,7 +1875,7 @@ void GPU::rasterizeGouraudTexturedTriangle(Vertex v0, Vertex v1, Vertex v2,
                          (((mB >> 3) & 0x1F) << 10) | (texColor.raw & 0x8000);
 
           Color16 finalColor = applyDither(modColor, x, y);
-          if (blend) {
+          if (blend && (texColor.raw & 0x8000)) {
             finalColor = applyBlend(finalColor, vram_[idx]);
           }
           vram_[idx] = finalColor;
