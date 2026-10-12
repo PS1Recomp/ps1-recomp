@@ -253,11 +253,19 @@ uint8_t MemoryCard::transfer(uint8_t dataIn) {
     return 0xFF; // bad sector
   if (checksum_ != 0)
     return 0x4E; // "N": bad checksum, nothing written
-  std::memcpy(data_.data() + sectorAddr_ * SECTOR_SIZE, writeBuf_, SECTOR_SIZE);
+  writeSector(sectorAddr_, writeBuf_);
+  return 0x47; // "G": write good
+}
+
+void MemoryCard::readSector(uint32_t sector, uint8_t *dst) const {
+  std::memcpy(dst, data_.data() + sector * SECTOR_SIZE, SECTOR_SIZE);
+}
+
+void MemoryCard::writeSector(uint32_t sector, const uint8_t *src) {
+  std::memcpy(data_.data() + sector * SECTOR_SIZE, src, SECTOR_SIZE);
   dirty_ = true;
   flag_ = static_cast<uint8_t>(flag_ & ~0x08); // directory has now been touched
   flush();
-  return 0x47; // "G": write good
 }
 
 // Input Controller
@@ -267,6 +275,10 @@ InputController::InputController() { reset(); }
 void InputController::reset() {
   for (auto &p : ports_) {
     p = PortState{};
+  }
+  for (int p = 0; p < 2; ++p) {
+    tapped_[p] = 0;
+    shown_[p] = 0;
   }
   joyData_ = 0;
   joyStat_ = 0x05; // TX ready, TX not empty
@@ -279,8 +291,10 @@ void InputController::reset() {
 }
 
 void InputController::press(uint16_t btn, int port) {
-  if (port >= 0 && port < 2)
+  if (port >= 0 && port < 2) {
     ports_[port].buttons &= ~btn;
+    tapped_[port].fetch_or(btn, std::memory_order_relaxed);
+  }
 }
 
 void InputController::release(uint16_t btn, int port) {
@@ -288,9 +302,14 @@ void InputController::release(uint16_t btn, int port) {
     ports_[port].buttons |= btn;
 }
 
+void InputController::latchFrame() {
+  for (int p = 0; p < 2; ++p)
+    shown_[p] = tapped_[p].exchange(0, std::memory_order_relaxed);
+}
+
 uint16_t InputController::buttonState(int port) const {
   if (port >= 0 && port < 2)
-    return ports_[port].buttons;
+    return ports_[port].buttons & ~shown_[port];
   return 0xFFFF;
 }
 
@@ -412,7 +431,7 @@ uint8_t InputController::processSioTransfer(uint8_t dataIn) {
 
   case SioState::TransferPadLo:
     sioState_ = SioState::TransferPadHi;
-    return port.buttons & 0xFF;
+    return buttonState(selectedPort_) & 0xFF;
 
   case SioState::TransferPadHi:
     if (port.padType == PadType::Analog || port.padType == PadType::DualShock) {
@@ -420,7 +439,7 @@ uint8_t InputController::processSioTransfer(uint8_t dataIn) {
     } else {
       sioState_ = SioState::Idle;
     }
-    return (port.buttons >> 8) & 0xFF;
+    return (buttonState(selectedPort_) >> 8) & 0xFF;
 
   case SioState::TransferAnalogRX:
     sioState_ = SioState::TransferAnalogRY;

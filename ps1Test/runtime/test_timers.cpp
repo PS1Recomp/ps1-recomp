@@ -120,3 +120,31 @@ TEST(Vblank, IRQRaised) {
   ic.raiseInterrupt(IRQ_VBLANK);
   EXPECT_TRUE(ic.hasPendingInterrupt());
 }
+
+// Timer::tick(n) jumps straight to the next target/overflow event instead of
+// counting cycle by cycle (it runs ~1.7M cycles per frame).  It must leave the
+// timer exactly where n single-cycle ticks would, and report the same IRQ.
+TEST(Timer, BulkTickMatchesSingleCycleTicks) {
+  uint32_t seed = 12345;
+  auto rnd = [&seed]() { return seed = seed * 1664525u + 1013904223u; };
+  for (int trial = 0; trial < 400; ++trial) {
+    Timer bulk, step;
+    const uint16_t mode = static_cast<uint16_t>(rnd() & 0x78); // bits 3..6
+    const uint16_t target = static_cast<uint16_t>(trial % 5 == 0 ? 0 : rnd());
+    const uint16_t start = static_cast<uint16_t>(rnd());
+    for (Timer *t : {&bulk, &step}) {
+      t->writeMode(mode);
+      t->writeTarget(target);
+      t->writeCounter(start);
+    }
+    for (int chunk = 0; chunk < 6; ++chunk) {
+      const uint32_t n = rnd() % 200000;
+      bool firedStep = false;
+      for (uint32_t i = 0; i < n; ++i)
+        firedStep |= step.tick(1);
+      ASSERT_EQ(bulk.tick(n), firedStep) << "trial " << trial << " chunk " << chunk;
+      ASSERT_EQ(bulk.readCounter(), step.readCounter()) << "trial " << trial;
+      ASSERT_EQ(bulk.readMode(), step.readMode()) << "trial " << trial;
+    }
+  }
+}
