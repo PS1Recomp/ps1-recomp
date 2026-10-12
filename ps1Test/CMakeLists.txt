@@ -98,6 +98,7 @@ add_executable(ps1Runtime_tests
     runtime/test_psyq_registry.cpp
     runtime/test_psyq_libapi.cpp
     runtime/test_psyq_gpu.cpp
+    runtime/test_psyq_hle_contracts.cpp
     runtime/test_psyq_cd.cpp
     runtime/test_psyq_gte.cpp
     runtime/test_psyq_font.cpp
@@ -131,4 +132,7 @@ add_executable(ps1Runtime_e2e_tests
     pipeline/test_function_resolver.cpp
 )
 target_link_libraries(ps1Runtime_e2e_tests PRIVATE ps1Runtime_lib ps1Analyzer_lib ps1Recomp_lib gtest gtest_main gmock)
+# ROMs live under the source tree; ctest runs the binary from build/ps1Test.
+target_compile_definitions(ps1Runtime_e2e_tests PRIVATE
+    PS1RECOMP_TEST_ROMS="${CMAKE_SOURCE_DIR}/test_roms")
 gtest_discover_tests(ps1Runtime_e2e_tests)
