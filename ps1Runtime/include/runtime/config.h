@@ -18,7 +18,9 @@
  */
 
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 namespace ps1 {
@@ -61,6 +63,10 @@ struct Config {
   InputConfig input;
   PathConfig paths;
 };
+
+/// A whole decimal or "0x" hex number that fits in 32 bits, as game TOMLs
+/// write addresses and counts; nullopt for anything else.
+std::optional<uint32_t> parseConfigU32(std::string_view text);
 
 class ConfigReader {
 public:

@@ -1,9 +1,24 @@
 #include "runtime/config.h"
+#include <charconv>
 #include <fmt/format.h>
 #include <fstream>
 #include <sstream>
 
 namespace ps1 {
+
+std::optional<uint32_t> parseConfigU32(std::string_view text) {
+  int base = 10;
+  if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
+    text.remove_prefix(2);
+    base = 16;
+  }
+  uint32_t value = 0;
+  const char *end = text.data() + text.size();
+  auto [ptr, ec] = std::from_chars(text.data(), end, value, base);
+  if (text.empty() || ec != std::errc() || ptr != end)
+    return std::nullopt;
+  return value;
+}
 
 // Simple TOML-like parser
 // Supports: [section], key = "value", key = number, key = true/false

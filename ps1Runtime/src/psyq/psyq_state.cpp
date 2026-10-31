@@ -13,6 +13,7 @@ void PsyqState::reset() {
   cdDataCb    = 0;
   cdNotifyCb  = 0;
   gpuSwapCb   = 0;
+  drawSyncCb  = 0;
   intrMask    = 0;
   for (auto &cb : intrCallback) cb = 0;
   for (auto &cb : dmaCallback)  cb = 0;
@@ -21,6 +22,7 @@ void PsyqState::reset() {
   rcntTickAddr = 0;
   gpuEnvAddr = 0;
   rcntTicksPerVBlank = 0;
+  intrStackTop = 0;
 }
 
 PsyqState &psyq_state() {

@@ -17,6 +17,7 @@ void DMA::reset() {
   std::memset(channels_, 0, sizeof(channels_));
   dpcr_ = 0x07654321; // TEST: reverted to check if bit11 was breaking DMA2
   dicr_ = 0;
+  completed_ = 0;
 }
 
 // Register I/O
@@ -194,6 +195,7 @@ void DMA::executeChannel(uint32_t ch) {
 
   // Set completion flag in DICR
   dicr_ |= (1 << (24 + ch));
+  completed_ |= static_cast<uint8_t>(1u << ch);
   updateMasterInterrupt();
 }
 

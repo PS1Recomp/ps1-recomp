@@ -602,6 +602,16 @@ std::string InstructionEmitter::emitFunction(const RecompFunction &func) const {
     Instruction inst = MipsDecoder::decode(func.instructions[i]);
     std::string code = emitInstruction(inst, addr);
 
+    // `jr $ra` is a return only while $ra holds a caller's address.  When this
+    // function computed $ra into itself, it is a local jump (func_80036340).
+    if (inst.id == InstrId::JR && inst.rs == 31 && !raResume.empty()) {
+      code.clear();
+      for (uint32_t target : raResume)
+        code += fmt::format("if (ctx->r31 == 0x{:08X}u) goto {};\n    ", target,
+                            label(target));
+      code += "return;";
+    }
+
     // Jump table override
     // If this JR $rx has a detected jump table, replace JUMP_INDIRECT
     // with a static switch/goto over the known target addresses.

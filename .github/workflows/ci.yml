@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   # Primary job: build + run full test suite (stub mode -- no ROM required)
   build-and-test:
@@ -31,6 +34,49 @@ jobs:
 
     - name: Run tests
       run: ctest --test-dir build --output-on-failure --verbose
+
+  # Coverage job: Debug + gcov in stub mode, uploaded to Codecov
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential libsdl2-dev libglfw3-dev libgl-dev
+        pipx install gcovr
+
+    - name: Configure CMake
+      run: >
+        cmake -B build -DCMAKE_BUILD_TYPE=Debug -DPS1RECOMP_BUILD_TESTS=ON -DPS1RECOMP_USE_STUB=ON
+        -DCMAKE_C_FLAGS=--coverage -DCMAKE_CXX_FLAGS="--coverage -fprofile-update=atomic"
+        -DCMAKE_EXE_LINKER_FLAGS=--coverage
+
+    - name: Build
+      run: cmake --build build --parallel $(nproc)
+
+    - name: Run tests
+      run: ctest --test-dir build --parallel $(nproc) --output-on-failure
+
+    - name: Collect coverage
+      run: >
+        gcovr --root . build --gcov-ignore-parse-errors=all
+        --exclude-unreachable-branches --exclude-throw-branches
+        --exclude third_party/ --exclude ps1Test/ --exclude 'build/.*'
+        --xml coverage.xml --txt-summary
+
+    - name: Upload to Codecov
+      uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+      with:
+        files: coverage.xml
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: false
 
   # Documentation job: verify Doxygen generates without errors
   docs:

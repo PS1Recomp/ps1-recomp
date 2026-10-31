@@ -2,6 +2,8 @@
 // Validates the PS1 CPU register context structure
 
 #include <gtest/gtest.h>
+#include <cstring>
+#include <new>
 #include <runtime/cpu_context.h>
 
 using namespace ps1;
@@ -170,4 +172,16 @@ TEST(CPUContext, ResetClearsAllFields) {
   EXPECT_EQ(ctx.cop2c[31], 0u);
   EXPECT_EQ(ctx.hi, 0u);
   EXPECT_EQ(ctx.lo, 0u);
+}
+
+// A fresh context must not inherit device pointers from whatever object last
+// lived in that memory: HLEs test `ctx->bios` for null before calling it, and
+// a stale pointer crashed hle_VSync depending on test order.
+TEST(RecompContext, DevicePointersStartNull) {
+  alignas(recomp_context) unsigned char buf[sizeof(recomp_context)];
+  std::memset(buf, 0xAB, sizeof(buf));
+  auto *ctx = new (buf) recomp_context;
+  EXPECT_EQ(ctx->mem, nullptr);
+  EXPECT_EQ(ctx->bios, nullptr);
+  ctx->~recomp_context();
 }

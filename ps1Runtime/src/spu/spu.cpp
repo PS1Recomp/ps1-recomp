@@ -136,22 +136,22 @@ void SPU::writeRegister(uint32_t addr, uint16_t val) {
     reverb_.volumeRight = static_cast<int16_t>(val);
     break;
 
-  // Key On (Lo/Hi)
+  // Key On / Key Off (Lo/Hi) -- trigger registers: a 1 bit keys the voice,
+  // a 0 bit does nothing.  The latches accumulate until the mixer retires
+  // them, because SpuSetKey writes both halves on every note: overwriting
+  // made the music sequencer's `0x18A = 0` erase a sound effect keyed on a
+  // high voice moments earlier in the same audio window.
   case 0x188:
-    keyOnLatch_ = (keyOnLatch_ & 0xFFFF0000) | val;
+    keyOnLatch_ |= val;
     break;
   case 0x18A:
-    keyOnLatch_ =
-        (keyOnLatch_ & 0x0000FFFF) | (static_cast<uint32_t>(val) << 16);
+    keyOnLatch_ |= static_cast<uint32_t>(val) << 16;
     break;
-
-  // Key Off (Lo/Hi)
   case 0x18C:
-    keyOffLatch_ = (keyOffLatch_ & 0xFFFF0000) | val;
+    keyOffLatch_ |= val;
     break;
   case 0x18E:
-    keyOffLatch_ =
-        (keyOffLatch_ & 0x0000FFFF) | (static_cast<uint32_t>(val) << 16);
+    keyOffLatch_ |= static_cast<uint32_t>(val) << 16;
     break;
 
   // Pitch Mod Enable

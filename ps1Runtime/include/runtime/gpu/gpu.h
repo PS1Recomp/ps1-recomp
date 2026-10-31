@@ -78,6 +78,11 @@ public:
   // Get a pointer to the 1024x512 VRAM framebuffer (live -- game thread writes here)
   const Color16 *getVRAM() const { return vram_.data(); }
 
+  // Host display option: ignore the game's dither bit (set from the UI
+  // thread while the game thread draws).
+  void setDedither(bool on) { dedither_ = on; }
+  bool dedither() const { return dedither_; }
+
   /// Push accumulated GPU counters into ps1::metrics at shutdown.
   /// `ps1::metrics::count()` accumulates, so this publishes only what has
   /// accrued since the previous call: main_host reaches this from two
@@ -167,6 +172,7 @@ private:
   int32_t drawAreaX2_;
   int32_t drawAreaY2_;
   bool ditherEnable_;
+  std::atomic<bool> dedither_{false};
   uint8_t blendMode_; // 0: B/2+F/2, 1: B+F, 2: B-F, 3: B+F/4
   // Current texture page from the last GP0(0xE1) draw-mode command. Sprites
   // (GP0 0x64-0x7F) carry no tpage word of their own and sample from this.

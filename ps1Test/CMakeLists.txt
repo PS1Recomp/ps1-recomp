@@ -12,6 +12,7 @@ add_executable(ps1Analyzer_tests
     analyzer/test_config_generator.cpp
     analyzer/test_overlay_scanner.cpp
     analyzer/test_function_boundaries.cpp
+    analyzer/test_disc_reader.cpp
 )
 
 target_link_libraries(ps1Analyzer_tests
@@ -40,6 +41,7 @@ add_executable(ps1Recomp_tests
     recompiler/test_dispatch_emitter.cpp
     recompiler/test_forward_branch.cpp
     recompiler/test_jump_analysis.cpp
+    recompiler/test_instruction_semantics.cpp
 )
 
 target_link_libraries(ps1Recomp_tests
@@ -98,6 +100,7 @@ add_executable(ps1Runtime_tests
     runtime/test_psyq_registry.cpp
     runtime/test_psyq_libapi.cpp
     runtime/test_psyq_gpu.cpp
+    runtime/test_psyq_hle_contracts.cpp
     runtime/test_psyq_cd.cpp
     runtime/test_psyq_gte.cpp
     runtime/test_psyq_font.cpp
@@ -107,6 +110,11 @@ add_executable(ps1Runtime_tests
     runtime/test_metrics.cpp
     runtime/test_gool.cpp
     runtime/test_golden_frame.cpp
+    runtime/test_gte_ops.cpp
+    runtime/test_gool_interp.cpp
+    runtime/test_gpu_primitives.cpp
+    runtime/test_bios_syscalls.cpp
+    runtime/test_cdrom_commands.cpp
 )
 
 target_include_directories(ps1Runtime_tests
@@ -129,6 +137,13 @@ add_executable(ps1Runtime_e2e_tests
     pipeline/test_pipeline.cpp
     pipeline/test_elf_loader.cpp
     pipeline/test_function_resolver.cpp
+    pipeline/test_cli.cpp
 )
 target_link_libraries(ps1Runtime_e2e_tests PRIVATE ps1Runtime_lib ps1Analyzer_lib ps1Recomp_lib gtest gtest_main gmock)
+# ROMs live under the source tree; ctest runs the binary from build/ps1Test.
+target_compile_definitions(ps1Runtime_e2e_tests PRIVATE
+    PS1RECOMP_TEST_ROMS="${CMAKE_SOURCE_DIR}/test_roms"
+    PS1RECOMP_ANALYZER_BIN="$<TARGET_FILE:ps1Analyzer>"
+    PS1RECOMP_RECOMP_BIN="$<TARGET_FILE:ps1Recomp>")
+add_dependencies(ps1Runtime_e2e_tests ps1Analyzer ps1Recomp)
 gtest_discover_tests(ps1Runtime_e2e_tests)

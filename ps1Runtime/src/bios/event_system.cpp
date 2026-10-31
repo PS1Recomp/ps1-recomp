@@ -1,6 +1,7 @@
 #include "runtime/bios/event_system.h"
 #include "runtime/cpu_context.h"
 #include "runtime/memory.h"
+#include "runtime/psyq/psyq_state.h"
 #include <chrono>
 #include <cstdlib>
 #include <fmt/core.h>
@@ -286,6 +287,7 @@ void EventSystem::drainPendingCallbacks() {
     if (cb.hasA1) {
       ctx_.r5 = cb.a1;
     }
+    ps1::psyq::enterInterruptStack(ctx_.r29);
     static int dispCbCount = 0;
     if (dispCbCount++ < 5)
       fmt::print(stderr, "[EVT] drainPendingCallbacks: dispatching 0x{:08X} a0=0x{:X}\n",
