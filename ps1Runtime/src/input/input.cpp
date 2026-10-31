@@ -96,10 +96,9 @@ bool MemoryCard::attachFile(const std::string &path) {
   return saveToFile(path);
 }
 
-// Written through after every accepted sector so a crash, or the fast exit
-// that skips destructors, cannot lose a save.  A sector write is 128 bytes of
-// game data against a 128 KB file; a whole save file is 64 of them, which is
-// well inside what this costs.
+// Called after every completed card operation (an SIO sector, a BIOS file
+// write) so a crash, or the fast exit that skips destructors, cannot lose a
+// save -- but once per operation, not once per 128-byte sector of it.
 void MemoryCard::flush() {
   if (!dirty_ || backingPath_.empty())
     return;
@@ -254,6 +253,7 @@ uint8_t MemoryCard::transfer(uint8_t dataIn) {
   if (checksum_ != 0)
     return 0x4E; // "N": bad checksum, nothing written
   writeSector(sectorAddr_, writeBuf_);
+  flush();
   return 0x47; // "G": write good
 }
 
@@ -265,7 +265,6 @@ void MemoryCard::writeSector(uint32_t sector, const uint8_t *src) {
   std::memcpy(data_.data() + sector * SECTOR_SIZE, src, SECTOR_SIZE);
   dirty_ = true;
   flag_ = static_cast<uint8_t>(flag_ & ~0x08); // directory has now been touched
-  flush();
 }
 
 // Input Controller
@@ -300,6 +299,18 @@ void InputController::press(uint16_t btn, int port) {
 void InputController::release(uint16_t btn, int port) {
   if (port >= 0 && port < 2)
     ports_[port].buttons |= btn;
+}
+
+void HeldButtons::set(Source src, uint16_t btn, bool down,
+                      InputController &input, int port) {
+  auto all = [this] { return static_cast<uint16_t>(held_[0] | held_[1] | held_[2]); };
+  const uint16_t before = all();
+  held_[src] = static_cast<uint16_t>(down ? held_[src] | btn : held_[src] & ~btn);
+  const uint16_t after = all();
+  if (const uint16_t pressed = after & ~before)
+    input.press(pressed, port);
+  if (const uint16_t released = before & ~after)
+    input.release(released, port);
 }
 
 void InputController::latchFrame() {

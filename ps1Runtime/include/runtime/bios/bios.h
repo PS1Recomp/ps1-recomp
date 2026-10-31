@@ -316,6 +316,14 @@ private:
   };
   static constexpr int32_t kCardFdBase = 16;
   CardFile cardFiles_[16];
+  // Any fd at or above the base belongs to the card device, valid or not.
+  static bool isCardFd(uint32_t fd) {
+    return static_cast<int32_t>(fd) >= kCardFdBase;
+  }
+  CardFile *cardFile(uint32_t fd) {
+    const int32_t i = static_cast<int32_t>(fd) - kCardFdBase;
+    return i >= 0 && i < 16 ? &cardFiles_[i] : nullptr;
+  }
   std::string cardSearch_; // firstfile/nextfile pattern, without the device
   int cardSearchSlot_ = 0;
   int cardSearchNext_ = 0;

@@ -95,11 +95,14 @@ int create(MemoryCard &card, const std::string &fileName, int blocks) {
     writeFrame(card, chain[i], state, first ? n * kBlockBytes : 0, next,
                first ? fileName : std::string());
   }
+  card.flush();
   return chain[0];
 }
 
 void erase(MemoryCard &card, int firstBlock) {
-  for (int b = firstBlock; b >= 0 && b < kBlocks;) {
+  // At most kBlocks links: a corrupted card can chain a block back on itself.
+  int b = firstBlock;
+  for (int steps = 0; b >= 0 && b < kBlocks && steps < kBlocks; ++steps) {
     Frame f = readFrame(card, b);
     f.b[0] = static_cast<uint8_t>(0xA0 | (f.b[0] & 0x0F)); // 51h->A1h, ...
     f.b[0x7F] = 0;
@@ -108,6 +111,7 @@ void erase(MemoryCard &card, int firstBlock) {
     card.writeSector(static_cast<uint32_t>(b + 1), f.b);
     b = f.next() == 0xFFFF ? -1 : f.next();
   }
+  card.flush();
 }
 
 int sectorAt(const MemoryCard &card, int firstBlock, uint32_t offset) {

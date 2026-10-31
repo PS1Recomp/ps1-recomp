@@ -84,7 +84,10 @@ public:
   /// Whole-sector access for the BIOS card functions, which talk to the card
   /// a sector at a time.  `sector` must be < NUM_SECTORS.
   void readSector(uint32_t sector, uint8_t *dst) const;
-  void writeSector(uint32_t sector, const uint8_t *src);
+  void writeSector(uint32_t sector, const uint8_t *src); // call flush() after
+
+  /// Write pending changes to the backing file, if any.
+  void flush();
 
 private:
   // The card answers a fixed script per command, so the state is just "which
@@ -94,7 +97,6 @@ private:
 
   void formatImage();
   static uint8_t frameChecksum(const uint8_t *frame, std::size_t n);
-  void flush();
 
   std::array<uint8_t, CARD_SIZE> data_{};
   bool present_ = true;
@@ -193,6 +195,19 @@ private:
   MemoryCard memCards_[2];
 
   uint8_t processSioTransfer(uint8_t dataIn);
+};
+
+/// Host sources (keyboard, pad buttons, left stick) can hold the same PS1
+/// button.  The pad sees their union, so letting go on one source does not
+/// release a button another source still holds.
+class HeldButtons {
+public:
+  enum Source { Keyboard, PadButtons, Stick, kSources };
+  void set(Source src, uint16_t btn, bool down, InputController &input,
+           int port = 0);
+
+private:
+  uint16_t held_[kSources] = {};
 };
 
 } // namespace ps1::input

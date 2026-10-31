@@ -140,6 +140,6 @@ class Bios;
 } // namespace ps1
 
 struct recomp_context : public ps1::CPUContext {
-  ps1::Memory *mem;
-  ps1::bios::Bios *bios;
+  ps1::Memory *mem = nullptr;
+  ps1::bios::Bios *bios = nullptr;
 };

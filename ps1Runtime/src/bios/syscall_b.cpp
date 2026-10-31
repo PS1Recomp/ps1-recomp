@@ -120,21 +120,31 @@ void Bios::handleB0(uint32_t index) {
                      : fileIo_.open(path.c_str(), ctx_.r[A1]);
   } break;
   case 0x33: // lseek
-    if (static_cast<int32_t>(ctx_.r[A0]) >= kCardFdBase) {
-      CardFile &f = cardFiles_[(ctx_.r[A0] - kCardFdBase) & 15];
-      f.pos = (ctx_.r[A2] == 1 ? f.pos : 0) + ctx_.r[A1];
-      ctx_.r[V0] = f.pos;
+    if (CardFile *f = cardFile(ctx_.r[A0])) {
+      const int32_t whence = static_cast<int32_t>(ctx_.r[A2]);
+      const int64_t base = whence == 0 ? 0
+                         : whence == 1 ? int64_t{f->pos}
+                         : whence == 2 ? int64_t{f->size} : -1;
+      const int64_t pos = base + static_cast<int32_t>(ctx_.r[A1]);
+      if (!f->open || base < 0 || pos < 0) {
+        ctx_.r[V0] = static_cast<uint32_t>(-1);
+      } else {
+        f->pos = static_cast<uint32_t>(pos);
+        ctx_.r[V0] = f->pos;
+      }
+    } else if (isCardFd(ctx_.r[A0])) {
+      ctx_.r[V0] = static_cast<uint32_t>(-1);
     } else {
       ctx_.r[V0] = fileIo_.lseek(ctx_.r[A0], ctx_.r[A1], ctx_.r[A2]);
     }
     break;
   case 0x34: // read
-    ctx_.r[V0] = static_cast<int32_t>(ctx_.r[A0]) >= kCardFdBase
+    ctx_.r[V0] = isCardFd(ctx_.r[A0])
                      ? cardTransfer(ctx_.r[A0], ctx_.r[A1], ctx_.r[A2], false)
                      : fileIo_.read(ctx_.r[A0], ctx_.r[A1], ctx_.r[A2]);
     break;
   case 0x35: // write -- memory card files; anything else goes to stdout
-    if (static_cast<int32_t>(ctx_.r[A0]) >= kCardFdBase) {
+    if (isCardFd(ctx_.r[A0])) {
       ctx_.r[V0] = cardTransfer(ctx_.r[A0], ctx_.r[A1], ctx_.r[A2], true);
       break;
     }
@@ -149,9 +159,11 @@ void Bios::handleB0(uint32_t index) {
     ctx_.r[V0] = ctx_.r[A2];
     break;
   case 0x36: // close
-    if (static_cast<int32_t>(ctx_.r[A0]) >= kCardFdBase) {
-      cardFiles_[(ctx_.r[A0] - kCardFdBase) & 15].open = false;
-      ctx_.r[V0] = ctx_.r[A0];
+    if (isCardFd(ctx_.r[A0])) {
+      CardFile *f = cardFile(ctx_.r[A0]);
+      ctx_.r[V0] = f && f->open ? ctx_.r[A0] : static_cast<uint32_t>(-1);
+      if (f)
+        f->open = false;
     } else {
       ctx_.r[V0] = fileIo_.close(ctx_.r[A0]);
     }
@@ -267,6 +279,7 @@ uint32_t Bios::cardRequest(uint32_t port, CardOp op, uint32_t sector,
       for (uint32_t i = 0; i < sizeof(buf); ++i)
         buf[i] = ctx_.mem->read8(addr + i);
       card->writeSector(sector, buf);
+      card->flush();
     } else if (op == CardOp::Read) {
       card->readSector(sector, buf);
       for (uint32_t i = 0; i < sizeof(buf); ++i)
@@ -316,9 +329,10 @@ int32_t Bios::cardOpen(const std::string &path, uint32_t mode) {
 }
 
 int32_t Bios::cardTransfer(int32_t fd, uint32_t addr, int32_t len, bool write) {
-  CardFile &f = cardFiles_[(fd - kCardFdBase) & 15];
-  if (!f.open || input_ == nullptr || len < 0)
+  CardFile *file = cardFile(static_cast<uint32_t>(fd));
+  if (file == nullptr || !file->open || input_ == nullptr || len < 0)
     return -1;
+  CardFile &f = *file;
   input::MemoryCard &card = input_->getMemoryCard(f.slot);
   constexpr uint32_t kSector = input::MemoryCard::SECTOR_SIZE;
   uint8_t buf[kSector];
@@ -341,6 +355,8 @@ int32_t Bios::cardTransfer(int32_t fd, uint32_t addr, int32_t len, bool write) {
     f.pos += n;
     done += static_cast<int32_t>(n);
   }
+  if (write)
+    card.flush();
   return done;
 }
 

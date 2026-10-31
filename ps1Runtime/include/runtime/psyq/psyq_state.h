@@ -109,6 +109,8 @@ public:
   /// Display-swap callback registered by `VSyncCallback`.  Replaces
   /// `gpu_swap_cb` BSS slot.
   uint32_t gpuSwapCb = 0;
+  /// libgpu DrawSyncCallback: recorded only, the GPU is synchronous.
+  uint32_t drawSyncCb = 0;
 
   // Interrupt / callback management (libetc + libapi).  PSY-Q's libetc
   // routes everything through an indirection struct (psyz/decomp/src/libetc/
@@ -188,5 +190,12 @@ private:
 
 /// Access the process-wide PsyqState singleton.
 PsyqState &psyq_state();
+
+/// Point a callback's $sp at the interrupt stack, as PSY-Q's interrupt module
+/// does before it calls a handler.  No-op when the game TOML sets none.
+inline void enterInterruptStack(uint32_t &sp) {
+  if (const uint32_t top = psyq_state().intrStackTop)
+    sp = top;
+}
 
 } // namespace ps1::psyq

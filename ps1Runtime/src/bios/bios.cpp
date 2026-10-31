@@ -504,9 +504,10 @@ void Bios::drainPendingCallbacksSlow() {
   // - Lines 4-6 (root counters): real counters fire far more often; the
   //   handlers seen so far only poll for completion.
   // - DMA channels: transfers complete synchronously in this runtime, so a
-  //   completion callback is always due by the next frame.  Crash's SPU
-  //   library polls transfer status this way and delivers
-  //   DeliverEvent(0xF0000009, 0x20), which the level loader waits on.
+  //   channel that finished one since the last frame gets its completion
+  //   callback now.  Crash's SPU library delivers DeliverEvent(0xF0000009,
+  //   0x20) from it, which the level loader waits on.  Channels that did not
+  //   transfer stay quiet: CD, MDEC and GPU handlers treat a call as "done".
   {
     auto &st = ps1::psyq::psyq_state();
     uint32_t frame = st.vsyncCounter.load(std::memory_order_relaxed);
@@ -521,8 +522,10 @@ void Bios::drainPendingCallbacksSlow() {
       deliver(st.intrCallback[0]);
       for (std::size_t irq = 4; irq <= 6; ++irq)
         deliver(st.intrCallback[irq]);
-      for (uint32_t cb : st.dmaCallback)
-        deliver(cb);
+      const uint8_t done = dma_ ? dma_->takeCompleted() : 0;
+      for (std::size_t ch = 0; ch < ::ps1::DMA::NUM_CHANNELS; ++ch)
+        if (done & (1u << ch))
+          deliver(st.dmaCallback[ch]);
     }
   }
 
@@ -603,6 +606,7 @@ void Bios::drainPendingCallbacksSlow() {
       if (dataCb != 0) {
         ctx_.r4 = intType; // a0 = interrupt type
         ctx_.r5 = 0;       // a1 (unused by dataCb in practice)
+        ps1::psyq::enterInterruptStack(ctx_.r29);
         recomp_dispatch(ctx_.mem->ramPtr(), &ctx_, dataCb);
       }
     } else if (intType == 2) {
@@ -611,6 +615,7 @@ void Bios::drainPendingCallbacksSlow() {
       if (notifyCb != 0) {
         ctx_.r4 = intType;
         ctx_.r5 = 0;
+        ps1::psyq::enterInterruptStack(ctx_.r29);
         recomp_dispatch(ctx_.mem->ramPtr(), &ctx_, notifyCb);
       }
     }

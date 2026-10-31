@@ -287,10 +287,7 @@ void EventSystem::drainPendingCallbacks() {
     if (cb.hasA1) {
       ctx_.r5 = cb.a1;
     }
-    // Switch to the interrupt stack, as PSY-Q's interrupt module does before
-    // it calls a handler (see PsyqState::intrStackTop).
-    if (const uint32_t stackTop = ps1::psyq::psyq_state().intrStackTop)
-      ctx_.r29 = stackTop;
+    ps1::psyq::enterInterruptStack(ctx_.r29);
     static int dispCbCount = 0;
     if (dispCbCount++ < 5)
       fmt::print(stderr, "[EVT] drainPendingCallbacks: dispatching 0x{:08X} a0=0x{:X}\n",

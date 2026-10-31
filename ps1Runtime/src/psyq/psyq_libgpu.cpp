@@ -53,12 +53,6 @@ inline void writeGP1(uint32_t w) {
 // videoMode: 0 = NTSC (default), 1 = PAL.
 int g_videoMode = 0;
 
-// DrawSyncCallback PS1-side function pointer. Recorded so we can return the
-// previous one; not actually invoked (runtime GPU is synchronous).
-// VSyncCallback's swap routine lives in psyq_state().gpuSwapCb so the BIOS
-// VBlank thread can dispatch it without round-tripping through this module.
-uint32_t g_drawSyncCallback = 0;
-
 // "Once-per-name" warning helper for stubbed libgs entries.
 void warnOnceFor(const char *name) {
   static std::unordered_set<std::string> seen;
@@ -254,9 +248,9 @@ void hle_libgpu_ClearImage(recomp_context *ctx) {
 // DrawSyncCallback(fn): record + return previous. Not invoked by the runtime
 // because the GPU is fully synchronous (DrawSync always returns 0 immediately).
 void hle_libgpu_DrawSyncCallback(recomp_context *ctx) {
-  uint32_t prev = g_drawSyncCallback;
-  g_drawSyncCallback = ctx->r[A0];
-  ctx->r[V0] = prev;
+  auto &s = psyq_state();
+  ctx->r[V0] = s.drawSyncCb;
+  s.drawSyncCb = ctx->r[A0];
 }
 
 // VSyncCallback(fn): record into psyq_state().gpuSwapCb + return previous.

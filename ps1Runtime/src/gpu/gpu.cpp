@@ -39,6 +39,8 @@ void GPU::reset() {
   drawAreaY2_ = 511;
   ditherEnable_ = false;
   currentTexpage_ = 0;
+  texWindowMaskX_ = texWindowMaskY_ = 0;
+  texWindowOffsetX_ = texWindowOffsetY_ = 0;
   displayModeSet_ = false;
   displayAreaSet_ = false;
 

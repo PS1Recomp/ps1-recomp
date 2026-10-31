@@ -37,11 +37,13 @@
 #include <runtime/input/input.h>
 #include <runtime/mdec/mdec.h>
 #include <runtime/memory.h>
+#include <runtime/config.h>
 #include <runtime/metrics.h>
 #include <runtime/spu/spu.h>
 #include <runtime/timers/timers.h>
 #include <string>
 #include <thread>
+#include <stdexcept>
 #include <toml.hpp>
 #include <vector>
 
@@ -435,7 +437,7 @@ static void printPadBindings() {
 }
 
 static void mapKeyToButton(SDL_Keycode key, ps1::input::InputController &input,
-                           bool pressed) {
+                           ps1::input::HeldButtons &held, bool pressed) {
   for (const auto &b : kPadBindings) {
     if (b.key != key)
       continue;
@@ -443,10 +445,7 @@ static void mapKeyToButton(SDL_Keycode key, ps1::input::InputController &input,
     // different problem from a button that never reached the pad at all.
     if (pressed)
       fmt::print(stderr, "[pad] {} -> {}\n", b.keyName, b.padName);
-    if (pressed)
-      input.press(b.button, 0);
-    else
-      input.release(b.button, 0);
+    held.set(ps1::input::HeldButtons::Keyboard, b.button, pressed, input);
     return;
   }
 }
@@ -475,11 +474,10 @@ static uint16_t controllerButton(uint8_t b) {
 }
 
 // Crash reads a digital pad, so the left stick drives the d-pad and the
-// triggers act as L2/R2.  Only crossings press or release, so a held key or
-// d-pad direction is not cancelled by a resting stick.
+// triggers act as L2/R2.
 static void mapControllerAxis(uint8_t axis, int16_t value,
                               ps1::input::InputController &input,
-                              uint16_t &held) {
+                              ps1::input::HeldButtons &held) {
   using namespace ps1::input;
   constexpr int16_t kStick = 12000, kTrigger = 8000;
   uint16_t mask = 0, want = 0;
@@ -503,15 +501,24 @@ static void mapControllerAxis(uint8_t axis, int16_t value,
   default:
     return;
   }
-  for (uint16_t bit = 1; bit != 0; bit = static_cast<uint16_t>(bit << 1)) {
-    if (!(mask & bit) || ((held & bit) != 0) == ((want & bit) != 0))
-      continue;
-    if (want & bit)
-      input.press(bit, 0);
-    else
-      input.release(bit, 0);
-  }
-  held = static_cast<uint16_t>((held & ~mask) | want);
+  held.set(HeldButtons::Stick, want, true, input);
+  held.set(HeldButtons::Stick, static_cast<uint16_t>(mask & ~want), false, input);
+}
+
+// An address or count from a game TOML: an integer, or a string such as
+// "0x8005494C".  Absent is 0; anything else is a config error, not a silent 0.
+static uint32_t readConfigU32(const toml::value &table, const char *section,
+                              const char *key) {
+  if (!table.contains(key))
+    return 0;
+  const auto &v = toml::find(table, key);
+  if (v.is_integer() && v.as_integer() >= 0 && v.as_integer() <= 0xFFFFFFFF)
+    return static_cast<uint32_t>(v.as_integer());
+  if (v.is_string())
+    if (auto n = ps1::parseConfigU32(v.as_string()))
+      return *n;
+  throw std::runtime_error(fmt::format(
+      "[{}] {}: expected a 32-bit integer or a \"0x...\" string", section, key));
 }
 
 // Constants
@@ -677,8 +684,9 @@ int main(int argc, char *argv[]) {
           if (paths.contains("memcard_dir"))
             cardDir = toml::find<std::string>(paths, "memcard_dir");
         }
-      } catch (const std::exception &) {
-        // Paths are optional; the default stands.
+      } catch (const std::exception &e) {
+        fmt::print(stderr, "Failed to parse config: {}\n", e.what());
+        return 1;
       }
     }
     std::error_code ec;
@@ -972,15 +980,8 @@ int main(int argc, char *argv[]) {
       if (cfg.contains("bss_mirrors")) {
         auto &mirrors = toml::find(cfg, "bss_mirrors");
         if (mirrors.is_table()) {
-          auto readAddr = [&](const char *key) -> uint32_t {
-            if (!mirrors.contains(key))
-              return 0;
-            auto v = toml::find(mirrors, key);
-            if (v.is_string())
-              return std::strtoul(v.as_string().c_str(), nullptr, 0);
-            if (v.is_integer())
-              return static_cast<uint32_t>(v.as_integer());
-            return 0;
+          auto readAddr = [&](const char *key) {
+            return readConfigU32(mirrors, "bss_mirrors", key);
           };
           vblankCounterMirror = readAddr("vblank_counter");
           cdSyncMirror = readAddr("cd_sync_byte");
@@ -996,8 +997,9 @@ int main(int argc, char *argv[]) {
                        cdReadyMirror);
         }
       }
-    } catch (const std::exception &) {
-      // Optional section -- silent fallback.
+    } catch (const std::exception &e) {
+      fmt::print(stderr, "Failed to parse config: {}\n", e.what());
+      return 1;
     }
 
     // `[timing]` (TOML, optional): games that drive their frame delta off a
@@ -1009,15 +1011,8 @@ int main(int argc, char *argv[]) {
       auto cfg = toml::parse(config_path);
       if (cfg.contains("timing")) {
         auto &t = toml::find(cfg, "timing");
-        auto readU32 = [&](const char *key) -> uint32_t {
-          if (!t.contains(key))
-            return 0;
-          auto v = toml::find(t, key);
-          if (v.is_string())
-            return std::strtoul(v.as_string().c_str(), nullptr, 0);
-          if (v.is_integer())
-            return static_cast<uint32_t>(v.as_integer());
-          return 0;
+        auto readU32 = [&](const char *key) {
+          return readConfigU32(t, "timing", key);
         };
         auto &st = ps1::psyq::psyq_state();
         st.rcntTickAddr = readU32("rcnt_tick_addr");
@@ -1032,8 +1027,9 @@ int main(int argc, char *argv[]) {
           fmt::print("[timing] rcnt tick 0x{:08X} += {} per VBlank\n",
                      st.rcntTickAddr, st.rcntTicksPerVBlank);
       }
-    } catch (const std::exception &) {
-      // Optional section -- silent fallback.
+    } catch (const std::exception &e) {
+      fmt::print(stderr, "Failed to parse config: {}\n", e.what());
+      return 1;
     }
   }
   bios.setBssMirrors(cdSyncMirror, cdReadyMirror);
@@ -1457,7 +1453,7 @@ int main(int argc, char *argv[]) {
   }
 
   bool running = true;
-  uint16_t stickHeld = 0; // d-pad bits currently held by the left stick
+  ps1::input::HeldButtons held;
   uint32_t presentedVBlank = 0;
   while (running) {
     // 1. Poll SDL2 Events.  Wait at most 1 ms for one, so a key press reaches
@@ -1477,24 +1473,20 @@ int main(int argc, char *argv[]) {
           fmt::print("[display] dithering {}\n",
                      gpu.dedither() ? "off" : "on (game default)");
         } else {
-          mapKeyToButton(event.key.keysym.sym, input, true);
+          mapKeyToButton(event.key.keysym.sym, input, held, true);
         }
         break;
       case SDL_KEYUP:
-        mapKeyToButton(event.key.keysym.sym, input, false);
+        mapKeyToButton(event.key.keysym.sym, input, held, false);
         break;
       case SDL_CONTROLLERBUTTONDOWN:
       case SDL_CONTROLLERBUTTONUP:
-        if (uint16_t btn = controllerButton(event.cbutton.button)) {
-          if (event.type == SDL_CONTROLLERBUTTONDOWN)
-            input.press(btn, 0);
-          else
-            input.release(btn, 0);
-        }
+        if (uint16_t btn = controllerButton(event.cbutton.button))
+          held.set(ps1::input::HeldButtons::PadButtons, btn,
+                   event.type == SDL_CONTROLLERBUTTONDOWN, input);
         break;
       case SDL_CONTROLLERAXISMOTION:
-        mapControllerAxis(event.caxis.axis, event.caxis.value, input,
-                          stickHeld);
+        mapControllerAxis(event.caxis.axis, event.caxis.value, input, held);
         break;
       case SDL_CONTROLLERDEVICEADDED: // plugged in after start-up
         if (!gamepad && (gamepad = SDL_GameControllerOpen(event.cdevice.which)))
