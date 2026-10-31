@@ -1,5 +1,7 @@
 # PS1Recomp
 
+[![CI](https://github.com/PS1Recomp/ps1-recomp/actions/workflows/ci.yml/badge.svg)](https://github.com/PS1Recomp/ps1-recomp/actions/workflows/ci.yml) [![codecov](https://codecov.io/gh/PS1Recomp/ps1-recomp/branch/main/graph/badge.svg)](https://codecov.io/gh/PS1Recomp/ps1-recomp)
+
 **Static recompiler for PlayStation 1 games -- translates MIPS R3000A machine code to native C++ for PC.**
 
 ## Overview

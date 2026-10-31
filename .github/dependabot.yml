@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # Actions used by the CI workflow (checkout, codecov upload).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # third_party/ submodules: ELFIO, fmt, toml11, googletest.
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      submodules:
+        patterns: ["*"]
