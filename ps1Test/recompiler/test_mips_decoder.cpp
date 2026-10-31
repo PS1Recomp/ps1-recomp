@@ -4,6 +4,10 @@
 #include <gtest/gtest.h>
 #include <ps1recomp/mips_decoder.h>
 
+#include <algorithm>
+#include <string_view>
+#include <vector>
+
 using namespace ps1recomp;
 
 // MIPS Instruction Encoding Helpers
@@ -565,4 +569,126 @@ TEST(MipsDecoder, InvalidInstructions) {
     // Unknown REGIMM
     inst = MipsDecoder::decode(encI(0x01, 4, 0x1F, 0));
     EXPECT_EQ(inst.id, InstrId::INVALID);
+}
+
+// Mnemonic round trip: each encoding decodes to the id whose name is the
+// mnemonic the MIPS I / psx-spx "CPU Specifications" tables give it.
+
+TEST(MipsDecoder, EveryEncodingRoundTripsToItsMnemonic) {
+    struct Case { uint32_t raw; const char* name; };
+    const Case cases[] = {
+        {encR(0, 1, 2, 3, 0, 0x20), "ADD"},   {encR(0, 1, 2, 3, 0, 0x21), "ADDU"},
+        {encR(0, 1, 2, 3, 0, 0x22), "SUB"},   {encR(0, 1, 2, 3, 0, 0x23), "SUBU"},
+        {encR(0, 1, 2, 3, 0, 0x24), "AND"},   {encR(0, 1, 2, 3, 0, 0x25), "OR"},
+        {encR(0, 1, 2, 3, 0, 0x26), "XOR"},   {encR(0, 1, 2, 3, 0, 0x27), "NOR"},
+        {encR(0, 1, 2, 3, 0, 0x2A), "SLT"},   {encR(0, 1, 2, 3, 0, 0x2B), "SLTU"},
+        {encR(0, 0, 2, 3, 1, 0x00), "SLL"},   {encR(0, 0, 2, 3, 1, 0x02), "SRL"},
+        {encR(0, 0, 2, 3, 1, 0x03), "SRA"},   {encR(0, 1, 2, 3, 0, 0x04), "SLLV"},
+        {encR(0, 1, 2, 3, 0, 0x06), "SRLV"},  {encR(0, 1, 2, 3, 0, 0x07), "SRAV"},
+        {encR(0, 1, 2, 0, 0, 0x18), "MULT"},  {encR(0, 1, 2, 0, 0, 0x19), "MULTU"},
+        {encR(0, 1, 2, 0, 0, 0x1A), "DIV"},   {encR(0, 1, 2, 0, 0, 0x1B), "DIVU"},
+        {encR(0, 0, 0, 3, 0, 0x10), "MFHI"},  {encR(0, 1, 0, 0, 0, 0x11), "MTHI"},
+        {encR(0, 0, 0, 3, 0, 0x12), "MFLO"},  {encR(0, 1, 0, 0, 0, 0x13), "MTLO"},
+        {encI(0x08, 1, 2, 5), "ADDI"},        {encI(0x09, 1, 2, 5), "ADDIU"},
+        {encI(0x0C, 1, 2, 5), "ANDI"},        {encI(0x0D, 1, 2, 5), "ORI"},
+        {encI(0x0E, 1, 2, 5), "XORI"},        {encI(0x0A, 1, 2, 5), "SLTI"},
+        {encI(0x0B, 1, 2, 5), "SLTIU"},       {encI(0x0F, 0, 2, 5), "LUI"},
+        {encI(0x20, 1, 2, 5), "LB"},          {encI(0x24, 1, 2, 5), "LBU"},
+        {encI(0x21, 1, 2, 5), "LH"},          {encI(0x25, 1, 2, 5), "LHU"},
+        {encI(0x23, 1, 2, 5), "LW"},          {encI(0x22, 1, 2, 5), "LWL"},
+        {encI(0x26, 1, 2, 5), "LWR"},         {encI(0x28, 1, 2, 5), "SB"},
+        {encI(0x29, 1, 2, 5), "SH"},          {encI(0x2B, 1, 2, 5), "SW"},
+        {encI(0x2A, 1, 2, 5), "SWL"},         {encI(0x2E, 1, 2, 5), "SWR"},
+        {encI(0x04, 1, 2, 5), "BEQ"},         {encI(0x05, 1, 2, 5), "BNE"},
+        {encI(0x06, 1, 0, 5), "BLEZ"},        {encI(0x07, 1, 0, 5), "BGTZ"},
+        {encI(0x01, 1, 0x00, 5), "BLTZ"},     {encI(0x01, 1, 0x01, 5), "BGEZ"},
+        {encI(0x01, 1, 0x10, 5), "BLTZAL"},   {encI(0x01, 1, 0x11, 5), "BGEZAL"},
+        {encJ(0x02, 0x100), "J"},             {encJ(0x03, 0x100), "JAL"},
+        {encR(0, 1, 0, 0, 0, 0x08), "JR"},    {encR(0, 1, 0, 31, 0, 0x09), "JALR"},
+        {encR(0, 0, 0, 0, 0, 0x0C), "SYSCALL"}, {encR(0, 0, 0, 0, 0, 0x0D), "BREAK"},
+        {encR(0x10, 0x00, 2, 12, 0, 0), "MFC0"}, {encR(0x10, 0x04, 2, 12, 0, 0), "MTC0"},
+        {encR(0x10, 0x10, 0, 0, 0, 0x10), "RFE"},
+        {encR(0x12, 0x00, 2, 3, 0, 0), "MFC2"}, {encR(0x12, 0x04, 2, 3, 0, 0), "MTC2"},
+        {encR(0x12, 0x02, 2, 3, 0, 0), "CFC2"}, {encR(0x12, 0x06, 2, 3, 0, 0), "CTC2"},
+        {encI(0x32, 1, 2, 5), "LWC2"},        {encI(0x3A, 1, 2, 5), "SWC2"},
+        {0x00000000, "NOP"},
+    };
+    for (const auto& c : cases) {
+        auto inst = MipsDecoder::decode(c.raw);
+        EXPECT_EQ(MipsDecoder::instrName(inst.id), c.name)
+            << "raw=0x" << std::hex << c.raw;
+    }
+}
+
+TEST(MipsDecoder, GteCommandFunctsRoundTripToMnemonics) {
+    // psx-spx "GTE Command Summary": funct (bits 0-5) selects the command.
+    struct Case { uint8_t funct; const char* name; };
+    const Case cases[] = {
+        {0x01, "RTPS"},  {0x06, "NCLIP"}, {0x0C, "OP"},    {0x10, "DPCS"},
+        {0x11, "INTPL"}, {0x12, "MVMVA"}, {0x13, "NCDS"},  {0x14, "CDP"},
+        {0x16, "NCDT"},  {0x1B, "NCCS"},  {0x1C, "CC"},    {0x1E, "NCS"},
+        {0x20, "NCT"},   {0x28, "SQR"},   {0x29, "DCPL"},  {0x2A, "DPCT"},
+        {0x2D, "AVSZ3"}, {0x2E, "AVSZ4"}, {0x30, "RTPT"},  {0x3D, "GPF"},
+        {0x3E, "GPL"},   {0x3F, "NCCT"},
+    };
+    for (const auto& c : cases) {
+        auto inst = MipsDecoder::decode(0x4A000000u | c.funct);
+        EXPECT_EQ(inst.category, InstrCategory::GTE);
+        EXPECT_EQ(MipsDecoder::instrName(inst.id), c.name)
+            << "funct=0x" << std::hex << int(c.funct);
+    }
+}
+
+TEST(MipsDecoder, InstrNamesAreUniqueAndOutOfRangeIsUnknown) {
+    std::vector<std::string_view> seen;
+    for (int i = 0; i < static_cast<int>(InstrId::COUNT); ++i) {
+        auto name = MipsDecoder::instrName(static_cast<InstrId>(i));
+        EXPECT_NE(name, "UNKNOWN") << "id " << i;
+        EXPECT_EQ(std::count(seen.begin(), seen.end(), name), 0) << name;
+        seen.push_back(name);
+    }
+    EXPECT_EQ(MipsDecoder::instrName(InstrId::COUNT), "UNKNOWN");
+}
+
+TEST(MipsDecoder, CategoryNamesCoverEveryCategory) {
+    EXPECT_EQ(MipsDecoder::categoryName(InstrCategory::Memory), "Memory");
+    EXPECT_EQ(MipsDecoder::categoryName(InstrCategory::Jump), "Jump");
+    EXPECT_EQ(MipsDecoder::categoryName(InstrCategory::MulDiv), "MulDiv");
+    EXPECT_EQ(MipsDecoder::categoryName(InstrCategory::System), "System");
+    EXPECT_EQ(MipsDecoder::categoryName(InstrCategory::COP0), "COP0");
+    EXPECT_EQ(MipsDecoder::categoryName(InstrCategory::Special), "Special");
+    EXPECT_EQ(MipsDecoder::categoryName(static_cast<InstrCategory>(99)), "Unknown");
+    EXPECT_EQ(cop0Name(32), "cop0_??");
+}
+
+TEST(MipsDecoder, UndefinedCoprocessorEncodingsAreInvalid) {
+    // COP0 sub-op 0x08 (BC0x) and rs=0x10 with a non-RFE funct are not R3000A ops.
+    EXPECT_FALSE(MipsDecoder::decode(encR(0x10, 0x08, 0, 0, 0, 0)).isValid());
+    EXPECT_FALSE(MipsDecoder::decode(encR(0x10, 0x10, 0, 0, 0, 0x01)).isValid());
+    // COP2 move sub-op 0x08 and an unused GTE funct (0x00).
+    EXPECT_FALSE(MipsDecoder::decode(encR(0x12, 0x08, 0, 0, 0, 0)).isValid());
+    EXPECT_FALSE(MipsDecoder::decode(0x4A000000u).isValid());
+}
+
+// destGPR: which GPR an instruction writes (drives delay-slot hazards)
+
+TEST(MipsDecoder, DestGprFollowsEncodingFormat) {
+    auto d = [](uint32_t raw) { return MipsDecoder::destGPR(MipsDecoder::decode(raw)); };
+    EXPECT_EQ(d(encR(0, 1, 2, 3, 0, 0x21)), 3);       // ADDU -> rd
+    EXPECT_EQ(d(encR(0, 0, 2, 7, 4, 0x00)), 7);       // SLL -> rd
+    EXPECT_EQ(d(encI(0x09, 1, 6, 1)), 6);             // ADDIU -> rt
+    EXPECT_EQ(d(encI(0x23, 1, 9, 0)), 9);             // LW -> rt
+    EXPECT_EQ(d(encI(0x2B, 1, 9, 0)), -1);            // SW writes no GPR
+    EXPECT_EQ(d(encR(0, 0, 0, 5, 0, 0x10)), 5);       // MFHI -> rd
+    EXPECT_EQ(d(encR(0, 1, 2, 0, 0, 0x18)), -1);      // MULT writes HI/LO
+    EXPECT_EQ(d(encR(0x10, 0x00, 4, 12, 0, 0)), 4);   // MFC0 -> rt
+    EXPECT_EQ(d(encR(0x10, 0x04, 4, 12, 0, 0)), -1);  // MTC0
+    EXPECT_EQ(d(encR(0x12, 0x02, 8, 31, 0, 0)), 8);   // CFC2 -> rt
+    EXPECT_EQ(d(encR(0x12, 0x04, 8, 0, 0, 0)), -1);   // MTC2
+    EXPECT_EQ(d(encJ(0x03, 0x100)), 31);              // JAL -> $ra
+    EXPECT_EQ(d(encR(0, 9, 0, 16, 0, 0x09)), 16);     // JALR -> rd
+    EXPECT_EQ(d(encR(0, 9, 0, 0, 0, 0x08)), -1);      // JR
+    EXPECT_EQ(d(encI(0x04, 1, 2, 1)), -1);            // BEQ
+    EXPECT_EQ(d(0x00000000), -1);                     // NOP
+    EXPECT_EQ(d(0xFC000000), -1);                     // invalid
 }

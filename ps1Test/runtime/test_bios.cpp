@@ -1,10 +1,14 @@
 #include <vector>
 #include "runtime/bios/bios.h"
+#include "runtime/cdrom/cdrom_controller.h"
+#include "runtime/dma/dma.h"
 #include "runtime/psyq/psyq_state.h"
 #include "runtime/cdrom/virtual_fs.h"
 #include "runtime/cpu_context.h"
 #include "runtime/memory.h"
 #include <gtest/gtest.h>
+#include <unistd.h>
+#include <filesystem>
 #include <string>
 
 using namespace ps1::bios;
@@ -198,19 +202,37 @@ TEST_F(BiosTest, DrainTicksVBlankLineCallbackOncePerFrame) {
   st.reset();
 }
 
-TEST_F(BiosTest, DrainPollsDmaCompletionCallbacks) {
+// A DMA completion callback fires only for a channel that finished a transfer:
+// CD, MDEC and GPU handlers treat any call as "transfer done".
+TEST_F(BiosTest, DrainDeliversDmaCallbackOnlyForCompletedChannel) {
   auto &st = ps1::psyq::psyq_state();
   st.reset();
+  ps1::DMA dma;
+  dma.setMemory(&mem);
+  bios->setDma(&dma);
   st.dmaCallback[4] = 0x800466A0;
-  st.vsyncCounter.store(1, std::memory_order_release);
+  st.dmaCallback[6] = 0x80001000;
   g_dispatched.clear();
   g_testRecompDispatchHook = &recordingHook;
 
+  st.vsyncCounter.store(1, std::memory_order_release);
+  bios->drainPendingCallbacks(); // nothing transferred yet
+  EXPECT_TRUE(g_dispatched.empty());
+
+  // OTC clear of 4 entries on channel 6 (a DPCR write enables it).
+  dma.writeRegister(0x1F8010F0, 0);
+  dma.writeRegister(0x1F8010E0, 0x00010000);
+  dma.writeRegister(0x1F8010E4, 4);
+  dma.writeRegister(0x1F8010E8, 0x11000002);
+  st.vsyncCounter.store(2, std::memory_order_release);
   bios->drainPendingCallbacks();
+  st.vsyncCounter.store(3, std::memory_order_release);
+  bios->drainPendingCallbacks(); // already delivered
 
   g_testRecompDispatchHook = nullptr;
+  bios->setDma(nullptr);
   ASSERT_EQ(g_dispatched.size(), 1u);
-  EXPECT_EQ(g_dispatched[0], 0x800466A0u);
+  EXPECT_EQ(g_dispatched[0], 0x80001000u);
   st.reset();
 }
 
@@ -474,4 +496,102 @@ TEST_F(BiosCardTest, NameLongerThanTwentyCharactersReopens) {
   ctx.r[A0] = 0x80030000; ctx.r[A1] = 0x1;
   b0(0x32);
   EXPECT_GE(static_cast<int32_t>(ctx.r[V0]), 0) << "save not found again";
+}
+
+// A corrupted card whose block chain points back on itself must not hang the
+// erase: the walk stops after one pass over the directory.
+TEST_F(BiosCardTest, EraseStopsOnALoopingBlockChain) {
+  writeString(0x80030000, "bu00:BASCUS-94900CRASH");
+  ctx.r[A0] = 0x80030000; ctx.r[A1] = 0x200 | (1u << 16);
+  b0(0x32);
+  ctx.r[A0] = ctx.r[V0];
+  b0(0x36);
+  auto &card = input.getMemoryCard(0);
+  uint8_t frame[input::MemoryCard::SECTOR_SIZE];
+  card.readSector(1, frame);
+  frame[8] = 0; frame[9] = 0; // block 0 -> block 0
+  card.writeSector(1, frame);
+
+  ctx.r[A0] = 0x80030000;
+  b0(0x45);
+  EXPECT_EQ(ctx.r[V0], 1u);
+}
+
+TEST_F(BiosCardTest, LseekFromEndAndInvalidWhence) {
+  writeString(0x80030000, "bu00:BASCUS-94900CRASH");
+  ctx.r[A0] = 0x80030000; ctx.r[A1] = 0x200 | 0x2 | (1u << 16);
+  b0(0x32);
+  const uint32_t fd = ctx.r[V0];
+  ctx.r[A0] = fd; ctx.r[A1] = static_cast<uint32_t>(-128); ctx.r[A2] = 2;
+  b0(0x33);
+  EXPECT_EQ(ctx.r[V0], 0x2000u - 128) << "SEEK_END counts from the file size";
+  ctx.r[A0] = fd; ctx.r[A1] = 0; ctx.r[A2] = 7;
+  b0(0x33);
+  EXPECT_EQ(static_cast<int32_t>(ctx.r[V0]), -1);
+  ctx.r[A0] = fd; ctx.r[A1] = 0; ctx.r[A2] = 1;
+  b0(0x33);
+  EXPECT_EQ(ctx.r[V0], 0x2000u - 128) << "bad whence moved the position";
+}
+
+// Card handles are 16..31.  Larger values are not aliases of open files.
+TEST_F(BiosCardTest, FdBeyondTheCardRangeIsRejected) {
+  writeString(0x80030000, "bu00:BASCUS-94900CRASH");
+  ctx.r[A0] = 0x80030000; ctx.r[A1] = 0x200 | 0x2 | (1u << 16);
+  b0(0x32);
+  const uint32_t fd = ctx.r[V0];
+  ASSERT_EQ(fd, 16u);
+  for (uint32_t fn : {0x33u, 0x34u, 0x35u, 0x36u}) {
+    ctx.r[A0] = fd + 16; ctx.r[A1] = 0x80040000; ctx.r[A2] = 16;
+    b0(fn);
+    EXPECT_EQ(static_cast<int32_t>(ctx.r[V0]), -1) << std::hex << fn;
+  }
+  ctx.r[A0] = fd; ctx.r[A1] = 0x80040000; ctx.r[A2] = 16;
+  b0(0x35);
+  EXPECT_EQ(ctx.r[V0], 16u) << "the real handle was closed through an alias";
+}
+
+// CD data/notify callbacks are interrupt handlers too: they get the interrupt
+// stack, not the $sp of whatever loop was interrupted.
+TEST_F(BiosTest, CdCallbacksRunOnTheInterruptStack) {
+  auto &st = ps1::psyq::psyq_state();
+  st.reset();
+  st.intrStackTop = 0x8005494C;
+  st.cdDataCb = 0x80047000;
+  ps1::cdrom::CdromController cdrom;
+  bios->setCdromController(&cdrom);
+  g_callbackSp = 0;
+  g_testRecompDispatchHook = &spRecordingHook;
+
+  const uint32_t interruptedSp = ctx.r29;
+  bios->queueCdromEvent(1); // INT1, data ready
+  bios->drainPendingCallbacks();
+
+  g_testRecompDispatchHook = nullptr;
+  bios->setCdromController(nullptr);
+  EXPECT_EQ(g_callbackSp, 0x8005494Cu);
+  EXPECT_EQ(ctx.r29, interruptedSp);
+  st.reset();
+}
+
+// Writes reach the backing file when the BIOS call returns (the runtime exits
+// without destructors), now flushed once per call rather than per sector.
+TEST_F(BiosCardTest, FileWriteReachesTheBackingFile) {
+  const std::string path =
+      (std::filesystem::temp_directory_path() /
+       ("ps1_test_BiosCardTest_FileWriteReachesTheBackingFile_" +
+        std::to_string(getpid()) + ".mcd")).string();
+  std::remove(path.c_str());
+  ASSERT_TRUE(input.getMemoryCard(0).attachFile(path));
+  writeString(0x80030000, "bu00:BASCUS-94900CRASH");
+  for (uint32_t i = 0; i < 256; ++i)
+    mem.write8(0x80040000 + i, static_cast<uint8_t>(i));
+  ctx.r[A0] = 0x80030000; ctx.r[A1] = 0x200 | 0x2 | (1u << 16);
+  b0(0x32);
+  ctx.r[A0] = ctx.r[V0]; ctx.r[A1] = 0x80040000; ctx.r[A2] = 256;
+  b0(0x35);
+
+  input::MemoryCard onDisk;
+  ASSERT_TRUE(onDisk.loadFromFile(path));
+  EXPECT_EQ(onDisk.image(), input.getMemoryCard(0).image());
+  std::remove(path.c_str());
 }

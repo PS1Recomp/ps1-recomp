@@ -554,3 +554,284 @@ TEST(SpuKeyLatch, KeyOffBitsAccumulateAcrossWrites) {
   EXPECT_EQ(spu.debugVoiceState(0).adsrPhase, AdsrPhase::Release);
   EXPECT_EQ(spu.debugVoiceState(1).adsrPhase, AdsrPhase::Release);
 }
+
+// Voice registers, envelope and modulation
+//
+// Contract: psx-spx "Sound Processing Unit (SPU)" (soundprocessingunitspu.md)
+// -- "SPU Voice Registers", "SPU Volume and ADSR Generator", "Envelope
+// Operation depending on Shift/Step/Mode/Direction", "Pitch Counter", "SPU
+// Interrupt".  The envelope level is read back through 1F801C0Ch+N*10h
+// (current ADSR volume), so the expected values are the per-sample steps the
+// pseudocode produces.
+
+namespace {
+
+constexpr uint32_t kVoice0 = 0x1F801C00;
+constexpr uint32_t voiceReg(uint32_t voice, uint32_t reg) {
+  return kVoice0 + voice * 0x10 + reg;
+}
+
+class SpuVoiceTest : public ::testing::Test {
+protected:
+  SPU spu;
+  int16_t out[2 * 512] = {};
+
+  void SetUp() override { spu.reset(); }
+
+  // A silent block that loops onto itself (flags 3 = End+Repeat), so a voice
+  // keyed on it plays for as long as the test needs.
+  void loopBlock(uint32_t byteAddr, uint8_t header = 0x00,
+                 uint8_t data = 0x00) {
+    uint8_t *ram = spu.soundRamPtr();
+    ram[byteAddr] = header;
+    ram[byteAddr + 1] = 0x03;
+    std::memset(ram + byteAddr + 2, data, 14);
+  }
+  void keyOnVoice(uint32_t voice, uint16_t adsrLo, uint16_t adsrHi,
+                  uint16_t start = 0) {
+    spu.writeRegister(voiceReg(voice, 0x06), start);
+    spu.writeRegister(voiceReg(voice, 0x0E), start);
+    spu.writeRegister(voiceReg(voice, 0x04), 0x1000);
+    spu.writeRegister(voiceReg(voice, 0x08), adsrLo);
+    spu.writeRegister(voiceReg(voice, 0x0A), adsrHi);
+    if (voice < 16)
+      spu.writeRegister(0x1F801D88, static_cast<uint16_t>(1u << voice));
+    else
+      spu.writeRegister(0x1F801D8A, static_cast<uint16_t>(1u << (voice - 16)));
+  }
+  uint16_t step(uint32_t samples = 1, uint32_t voice = 0) {
+    spu.generateSamples(out, samples);
+    return spu.readRegister(voiceReg(voice, 0x0C));
+  }
+};
+
+} // namespace
+
+TEST_F(SpuVoiceTest, VoiceRegistersReadBackWhatWasWritten) {
+  const uint16_t vals[] = {0x1234, 0x2345, 0x3456, 0x4567,
+                           0x5678, 0x6789, 0x789A, 0x89AB};
+  for (uint32_t r = 0; r < 8; ++r)
+    spu.writeRegister(voiceReg(5, r * 2), vals[r]);
+  for (uint32_t r = 0; r < 8; ++r)
+    EXPECT_EQ(spu.readRegister(voiceReg(5, r * 2)), vals[r]) << "reg " << r;
+  EXPECT_EQ(spu.readRegister(voiceReg(4, 0x04)), 0) << "voices are separate";
+}
+
+TEST_F(SpuVoiceTest, LinearAttackAtShiftZeroAddsSevenShl11PerSample) {
+  // AdsrStep = (7-0) SHL 11 = 3800h every 44.1 kHz tick, clamped at 7FFFh.
+  loopBlock(0);
+  keyOnVoice(0, /*lo=*/0x0000, /*hi=*/0x0000);
+  EXPECT_EQ(step(), 0x3800);
+  EXPECT_EQ(step(), 0x7000);
+  EXPECT_EQ(step(), 0x7FFF);
+}
+
+TEST_F(SpuVoiceTest, AttackStepValueSelectsTheIncrement) {
+  // Attack Step 3 = "+4": 4 SHL 11 = 2000h per tick.
+  loopBlock(0);
+  keyOnVoice(0, /*lo=*/0x0300, /*hi=*/0x0000);
+  EXPECT_EQ(step(), 0x2000);
+  EXPECT_EQ(step(), 0x4000);
+}
+
+TEST_F(SpuVoiceTest, SlowAttackShiftBarelyMoves) {
+  // Shift 1Fh: one +7 step every 2^20 ticks; 100 ticks stay near silence.
+  loopBlock(0);
+  keyOnVoice(0, /*lo=*/0x7C00, /*hi=*/0x0000);
+  EXPECT_LT(step(100), 0x100);
+}
+
+TEST_F(SpuVoiceTest, ExponentialAttackSlowsDownAboveLevel6000) {
+  // "IF exponential AND increase AND AdsrLevel>6000h THEN AdsrStep /= 4".
+  auto ticksToFull = [this](uint16_t lo) {
+    spu.reset();
+    loopBlock(0);
+    keyOnVoice(0, lo, 0x0000);
+    for (int t = 1; t < 200; ++t)
+      if (step() == 0x7FFF)
+        return t;
+    return 200;
+  };
+  const int linear = ticksToFull(0x0800);      // shift 2: +7 SHL 9 = E00h
+  const int exponential = ticksToFull(0x8800); // same rate, exponential
+  EXPECT_GT(exponential, linear);
+}
+
+TEST_F(SpuVoiceTest, DecayFallsExponentiallyToTheSustainLevel) {
+  // Decay shift 0: -8 SHL 11 scaled by level/8000h, from 7FFFh straight to
+  // the sustain level 7 => (7+1)*800h = 4000h.
+  loopBlock(0);
+  keyOnVoice(0, /*lo=*/0x0007, /*hi=*/0x0007);
+  step(3); // attack to 7FFFh
+  EXPECT_EQ(step(), 0x4000);
+}
+
+TEST_F(SpuVoiceTest, LinearSustainIncreaseAtShift11AddsSeven) {
+  // Sustain shift 11, step 0, increase: 7 SHL 0 = +7 per tick.
+  loopBlock(0);
+  keyOnVoice(0, /*lo=*/0x0007, /*hi=*/0x0B07);
+  step(4); // attack + decay to 4000h
+  EXPECT_EQ(step(), 0x4007);
+  EXPECT_EQ(step(), 0x400E);
+}
+
+TEST_F(SpuVoiceTest, SustainDecreaseLowersTheLevel) {
+  loopBlock(0);
+  keyOnVoice(0, /*lo=*/0x0007, /*hi=*/0x4007); // linear decrease, shift 0
+  step(4);
+  const uint16_t a = step();
+  EXPECT_LT(a, 0x4000);
+  EXPECT_LT(step(), a);
+}
+
+TEST_F(SpuVoiceTest, ExponentialSustainDecreaseSlowsAsTheLevelFalls) {
+  // Exponential decrease: AdsrStep*AdsrLevel/8000h -- each drop is smaller.
+  loopBlock(0);
+  keyOnVoice(0, /*lo=*/0x0007, /*hi=*/0xC007);
+  const uint16_t l0 = step(4);
+  const uint16_t l1 = step();
+  const uint16_t l2 = step();
+  ASSERT_LT(l1, l0);
+  ASSERT_LT(l2, l1);
+  EXPECT_LT(l1 - l2, l0 - l1);
+}
+
+TEST_F(SpuVoiceTest, LinearReleaseAtShiftZeroDropsToSilence) {
+  // Release step -8 SHL 11 = -4000h per tick, then the voice turns off.
+  loopBlock(0);
+  keyOnVoice(0, /*lo=*/0x0000, /*hi=*/0x0000);
+  step(3);
+  spu.writeRegister(0x1F801D8C, 0x0001); // key off
+  EXPECT_EQ(step(), 0x3FFF);
+  EXPECT_EQ(step(), 0x0000);
+  EXPECT_EQ(spu.debugVoiceState(0).adsrPhase, AdsrPhase::Off);
+}
+
+TEST_F(SpuVoiceTest, ExponentialReleaseIsSlowerThanLinear) {
+  loopBlock(0);
+  keyOnVoice(0, /*lo=*/0x0000, /*hi=*/0x0020); // release mode exponential
+  step(3);
+  spu.writeRegister(0x1F801D8C, 0x0001);
+  step(2);
+  EXPECT_GT(spu.readRegister(voiceReg(0, 0x0C)), 0)
+      << "exponential release reached zero as fast as linear";
+}
+
+TEST_F(SpuVoiceTest, KeyOffHighHalfReleasesVoicesAbove15) {
+  loopBlock(0);
+  keyOnVoice(17, 0x0000, 0x0000);
+  step(0);
+  spu.writeRegister(0x1F801D8E, 0x0002); // KOFF voice 17
+  step(0);
+  EXPECT_EQ(spu.debugVoiceState(17).adsrPhase, AdsrPhase::Release);
+}
+
+TEST_F(SpuVoiceTest, EndxHighHalfReportsVoicesAbove15) {
+  // ENDX bit N is set when voice N reads a block with the Loop End flag.
+  loopBlock(0);
+  keyOnVoice(20, 0x0000, 0x0000);
+  step();
+  EXPECT_EQ(spu.readRegister(0x1F801D9E), 1u << (20 - 16));
+  EXPECT_EQ(spu.readRegister(0x1F801D9C), 0);
+}
+
+TEST_F(SpuVoiceTest, NoiseModeVoicePlaysNoiseInsteadOfItsSamples) {
+  // NON bit set: the voice outputs the noise generator, not its ADPCM data.
+  loopBlock(0); // all-zero samples
+  spu.writeRegister(0x1F801D80, 0x3FFF);
+  spu.writeRegister(0x1F801D82, 0x3FFF);
+  spu.writeRegister(voiceReg(0, 0x00), 0x3FFF);
+  spu.writeRegister(voiceReg(0, 0x02), 0x3FFF);
+  spu.writeRegister(0x1F801D94, 0x0001); // NON voice 0
+  keyOnVoice(0, 0x0000, 0x0000);
+  spu.generateSamples(out, 64);
+  bool anyNonZero = false;
+  for (int i = 0; i < 128; ++i)
+    anyNonZero |= out[i] != 0;
+  EXPECT_TRUE(anyNonZero);
+
+  spu.writeRegister(0x1F801D94, 0x0000);
+  spu.generateSamples(out, 64);
+  for (int i = 0; i < 128; ++i)
+    ASSERT_EQ(out[i], 0) << "silent samples without NON, index " << i;
+}
+
+TEST_F(SpuVoiceTest, PitchModulationByALoudVoiceSpeedsUpTheNextOne) {
+  // "Factor = VxOUTX(x-1)+8000h; Step = (Step*Factor) SAR 15": a positive
+  // modulator raises voice 1's effective pitch above 1000h.
+  auto voice1AddrAfter = [this](uint16_t pmon) {
+    spu.reset();
+    loopBlock(0x1000, 0x00, 0x77); // loud: nibble 7 SHL 12 = 7000h
+    // Voice 1 runs through zeroed RAM: plain blocks with no loop flags.
+    keyOnVoice(0, 0x0000, 0x0000, 0x1000 / 8);
+    keyOnVoice(1, 0x0000, 0x0000, 0x8000 / 8);
+    spu.writeRegister(0x1F801D90, pmon);
+    spu.generateSamples(out, 280);
+    return spu.debugVoiceState(1).currentAddr;
+  };
+  EXPECT_GT(voice1AddrAfter(0x0002), voice1AddrAfter(0x0000));
+}
+
+TEST_F(SpuVoiceTest, PitchModulationBitZeroIsIgnored) {
+  // "IF PMON.Bit(x)=1 AND (x>0)": voice 0 has no previous voice.
+  auto voice0Addr = [this](uint16_t pmon) {
+    spu.reset();
+    loopBlock(0x1000);
+    uint8_t *ram = spu.soundRamPtr();
+    for (uint32_t b = 0; b < 8; ++b) // 8 plain blocks, no loop flags
+      ram[0x1000 + b * 16 + 1] = 0;
+    keyOnVoice(0, 0x0000, 0x0000, 0x1000 / 8);
+    spu.writeRegister(0x1F801D90, pmon);
+    spu.generateSamples(out, 100);
+    return spu.debugVoiceState(0).currentAddr;
+  };
+  EXPECT_EQ(voice0Addr(0x0001), voice0Addr(0x0000));
+}
+
+TEST_F(SpuVoiceTest, IrqFiresWhenAVoiceReadsTheIrqAddress) {
+  // SPUCNT bit6 enables IRQ9 on an access to IRQ Address (1F801DA4h * 8).
+  loopBlock(0x100);
+  spu.writeRegister(0x1F801DA4, 0x100 / 8);
+  spu.writeRegister(0x1F801DAA, 0x0040);
+  keyOnVoice(0, 0x0000, 0x0000, 0x100 / 8);
+  step();
+  EXPECT_TRUE(spu.hasIrq());
+  spu.clearIrq();
+  EXPECT_FALSE(spu.hasIrq());
+}
+
+TEST_F(SpuVoiceTest, IrqStaysQuietWhenDisabled) {
+  loopBlock(0x100);
+  spu.writeRegister(0x1F801DA4, 0x100 / 8);
+  spu.writeRegister(0x1F801DAA, 0x0000);
+  keyOnVoice(0, 0x0000, 0x0000, 0x100 / 8);
+  step(30);
+  EXPECT_FALSE(spu.hasIrq());
+}
+
+TEST_F(SpuVoiceTest, VoiceAddressWrapsAtTheEndOfSoundRam) {
+  // Sound RAM is 512 KiB; the block after 7FFF0h is at 0.
+  uint8_t *ram = spu.soundRamPtr();
+  std::memset(ram + 0x7FFF0, 0, 16); // plain block, no flags
+  keyOnVoice(0, 0x0000, 0x0000, 0x7FFF0 / 8);
+  step();
+  EXPECT_EQ(spu.debugVoiceState(0).currentAddr, 0u);
+}
+
+TEST(SpuTransferAddress, DirectSetterUsesEightByteUnits) {
+  SPU spu;
+  spu.reset();
+  spu.setTransferAddr(0x10);
+  spu.writeTransferData(0xBEEF);
+  EXPECT_EQ(spu.readSoundRam(0x80), 0xBEEF);
+}
+
+TEST(SpuTransferAddress, ManualTransferWrapsAtTheEndOfSoundRam) {
+  SPU spu;
+  spu.reset();
+  spu.writeRegister(0x1F801DA6, 0xFFFF); // byte address 7FFF8h
+  for (uint16_t v : {0x1111, 0x2222, 0x3333, 0x4444, 0x5555})
+    spu.writeRegister(0x1F801DA8, v);
+  EXPECT_EQ(spu.readSoundRam(0x7FFFE), 0x4444);
+  EXPECT_EQ(spu.readSoundRam(0x00000), 0x5555);
+}

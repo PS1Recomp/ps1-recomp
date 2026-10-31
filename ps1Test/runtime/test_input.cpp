@@ -320,3 +320,18 @@ TEST(InputDigital, HeldButtonStaysPressedAcrossSamples) {
   input.latchFrame();
   EXPECT_NE(input.buttonState() & BTN_CROSS, 0);
 }
+
+// The stick and the d-pad can hold the same direction.  Releasing one must not
+// release what the other still holds.
+TEST(InputHeldButtons, ReleaseOnOneSourceKeepsTheOther) {
+  InputController ic;
+  HeldButtons held;
+  held.set(HeldButtons::Stick, BTN_LEFT, true, ic);
+  held.set(HeldButtons::PadButtons, BTN_LEFT, true, ic);
+  held.set(HeldButtons::Stick, BTN_LEFT, false, ic);
+  ic.latchFrame();
+  EXPECT_EQ(ic.buttonState() & BTN_LEFT, 0) << "left released while d-pad holds it";
+  held.set(HeldButtons::PadButtons, BTN_LEFT, false, ic);
+  ic.latchFrame();
+  EXPECT_EQ(ic.buttonState() & BTN_LEFT, BTN_LEFT);
+}

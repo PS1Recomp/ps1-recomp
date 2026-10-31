@@ -2,10 +2,13 @@
 // Tests ElfParser class: loading, validation, section/symbol extraction
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 #include <ps1recomp/elf_parser.h>
 #include <elfio/elfio.hpp>
 #include <fstream>
 #include <cstdio>
+#include <cstring>
+#include <filesystem>
 
 using namespace ps1recomp;
 
@@ -422,4 +425,208 @@ TEST(PS1Constants, Scratchpad) {
 TEST(PS1Constants, IOBase) {
     EXPECT_EQ(PS1_IO_BASE, 0x1F801000u);
     EXPECT_EQ(PS1_BIOS_START, 0xBFC00000u);
+}
+
+// Unique temp path per test (parallel ctest runs share /tmp).
+static std::string uniqueTempPath(const char* ext) {
+    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    return (std::filesystem::temp_directory_path() /
+            (std::string("ps1recomp_elf_") + info->name() + "_" +
+             std::to_string(getpid()) + ext)).string();
+}
+
+// PS-X EXE (psx-spx "CDROM File Playstation EXE and SYSTEM.CNF"):
+// 800h-byte header, pc0 at 10h, t_addr at 18h, t_size at 1Ch, then payload.
+static std::vector<uint8_t> makePsxExeFile(uint32_t pc, uint32_t tAddr,
+                                           uint32_t tSize, size_t payload) {
+    std::vector<uint8_t> f(0x800 + payload, 0);
+    std::memcpy(f.data(), "PS-X EXE", 8);
+    std::memcpy(f.data() + 0x10, &pc, 4);
+    std::memcpy(f.data() + 0x18, &tAddr, 4);
+    std::memcpy(f.data() + 0x1C, &tSize, 4);
+    for (size_t i = 0; i < payload; ++i)
+        f[0x800 + i] = static_cast<uint8_t>(i + 1);
+    return f;
+}
+
+static void writeBytes(const std::string& path, const std::vector<uint8_t>& b) {
+    std::ofstream out(path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(b.data()),
+              static_cast<std::streamsize>(b.size()));
+}
+
+TEST(ElfParser, LoadsPsxExeAsSingleTextSection) {
+    const std::string path = uniqueTempPath(".exe");
+    writeBytes(path, makePsxExeFile(0x80010008, 0x80010000, 0x100, 0x100));
+
+    ElfParser parser;
+    ASSERT_TRUE(parser.load(path)) << parser.getError();
+    EXPECT_EQ(parser.getEntryPoint(), 0x80010008u);
+    ASSERT_EQ(parser.getSections().size(), 1u);
+    const Section* text = parser.getTextSection();
+    ASSERT_NE(text, nullptr);
+    EXPECT_EQ(text->vaddr, 0x80010000u);
+    EXPECT_EQ(text->size, 0x100u);
+    EXPECT_EQ(text->type, SectionType::Text);
+    ASSERT_NE(text->data, nullptr);
+    EXPECT_EQ(text->data[0], 1);      // payload starts right after the header
+    EXPECT_EQ(text->data[0xFF], 0x00); // (0xFF + 1) & 0xFF
+    EXPECT_TRUE(parser.getSymbols().empty());
+    EXPECT_EQ(parser.getTotalCodeSize(), 0x100u);
+
+    cleanupFile(path);
+}
+
+TEST(ElfParser, PsxExeSizeLargerThanFileIsClampedToPayload) {
+    const std::string path = uniqueTempPath(".exe");
+    writeBytes(path, makePsxExeFile(0x80010000, 0x80010000, 0x10000, 0x40));
+    ElfParser parser;
+    ASSERT_TRUE(parser.load(path));
+    EXPECT_EQ(parser.getTextSection()->size, 0x40u);
+    cleanupFile(path);
+}
+
+TEST(ElfParser, PsxExeZeroSizeUsesWholePayload) {
+    const std::string path = uniqueTempPath(".exe");
+    writeBytes(path, makePsxExeFile(0x80010000, 0x80010000, 0, 0x80));
+    ElfParser parser;
+    ASSERT_TRUE(parser.load(path));
+    EXPECT_EQ(parser.getTextSection()->size, 0x80u);
+    cleanupFile(path);
+}
+
+TEST(ElfParser, PsxExeEntryOutsideRamIsRejected) {
+    const std::string path = uniqueTempPath(".exe");
+    writeBytes(path, makePsxExeFile(0xBFC00000, 0x80010000, 0x40, 0x40)); // BIOS
+    ElfParser parser;
+    EXPECT_FALSE(parser.load(path));
+    EXPECT_FALSE(parser.isLoaded());
+    EXPECT_NE(parser.getError().find("PS-EXE entry point 0xBFC00000"),
+              std::string::npos) << parser.getError();
+    cleanupFile(path);
+}
+
+// ELF header validation: PS1 is 32-bit little-endian MIPS.
+
+static void writeHeaderOnlyElf(const std::string& path, unsigned char cls,
+                               unsigned char enc, ELFIO::Elf_Half machine) {
+    ELFIO::elfio writer;
+    writer.create(cls, enc);
+    writer.set_type(ELFIO::ET_EXEC);
+    writer.set_machine(machine);
+    writer.set_entry(0x80010000);
+    auto* text = writer.sections.add(".text");
+    text->set_type(ELFIO::SHT_PROGBITS);
+    text->set_flags(ELFIO::SHF_ALLOC | ELFIO::SHF_EXECINSTR);
+    const char code[8] = {};
+    text->set_data(code, sizeof(code));
+    writer.save(path);
+}
+
+TEST(ElfParser, RejectsNonMipsMachine) {
+    const std::string path = uniqueTempPath(".elf");
+    writeHeaderOnlyElf(path, ELFIO::ELFCLASS32, ELFIO::ELFDATA2LSB, ELFIO::EM_386);
+    ElfParser parser;
+    EXPECT_FALSE(parser.load(path));
+    EXPECT_NE(parser.getError().find("Not a MIPS ELF"), std::string::npos);
+    cleanupFile(path);
+}
+
+TEST(ElfParser, Rejects64BitElf) {
+    const std::string path = uniqueTempPath(".elf");
+    writeHeaderOnlyElf(path, ELFIO::ELFCLASS64, ELFIO::ELFDATA2LSB, ELFIO::EM_MIPS);
+    ElfParser parser;
+    EXPECT_FALSE(parser.load(path));
+    EXPECT_EQ(parser.getError(), "Not a 32-bit ELF");
+    cleanupFile(path);
+}
+
+TEST(ElfParser, RejectsBigEndianElf) {
+    const std::string path = uniqueTempPath(".elf");
+    writeHeaderOnlyElf(path, ELFIO::ELFCLASS32, ELFIO::ELFDATA2MSB, ELFIO::EM_MIPS);
+    ElfParser parser;
+    EXPECT_FALSE(parser.load(path));
+    EXPECT_NE(parser.getError().find("little-endian"), std::string::npos);
+    cleanupFile(path);
+}
+
+// Section classification falls back on the section name, then on flags.
+
+TEST(ElfParser, ClassifiesSectionsByNameThenFlags) {
+    const std::string path = uniqueTempPath(".elf");
+    ELFIO::elfio writer;
+    writer.create(ELFIO::ELFCLASS32, ELFIO::ELFDATA2LSB);
+    writer.set_type(ELFIO::ET_EXEC);
+    writer.set_machine(ELFIO::EM_MIPS);
+    writer.set_entry(0x80010000);
+    const char bytes[4] = {1, 2, 3, 4};
+    auto add = [&](const char* name, ELFIO::Elf_Xword flags) {
+        auto* s = writer.sections.add(name);
+        s->set_type(ELFIO::SHT_PROGBITS);
+        s->set_flags(flags);
+        s->set_data(bytes, sizeof(bytes));
+    };
+    add(".init", 0);                                  // Text by name
+    add(".sbss", 0);                                  // Bss by name (PROGBITS)
+    add(".lit4", 0);                                  // Data by name
+    add(".mydata", ELFIO::SHF_ALLOC | ELFIO::SHF_WRITE); // Data by flags
+    add(".myconst", ELFIO::SHF_ALLOC);                // Other: read-only alloc
+    add(".comment", 0);                               // Other
+    writer.save(path);
+
+    ElfParser parser;
+    ASSERT_TRUE(parser.load(path)) << parser.getError();
+    auto type = [&](const char* n) {
+        const Section* s = parser.findSection(n);
+        EXPECT_NE(s, nullptr) << n;
+        return s ? s->type : SectionType::Other;
+    };
+    EXPECT_EQ(type(".init"), SectionType::Text);
+    EXPECT_EQ(type(".sbss"), SectionType::Bss);
+    EXPECT_EQ(type(".lit4"), SectionType::Data);
+    EXPECT_EQ(type(".mydata"), SectionType::Data);
+    EXPECT_EQ(type(".myconst"), SectionType::Other);
+    EXPECT_EQ(type(".comment"), SectionType::Other);
+    EXPECT_EQ(parser.findSection(".nope"), nullptr);
+    cleanupFile(path);
+}
+
+TEST(ElfParser, SymbolTypesMapFromElfSymbolType) {
+    const std::string path = uniqueTempPath(".elf");
+    ELFIO::elfio writer;
+    writer.create(ELFIO::ELFCLASS32, ELFIO::ELFDATA2LSB);
+    writer.set_type(ELFIO::ET_EXEC);
+    writer.set_machine(ELFIO::EM_MIPS);
+    writer.set_entry(0x80010000);
+    auto* text = writer.sections.add(".text");
+    text->set_type(ELFIO::SHT_PROGBITS);
+    text->set_flags(ELFIO::SHF_ALLOC | ELFIO::SHF_EXECINSTR);
+    text->set_address(0x80010000);
+    const char code[16] = {};
+    text->set_data(code, sizeof(code));
+    auto* strtab = writer.sections.add(".strtab");
+    strtab->set_type(ELFIO::SHT_STRTAB);
+    ELFIO::string_section_accessor stra(strtab);
+    auto* symtab = writer.sections.add(".symtab");
+    symtab->set_type(ELFIO::SHT_SYMTAB);
+    symtab->set_entry_size(writer.get_default_entry_size(ELFIO::SHT_SYMTAB));
+    symtab->set_link(strtab->get_index());
+    ELFIO::symbol_section_accessor syma(writer, symtab);
+    syma.add_symbol(stra, "label", 0x80010004, 0, ELFIO::STB_LOCAL,
+                    ELFIO::STT_NOTYPE, 0, text->get_index());
+    syma.add_symbol(stra, "sect", 0x80010000, 0, ELFIO::STB_LOCAL,
+                    ELFIO::STT_SECTION, 0, text->get_index());
+    writer.save(path);
+
+    ElfParser parser;
+    ASSERT_TRUE(parser.load(path)) << parser.getError();
+    bool sawLabel = false, sawSect = false;
+    for (const auto& s : parser.getSymbols()) {
+        if (s.name == "label") { sawLabel = true; EXPECT_EQ(s.type, SymbolType::NoType); }
+        if (s.name == "sect")  { sawSect = true;  EXPECT_EQ(s.type, SymbolType::Other); }
+    }
+    EXPECT_TRUE(sawLabel);
+    EXPECT_TRUE(sawSect);
+    EXPECT_TRUE(parser.getFunctionSymbols().empty());
+    cleanupFile(path);
 }

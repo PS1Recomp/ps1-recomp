@@ -382,6 +382,17 @@ TEST_F(PsyqGpuTest, DrawSyncCallbackStoresAndReturnsPrev) {
   EXPECT_EQ(ctx.r[V0], 0x80012340u);
 }
 
+// The registered callback is per-run PsyQ state: psyq_state().reset() clears it
+// like every other callback slot, so a test (or a new run) starts with none.
+TEST_F(PsyqGpuTest, StateResetClearsDrawSyncCallback) {
+  ctx.r[A0] = 0x80012340u;
+  hle_libgpu_DrawSyncCallback(&ctx);
+  psyq_state().reset();
+  ctx.r[A0] = 0x80056780u;
+  hle_libgpu_DrawSyncCallback(&ctx);
+  EXPECT_EQ(ctx.r[V0], 0u);
+}
+
 TEST_F(PsyqGpuTest, VSyncCallbackStoresAndReturnsPrev) {
   ctx.r[A0] = 0x80044000u;
   hle_libgpu_VSyncCallback(&ctx);

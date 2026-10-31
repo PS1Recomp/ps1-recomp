@@ -113,3 +113,24 @@ TEST_F(ConfigTest, CommentsAndBlankLinesIgnored) {
   ASSERT_TRUE(reader.load(tmpPath));
   EXPECT_EQ(reader.config().video.windowWidth, 800);
 }
+
+// Game TOMLs write addresses and counts as integers or strings ("0x8005494C").
+// A string must be a whole number that fits in 32 bits: a typo must not
+// silently become 0 or a truncated prefix.
+TEST(ParseConfigU32, AcceptsHexAndDecimalStrings) {
+  EXPECT_EQ(ps1::parseConfigU32("0x8005494C"), 0x8005494Cu);
+  EXPECT_EQ(ps1::parseConfigU32("16"), 16u);
+}
+
+TEST(ParseConfigU32, RejectsTyposAndPartialNumbers) {
+  EXPECT_EQ(ps1::parseConfigU32("0x80O5"), std::nullopt);
+  EXPECT_EQ(ps1::parseConfigU32("16 ticks"), std::nullopt);
+  EXPECT_EQ(ps1::parseConfigU32(""), std::nullopt);
+  EXPECT_EQ(ps1::parseConfigU32(" 16"), std::nullopt);
+  EXPECT_EQ(ps1::parseConfigU32("-1"), std::nullopt);
+}
+
+TEST(ParseConfigU32, RejectsValuesWiderThan32Bits) {
+  EXPECT_EQ(ps1::parseConfigU32("0x100000000"), std::nullopt);
+  EXPECT_EQ(ps1::parseConfigU32("0xFFFFFFFF"), 0xFFFFFFFFu);
+}
