@@ -104,18 +104,27 @@ into recompiled functions. Subsystems live in `ps1Runtime/src/<unit>/`:
 |-----------|------------|--------------|
 | BIOS HLE | `bios/` | Syscall tables A/B/C, heap, events, file I/O |
 | CD-ROM | `cdrom/` | ISO 9660 / CUE+BIN reader, drive state machine |
-| GPU | `gpu/` | GP0/GP1 command stream, 1MB VRAM, OpenGL renderer |
+| GPU | `gpu/` | GP0/GP1 command stream, software rasterizer into 1MB VRAM, OpenGL output |
 | SPU | `spu/` | 24-voice ADPCM audio (SDL2 callback) |
 | DMA | `dma/` | 7-channel DMA controllers |
 | GTE | `gte.cpp` | Geometry transform coprocessor |
-| MDEC | `mdec/` | Motion picture decoder (stubbed, FMV skipped) |
+| MDEC | `mdec/` | Motion picture decoder (VLC decoding incomplete) |
 | Timers | `timers/` | Root counters 0/1/2/3 |
 | Input | `input/` | Controller + memory card SIO |
 | PsyQ HLE | `psyq/` | Native implementations of detected PsyQ funcs |
 
 `main_host.cpp` wires it all together: it loads the disc, hands control to
 the recompiled entry point, and runs a VBlank timer thread that increments
-`psyq_state().vsyncCounter` at 60Hz.
+`psyq_state().vsyncCounter` at 60Hz. Each VBlank the game thread also credits
+the root-counter ticks a real PS1 would have produced (`[timing]` in the game
+TOML); games that pace themselves with a root counter run in slow motion
+without it.
+
+**Lockstep mode.** With `PS1_STEP=<dir>` the game advances only when a client
+asks (`step_control.cpp`, a line protocol over two FIFOs): step N frames with a
+pad mask, peek/poke RAM, hash RAM, dump VRAM. A VBlank happens when the game
+waits for one, so a run is deterministic and a recorded input sequence replays
+frame-exactly. It is used to turn a played level into a regression test.
 
 ---
 
@@ -157,10 +166,18 @@ future multi-threaded recompilation harness has a clean handoff. Do not move
 the context to a thread-local global without rethinking that.
 
 ### TOML configs, not CLI flags
-Each game has a `configs/<game>.toml` that lists every recompiled function,
-every HLE override, every overlay, and the disc path. This file is the only
-input the recompiler needs. CLI flags are limited to overrides and
-debugging tools.
+Everything true for one game only lives in TOML, never in the engine.
+`configs/<game>_recomp.toml` (analyzer output) lists every function, the
+detected `[[hle_functions]]`, `[[stubs]]` and `[hle_overrides]` (address ->
+HLE body); it is the only input the recompiler needs. `configs/<game>.toml`
+holds what the runtime needs: disc paths, `[memory_init]` and `[timing]`.
+CLI flags are limited to overrides and debugging tools.
+
+The cost of hash detection is that only exact SDK bodies are recognised. In
+Crash, 174 PsyQ functions are detected; 61 are routed to HLE and the rest are
+recompiled like game code, because an HLE body that skips a side effect the
+game relies on breaks it. The analyzer also truncates a function at a second
+entry point, which `tools/fix_crash_func_sizes.py` corrects for Crash.
 
 ### Single-file emission (open issue)
 `ps1Recomp` currently emits one giant `recompiled_out.cpp`. N64Recomp emits
@@ -213,27 +230,26 @@ shared variables. See `ps1Runtime/include/runtime/psyq/psyq_state.h`.
 
 ## Known limitations
 
-The project is honest about its scope. As of this writing:
+As of this writing:
 
-- **One title fully validated**: Rayman (USA) ran end-to-end at ~59fps with
-  correct framebuffer content through Phase 3. The supporting imperative
-  patch script (`tools/patch_rayman.py`) was retired during open-source
-  preparation; the regen-fresh path now relies entirely on the PsyQ HLE
-  coverage and has not been re-validated headed since.
-- **Crash Bandicoot 1**: experimental. Boots through PsyQ init, then stalls
-  in a game-side hash table walk before the title screen. A signature
-  collision in short libcd wrappers is the next known blocker.
-- **MDEC / FMV**: the decoder stubs out -- full-motion video is skipped, not
-  decoded.
-- **SPU accuracy**: ADPCM envelope, reverb and pitch modulation are
-  approximations. Most music plays; precise effects do not.
+- **One validated title: Crash Bandicoot (USA).** It runs from boot through
+  menus, map and levels at 30 fps with audio, memory card saves and gamepad
+  input. Open issue: the first level's fork camera (see `ISSUES.md`).
+- **Rayman (USA)** was the first target and ran at ~59fps with an imperative
+  patch script (`tools/patch_rayman.py`), retired in favour of hash-based HLE.
+  Its regenerated build boots but draws nothing.
+- **MDEC / FMV**: VLC decoding still has errors. Crash's video is not MDEC.
+- **SPU accuracy**: reverb and pitch modulation are approximations.
+- **GPU timing**: commands have no cycle timing.
+- **Spec divergences**: some GTE (UNR division, FLAG bits), GPU (mask bit,
+  polylines) and BIOS edge cases differ from psx-spx.
 - **No save/load state UI**: the underlying machinery exists in
   `save_state.cpp` but is not surfaced in `ps1Interface`.
 - **Single-thread game loop**: the recompiled code itself runs on one
   thread. VBlank, CD-ROM IRQs and audio are on separate threads but the
   game thread is single-threaded by design.
 
-For active follow-up items, see `PLANNING.md` in the working tree.
+For game-specific open items, see [ISSUES.md](ISSUES.md).
 
 ---
 
@@ -258,16 +274,17 @@ ps1-recomp/
 |       +-- gpu/        gpu (state machine + primitives), renderer_opengl
 |       +-- spu/        spu (24-voice ADPCM)
 |       +-- dma/        dma (7 channels)
-|       +-- mdec/       mdec (currently stubbed)
+|       +-- mdec/       mdec (VLC decoding incomplete)
 |       +-- timers/     timers (root counters)
 |       +-- input/      input (controller + SIO)
 |       +-- psyq/       psyq_state, psyq_registry, hle_VSync etc.
 |       +-- interrupts/ interrupt controller
 |       +-- gte.cpp     geometry transform engine
 |       +-- main_host.cpp   game loop, VBlank thread, SDL2 host
+|       +-- step_control.cpp   lockstep mode (PS1_STEP)
 |       +-- recompiled_out{,_stub}.cpp   generated game code
 +-- ps1Interface/       optional ImGui studio (off by default)
-+-- ps1Test/            557 Google Test cases
++-- ps1Test/            GoogleTest suite
 |   +-- analyzer/
 |   +-- recompiler/
 |   +-- runtime/
@@ -275,5 +292,5 @@ ps1-recomp/
 +-- third_party/        ELFIO, toml11, fmt, googletest (git submodules)
 +-- tools/              PsyQ signature extraction, diagnostics, MCP server
 +-- .github/workflows/  CI: stub-mode build + ctest on Ubuntu
-+-- configs/            per-game TOMLs (gitignored except example_game.toml)
++-- configs/            per-game TOMLs (gitignored except examples/)
 ```

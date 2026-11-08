@@ -39,6 +39,9 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Codecov OIDC upload, no secret needed
 
     steps:
     - name: Checkout repository
@@ -75,7 +78,9 @@ jobs:
       uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
       with:
         files: coverage.xml
-        token: ${{ secrets.CODECOV_TOKEN }}
+        use_oidc: true
+        disable_search: true
+        plugins: noop
         fail_ci_if_error: false
 
   # Documentation job: verify Doxygen generates without errors
