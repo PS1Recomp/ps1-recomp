@@ -12,3 +12,9 @@ ignore:
   - "third_party"
   - "ps1Test"
   - "ps1Interface"
+  # Humble-object shell: SDL window/event loop, threads and OpenGL presentation.
+  # They need a display and are exercised by running a game; the logic they
+  # call (input bindings, VRAM dump, config parsing, step control) lives in
+  # tested modules.
+  - "ps1Runtime/src/main_host.cpp"
+  - "ps1Runtime/src/gpu/renderer_opengl.cpp"

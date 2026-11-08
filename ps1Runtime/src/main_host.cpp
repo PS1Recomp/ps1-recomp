@@ -37,6 +37,8 @@
 #include <execinfo.h>
 #include <pthread.h>
 #include <runtime/input/input.h>
+#include <runtime/input/host_bindings.h>
+#include <runtime/gpu/vram_dump.h>
 #include <runtime/mdec/mdec.h>
 #include <runtime/memory.h>
 #include <runtime/config.h>
@@ -382,36 +384,7 @@ static void audioCallback(void * /*userdata*/, uint8_t *stream, int len) {
   g_spu->generateSamples(reinterpret_cast<int16_t *>(stream), numSamples);
 }
 
-// SDL2 Key Mapping
-// Keyboard to PS1 pad.  One table, so the startup banner and the event handler
-// cannot drift apart -- the pad layout is the first thing anyone needs to know
-// to play, and "which key is Start" has already cost a play session.
-struct KeyBinding {
-  SDL_Keycode key;
-  uint16_t button;
-  const char *keyName;
-  const char *padName;
-};
-
-static const KeyBinding kPadBindings[] = {
-    {SDLK_UP, ps1::input::BTN_UP, "Up", "D-Pad Up"},
-    {SDLK_DOWN, ps1::input::BTN_DOWN, "Down", "D-Pad Down"},
-    {SDLK_LEFT, ps1::input::BTN_LEFT, "Left", "D-Pad Left"},
-    {SDLK_RIGHT, ps1::input::BTN_RIGHT, "Right", "D-Pad Right"},
-    {SDLK_z, ps1::input::BTN_CROSS, "Z", "Cross"},
-    {SDLK_x, ps1::input::BTN_CIRCLE, "X", "Circle"},
-    {SDLK_a, ps1::input::BTN_SQUARE, "A", "Square"},
-    {SDLK_s, ps1::input::BTN_TRIANGLE, "S", "Triangle"},
-    {SDLK_q, ps1::input::BTN_L1, "Q", "L1"},
-    {SDLK_w, ps1::input::BTN_R1, "W", "R1"},
-    {SDLK_e, ps1::input::BTN_L2, "E", "L2"},
-    {SDLK_r, ps1::input::BTN_R2, "R", "R2"},
-    {SDLK_c, ps1::input::BTN_L3, "C", "L3"},
-    {SDLK_v, ps1::input::BTN_R3, "V", "R3"},
-    {SDLK_RETURN, ps1::input::BTN_START, "Enter", "Start"},
-    {SDLK_RSHIFT, ps1::input::BTN_SELECT, "Right Shift", "Select"},
-    {SDLK_BACKSPACE, ps1::input::BTN_SELECT, "Backspace", "Select"},
-};
+// SDL2 Key Mapping (bindings live in runtime/input/host_bindings)
 
 static void printControllerBindings() {
   fmt::print("[pad] controller layout (by position, Xbox names):\n"
@@ -437,79 +410,10 @@ static void announceController(SDL_GameController *pad) {
 
 static void printPadBindings() {
   fmt::print("[pad] keyboard layout:\n");
-  for (const auto &b : kPadBindings)
+  for (const auto &b : ps1::input::keyBindings())
     fmt::print("[pad]   {:<12} -> {}\n", b.keyName, b.padName);
   fmt::print("[pad]   {:<12} -> {}\n", "Esc", "quit");
   fmt::print("[pad]   {:<12} -> {}\n", "F2", "dithering on/off");
-}
-
-static void mapKeyToButton(SDL_Keycode key, ps1::input::InputController &input,
-                           ps1::input::HeldButtons &held, bool pressed) {
-  for (const auto &b : kPadBindings) {
-    if (b.key != key)
-      continue;
-    // Printed on every press: a button that does nothing in the game is a
-    // different problem from a button that never reached the pad at all.
-    if (pressed)
-      fmt::print(stderr, "[pad] {} -> {}\n", b.keyName, b.padName);
-    held.set(ps1::input::HeldButtons::Keyboard, b.button, pressed, input);
-    return;
-  }
-}
-
-// SDL GameController (XInput, DualShock, ...): buttons by position, so the
-// face buttons land where a PlayStation pad has them.
-static uint16_t controllerButton(uint8_t b) {
-  using namespace ps1::input;
-  switch (b) {
-  case SDL_CONTROLLER_BUTTON_A: return BTN_CROSS;
-  case SDL_CONTROLLER_BUTTON_B: return BTN_CIRCLE;
-  case SDL_CONTROLLER_BUTTON_X: return BTN_SQUARE;
-  case SDL_CONTROLLER_BUTTON_Y: return BTN_TRIANGLE;
-  case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: return BTN_L1;
-  case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: return BTN_R1;
-  case SDL_CONTROLLER_BUTTON_LEFTSTICK: return BTN_L3;
-  case SDL_CONTROLLER_BUTTON_RIGHTSTICK: return BTN_R3;
-  case SDL_CONTROLLER_BUTTON_BACK: return BTN_SELECT;
-  case SDL_CONTROLLER_BUTTON_START: return BTN_START;
-  case SDL_CONTROLLER_BUTTON_DPAD_UP: return BTN_UP;
-  case SDL_CONTROLLER_BUTTON_DPAD_DOWN: return BTN_DOWN;
-  case SDL_CONTROLLER_BUTTON_DPAD_LEFT: return BTN_LEFT;
-  case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: return BTN_RIGHT;
-  }
-  return 0;
-}
-
-// Crash reads a digital pad, so the left stick drives the d-pad and the
-// triggers act as L2/R2.
-static void mapControllerAxis(uint8_t axis, int16_t value,
-                              ps1::input::InputController &input,
-                              ps1::input::HeldButtons &held) {
-  using namespace ps1::input;
-  constexpr int16_t kStick = 12000, kTrigger = 8000;
-  uint16_t mask = 0, want = 0;
-  switch (axis) {
-  case SDL_CONTROLLER_AXIS_LEFTX:
-    mask = BTN_LEFT | BTN_RIGHT;
-    want = value < -kStick ? BTN_LEFT : value > kStick ? BTN_RIGHT : 0;
-    break;
-  case SDL_CONTROLLER_AXIS_LEFTY:
-    mask = BTN_UP | BTN_DOWN;
-    want = value < -kStick ? BTN_UP : value > kStick ? BTN_DOWN : 0;
-    break;
-  case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
-    mask = BTN_L2;
-    want = value > kTrigger ? BTN_L2 : 0;
-    break;
-  case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:
-    mask = BTN_R2;
-    want = value > kTrigger ? BTN_R2 : 0;
-    break;
-  default:
-    return;
-  }
-  held.set(HeldButtons::Stick, want, true, input);
-  held.set(HeldButtons::Stick, static_cast<uint16_t>(mask & ~want), false, input);
 }
 
 // An address or count from a game TOML: an integer, or a string such as
@@ -553,41 +457,6 @@ static void stallSampler(int) {
 
 static volatile std::sig_atomic_t g_shutdown_requested = 0;
 static void onTerminate(int) { g_shutdown_requested = 1; }
-
-// Serialize full 1024x512 VRAM (ABGR1555) as a P6 PPM at `path`.
-// Used by tools/smoke_test.py as the regression contract for game bring-up.
-static bool dumpVramPpm(const ps1::gpu::GPU &gpu, const char *path) {
-  std::FILE *f = std::fopen(path, "wb");
-  if (!f) {
-    fmt::print(stderr, "[VRAM-DUMP] open failed: {}\n", path);
-    return false;
-  }
-  constexpr uint32_t W = ps1::gpu::GPU::VRAM_WIDTH;
-  constexpr uint32_t H = ps1::gpu::GPU::VRAM_HEIGHT;
-  std::fprintf(f, "P6\n%u %u\n255\n", W, H);
-  const ps1::gpu::Color16 *vram = gpu.getVRAM();
-  std::vector<uint8_t> row(W * 3);
-  uint64_t nonZero = 0;
-  for (uint32_t y = 0; y < H; ++y) {
-    for (uint32_t x = 0; x < W; ++x) {
-      uint16_t p = vram[y * W + x].raw;
-      row[x * 3 + 0] = static_cast<uint8_t>((p & 0x1F) << 3);
-      row[x * 3 + 1] = static_cast<uint8_t>(((p >> 5) & 0x1F) << 3);
-      row[x * 3 + 2] = static_cast<uint8_t>(((p >> 10) & 0x1F) << 3);
-      if (p != 0)
-        ++nonZero;
-    }
-    std::fwrite(row.data(), 1, row.size(), f);
-  }
-  std::fclose(f);
-  ps1::metrics::count("vram_dump.written");
-  ps1::metrics::setState("vram_dump.nonzero_pixels",
-                         static_cast<int64_t>(nonZero));
-  fmt::print("[VRAM-DUMP] wrote {} ({}x{}), {} non-zero pixels\n", path, W, H,
-             nonZero);
-  return true;
-}
-
 
 // Follow goolobj->local (an nsentry) for the fields the GOOL render gate
 // reads.  Returns 0 when the pointer is not plausible RAM, so a bad entry
@@ -1159,7 +1028,7 @@ int main(int argc, char *argv[]) {
         ps1::StepControl::Hooks{
             [&](uint32_t a) { return memory.read32(a); },
             [&](uint32_t a, uint32_t v) { memory.write32(a, v); },
-            [&](const std::string &p) { return dumpVramPpm(gpu, p.c_str()); },
+            [&](const std::string &p) { return ps1::gpu::writeVramPpm(gpu, p.c_str()); },
             [&input, held = uint16_t{0}](uint16_t mask) mutable {
               input.release(held, 0);
               input.press(mask, 0);
@@ -1550,20 +1419,20 @@ int main(int argc, char *argv[]) {
           fmt::print("[display] dithering {}\n",
                      gpu.dedither() ? "off" : "on (game default)");
         } else {
-          mapKeyToButton(event.key.keysym.sym, padSink, held, true);
+          ps1::input::applyKey(event.key.keysym.sym, true, padSink, held);
         }
         break;
       case SDL_KEYUP:
-        mapKeyToButton(event.key.keysym.sym, padSink, held, false);
+        ps1::input::applyKey(event.key.keysym.sym, false, padSink, held);
         break;
       case SDL_CONTROLLERBUTTONDOWN:
       case SDL_CONTROLLERBUTTONUP:
-        if (uint16_t btn = controllerButton(event.cbutton.button))
+        if (uint16_t btn = ps1::input::controllerButton(event.cbutton.button))
           held.set(ps1::input::HeldButtons::PadButtons, btn,
                    event.type == SDL_CONTROLLERBUTTONDOWN, padSink);
         break;
       case SDL_CONTROLLERAXISMOTION:
-        mapControllerAxis(event.caxis.axis, event.caxis.value, padSink, held);
+        ps1::input::applyControllerAxis(event.caxis.axis, event.caxis.value, padSink, held);
         break;
       case SDL_CONTROLLERDEVICEADDED: // plugged in after start-up
         if (!gamepad && (gamepad = SDL_GameControllerOpen(event.cdevice.which)))
@@ -1632,7 +1501,7 @@ int main(int argc, char *argv[]) {
       if (!frameDumpWritten && vblanks >= std::strtoul(atFrame, nullptr, 10)) {
         const char *path = std::getenv("PS1_VRAM_DUMP_PATH");
         frameDumpWritten =
-            dumpVramPpm(gpu, path ? path : "/tmp/vram_frame.ppm");
+            ps1::gpu::writeVramPpm(gpu, path ? path : "/tmp/vram_frame.ppm");
       }
     }
 
@@ -1660,7 +1529,7 @@ int main(int argc, char *argv[]) {
       const uint32_t bucket = vblanks / shotEvery;
       if (bucket != lastShotBucket && vblanks >= shotFrom) {
         lastShotBucket = bucket;
-        dumpVramPpm(gpu,
+        ps1::gpu::writeVramPpm(gpu,
                     fmt::format("{}/shot_{:05}.ppm", shotDir, vblanks).c_str());
       }
     }
@@ -1687,7 +1556,7 @@ int main(int argc, char *argv[]) {
 
   if (const char *vramDump = std::getenv("PS1_VRAM_DUMP_PATH")) {
     if (!frameDumpWritten)
-      dumpVramPpm(gpu, vramDump);
+      ps1::gpu::writeVramPpm(gpu, vramDump);
   }
   gpu.publishMetrics();
   ps1::metrics::dumpJson();

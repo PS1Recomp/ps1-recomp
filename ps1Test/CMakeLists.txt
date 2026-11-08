@@ -89,6 +89,7 @@ add_executable(ps1Runtime_tests
     runtime/test_cdrom_controller.cpp
     runtime/test_dma.cpp
     runtime/test_input.cpp
+    runtime/test_host_bindings.cpp
     runtime/test_mdec.cpp
     runtime/test_timers.cpp
     runtime/test_save_state.cpp

@@ -23,9 +23,11 @@ add_library(ps1Runtime_lib STATIC
     src/bios/card_fs.cpp
     src/gpu/gpu.cpp
     src/gpu/renderer_opengl.cpp
+    src/gpu/vram_dump.cpp
     src/spu/spu.cpp
     src/dma/dma.cpp
     src/input/input.cpp
+    src/input/host_bindings.cpp
     src/mdec/mdec.cpp
     src/timers/timers.cpp
     src/save_state.cpp
@@ -51,7 +53,7 @@ target_include_directories(ps1Runtime_lib
 )
 
 target_link_libraries(ps1Runtime_lib
-    PUBLIC fmt::fmt
+    PUBLIC fmt::fmt SDL2::SDL2
 )
 
 # Recompiled output generation (manual; see CONTRIBUTING.md)
