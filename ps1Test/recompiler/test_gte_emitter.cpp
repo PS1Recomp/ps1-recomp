@@ -235,3 +235,12 @@ TEST(GteEmitter, NonGteRejected) {
   auto code = emitter.emit(inst, 0);
   EXPECT_NE(code.find("NOT GTE"), std::string::npos);
 }
+
+// The GTE has 32 data and 32 control registers (psx-spx "GTE Registers");
+// an index past that has no name and must not read past the table.
+TEST(GteEmitter, RegisterIndexPastThirtyOneGetsAPlaceholderName) {
+  EXPECT_EQ(gteDataRegName(32), "gte_d??");
+  EXPECT_EQ(gteControlRegName(32), "gte_c??");
+  EXPECT_NE(gteDataRegName(31), "gte_d??");
+  EXPECT_NE(gteControlRegName(31), "gte_c??");
+}

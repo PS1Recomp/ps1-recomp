@@ -11,6 +11,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -674,6 +675,238 @@ TEST_F(RecompCli, EmittedSourceCompilesAgainstRuntimeHeaders) {
   auto cc = run("c++ -std=c++20 -fsyntax-only -I" + q((src / "ps1Runtime/include").string()) +
                 " -I" + q((src / "third_party/fmt/include").string()) + " " + q(out.string()));
   EXPECT_EQ(cc.code, 0) << cc.out;
+}
+
+
+// Raw overlay image: little-endian words, no PS-X EXE header.
+std::vector<uint8_t> rawWords(const std::vector<uint32_t> &code, size_t minBytes = 0) {
+  std::vector<uint8_t> d(std::max(code.size() * 4, minBytes), 0);
+  for (size_t i = 0; i < code.size(); ++i)
+    put32(d, i * 4, code[i]);
+  return d;
+}
+
+// `sw` targets and the jr of a switch: lw $t2, 0($t1) ; jr $t2 ; nop
+constexpr uint32_t kLwT2 = 0x8D2A0000, kJrT2 = 0x01400008;
+
+TEST_F(RecompCli, OverrideAndMissingAddressesOutsideFunctionsAreDispatchable) {
+  auto r = recompile(header() + func("leaf", "0x80010020", 12) +
+                     "[hle_overrides]\n\"0x80030000\" = \"hle_VSync\"\n"
+                     "[missing_functions]\n\"0x80040000\" = \"ctx->r2 = 1;\"\n");
+  ASSERT_EQ(r.code, 0) << r.out;
+  auto cpp = output();
+  EXPECT_TRUE(has(cpp, "recomp_func_table[0x80030000] = func_80030000;"));
+  EXPECT_TRUE(has(cpp, "recomp_func_table[0x80040000] = func_80040000;"));
+  EXPECT_TRUE(has(r.out, "Missing functions: 1 address(es)"));
+}
+
+TEST_F(RecompCli, StubNamedMainIsRenamedLikeAFunction) {
+  auto r = recompile(header() + func("leaf", "0x80010020", 12) +
+                     "[[stubs]]\nname = \"main\"\naddress = \"0x80050000\"\n");
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_TRUE(has(output(), "recomp_func_table[0x80050000] = func_main;"));
+}
+
+TEST_F(RecompCli, HleEntryWithoutHleKeyIsLeftToTheRecompiler) {
+  auto r = recompile(header() + func("leaf", "0x80010020", 12) +
+                     "[[hle_functions]]\naddress = \"0x80010020\"\nname = \"libgpu_X\"\n");
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_FALSE(has(output(), "libgpu_X"));
+  EXPECT_TRUE(has(r.out, "HLE functions ([[hle_functions]]): 0"));
+}
+
+TEST_F(RecompCli, HleOverrideWinsOverHleFunctionAtTheSameAddress) {
+  auto r = recompile(header() + func("leaf", "0x80010020", 12) +
+                     "[hle_overrides]\n\"0x80030000\" = \"hle_VSync\"\n"
+                     "[[hle_functions]]\naddress = \"0x80030000\"\nhle = true\n"
+                     "name = \"libetc_VSync\"\n");
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_FALSE(has(output(), "psyq_dispatch(\"libetc_VSync\""));
+}
+
+TEST_F(RecompCli, HleFunctionListedOutsideTextKeepsItsConfiguredName) {
+  // "ghost" is not in .text so the translation loop skips it; the HLE body
+  // still has to be emitted under the name the declaration used.
+  auto r = recompile(header() + func("ghost", "0x80200000", 8) +
+                     "[[hle_functions]]\naddress = \"0x80200000\"\nhle = true\n"
+                     "name = \"libgpu_DrawSync\"\n");
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_TRUE(has(output(), def("ghost") + "\n    psyq_dispatch(\"libgpu_DrawSync\", ctx);"));
+}
+
+TEST_F(RecompCli, ForwardJumpInsideAFunctionBecomesALocalLabel) {
+  // j +0x10 ; nop ; jr $ra ; nop ; (target) jr $ra ; nop
+  std::vector<uint32_t> code = {0x08000000 | (((kBase + 0x10) >> 2) & 0x03FFFFFF), kNop,
+                                kJrRa, kNop, kJrRa, kNop};
+  writeBytes(exe, makePsxExe(kBase, kBase, code));
+  auto r = recompile(header() + func("f", "0x80010000", 24));
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_TRUE(has(output(), "L_80010010:"));
+}
+
+TEST_F(RecompCli, DuffDeviceJrIsResolvedToInFunctionTargets) {
+  // lui $t0 ; addiu $t0,+0x20 ; sll $at,$a2,2 ; subu $t0,$t0,$at ; jr $t0
+  std::vector<uint32_t> code = {
+      0x2CC10003,                  // sltiu $at, $a2, 3
+      0x3C080000 | (kBase >> 16),  // lui   $t0, hi(base)
+      0x25080020,                  // addiu $t0, $t0, 0x20 (lo of base = +0x20)
+      0x00060880,                  // sll   $at, $a2, 2
+      0x01014023,                  // subu  $t0, $t0, $at
+      0x01000008,                  // jr    $t0
+      kNop, kNop, kNop, kJrRa, kNop, kNop,
+  };
+  writeBytes(exe, makePsxExe(kBase, kBase, code));
+  auto r = recompile(header() + func("duff", "0x80010000", 48));
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_TRUE(has(r.out, "[jump table] func 0x80010000+20: 3 targets (computed in-function targets)"));
+}
+
+TEST_F(RecompCli, JrAsTheFirstInstructionIsNotAJumpTable) {
+  std::vector<uint32_t> code = {kJrT2, kNop};
+  writeBytes(exe, makePsxExe(kBase, kBase, code));
+  auto r = recompile(header() + func("f", "0x80010000", 8));
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_FALSE(has(r.out, "[jump table]"));
+}
+
+TEST_F(RecompCli, LoadedTargetWithoutIndexedBaseIsNotAJumpTable) {
+  // lw $t2, 0($t1) with $t1 never formed by an ADDU: a function pointer.
+  std::vector<uint32_t> code = {kNop, kLwT2, kJrT2, kNop};
+  writeBytes(exe, makePsxExe(kBase, kBase, code));
+  auto r = recompile(header() + func("f", "0x80010000", 16));
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_FALSE(has(r.out, "[jump table]"));
+}
+
+class RecompJumpTable : public RecompCli {
+protected:
+  static constexpr uint32_t kFn = kBase + 0x40;
+
+  // switch over `bound` cases with the table at `table`; `addu` combines the
+  // base ($t1) and the scaled index ($t0) in the given operand order.
+  std::vector<uint32_t> switchCode(uint32_t table, uint16_t bound, uint32_t adduWord,
+                                   bool withLui = true) {
+    std::vector<uint32_t> code = twoFunctionCode();
+    code.resize(0x40 / 4, kNop);
+    std::vector<uint32_t> sw = {
+        0x2C810000u | bound,                                  // sltiu at, a0, bound
+        0x1020000B,                                           // beqz  at, default
+        0x00044080,                                           // sll   t0, a0, 2
+        withLui ? (0x3C090000 | (table >> 16)) : kNop,        // lui   t1, hi
+        0x25290000 | (table & 0xFFFF),                        // addiu t1, t1, lo
+        adduWord,                                             // addu  t1, ...
+        kLwT2, kJrT2, kNop,
+        kJrRa, kNop, kJrRa, kNop, kJrRa, kNop,
+    };
+    code.insert(code.end(), sw.begin(), sw.end());
+    return code;
+  }
+
+  RunResult build(std::vector<uint32_t> code) {
+    writeBytes(exe, makePsxExe(kBase, kBase, code));
+    return recompile(header() + func("sw", "0x80010040", 60));
+  }
+};
+
+TEST_F(RecompJumpTable, BaseMayBeTheSecondAdduOperand) {
+  constexpr uint32_t table = kBase + 0x100;
+  auto code = switchCode(table, 2, 0x01094821); // addu t1, t0, t1
+  code.resize((table - kBase) / 4, kNop);
+  for (uint32_t t : {kFn + 36, kFn + 44})
+    code.push_back(t);
+
+  auto r = build(code);
+
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_TRUE(has(r.out, "func 0x80010040+28: 2 targets (table entries detected)")) << r.out;
+}
+
+TEST_F(RecompJumpTable, BaseWithoutAConstantIsNotATable) {
+  auto r = build(switchCode(kBase + 0x100, 2, 0x01284821, /*withLui=*/false));
+
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_FALSE(has(r.out, "table entries detected"));
+}
+
+TEST_F(RecompJumpTable, TableOutsideEveryLoadedSectionIsNotRead) {
+  auto r = build(switchCode(0x80300000, 2, 0x01284821));
+
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_FALSE(has(r.out, "table entries detected"));
+}
+
+TEST_F(RecompJumpTable, ReadStopsAtTheEndOfTheSection) {
+  // Bound 8, but only two entries fit before the image ends.
+  constexpr uint32_t table = kBase + 0x100;
+  auto code = switchCode(table, 8, 0x01284821);
+  code.resize((table - kBase) / 4, kNop);
+  for (uint32_t t : {kFn + 36, kFn + 44})
+    code.push_back(t);
+
+  auto r = build(code);
+
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_TRUE(has(r.out, "func 0x80010040+28: 2 targets (table entries detected)")) << r.out;
+}
+
+TEST_F(RecompJumpTable, ReadStopsAtTheFirstNonRamWord) {
+  constexpr uint32_t table = kBase + 0x100;
+  auto code = switchCode(table, 4, 0x01284821);
+  code.resize((table - kBase) / 4, kNop);
+  for (uint32_t t : {kFn + 36, 0x1F801810u /* GPU port */, kFn + 44, kFn + 52})
+    code.push_back(t);
+
+  auto r = build(code);
+
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_TRUE(has(r.out, "func 0x80010040+28: 1 targets (table entries detected)")) << r.out;
+}
+
+TEST_F(RecompJumpTable, ReadStopsAboveTheRamWindow) {
+  constexpr uint32_t table = kBase + 0x100;
+  auto code = switchCode(table, 4, 0x01284821);
+  code.resize((table - kBase) / 4, kNop);
+  for (uint32_t t : {kFn + 36, kFn + 44, 0x80400004u, kFn + 52})
+    code.push_back(t);
+
+  auto r = build(code);
+
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_TRUE(has(r.out, "func 0x80010040+28: 2 targets (table entries detected)")) << r.out;
+}
+
+TEST_F(RecompCli, RawOverlayWithListedFunctionsKeepsItsInternalBranches) {
+  // Headerless image >= 2 KB: ram_base comes from the config, and the branch
+  // and jump targets inside the function become labels.
+  constexpr uint32_t base = 0x80200000;
+  std::vector<uint32_t> ovl = {
+      0x10000002,                                        // beq $0,$0,+2 -> +0xC
+      kNop,
+      0x08000000 | (((base + 0x10) >> 2) & 0x03FFFFFF),  // j +0x10
+      kNop,
+      kJrRa, kNop,
+  };
+  writeBytes(dir / "raw.bin", rawWords(ovl, 2048));
+  auto r = recompile(header() + func("leaf", "0x80010020", 12) +
+                     "[[overlays]]\nname = \"RAW\"\nbinary_path = \"raw.bin\"\n"
+                     "ram_base = 0x80200000\nsize = 24\nfunctions = [0x80200000]\n");
+  ASSERT_EQ(r.code, 0) << r.out;
+  auto cpp = output();
+  EXPECT_TRUE(has(cpp, def("overlay_RAW__80200000")));
+  EXPECT_TRUE(has(cpp, "L_8020000C:"));
+  EXPECT_TRUE(has(cpp, "L_80200010:"));
+  EXPECT_TRUE(has(cpp, "{ \"RAW\", 0x80200000, 24, 0 },"));
+}
+
+TEST_F(RecompCli, OverlayFromDiscPathAutoDetectsPrologues) {
+  std::vector<uint32_t> ovl = {0x27BDFFF8, kJrRa, 0x27BD0008};
+  writeBytes(dir / "disc_ovl.bin", rawWords(ovl));
+  auto r = recompile(header() + func("leaf", "0x80010020", 12) +
+                     "[[overlays]]\nname = \"DISC\"\ndisc_path = \"disc_ovl.bin\"\n"
+                     "ram_base = 0x80300000\nsize = 12\n");
+  ASSERT_EQ(r.code, 0) << r.out;
+  EXPECT_TRUE(has(r.out, "[DISC] Auto-detected 1 functions"));
+  EXPECT_TRUE(has(output(), def("overlay_DISC__80300000")));
 }
 
 } // namespace

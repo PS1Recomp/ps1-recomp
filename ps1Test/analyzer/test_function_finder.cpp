@@ -7,7 +7,9 @@
 #include <elfio/elfio.hpp>
 #include <cstdio>
 #include <fmt/format.h>
+#include <filesystem>
 #include <fstream>
+#include <unistd.h>
 
 using namespace ps1recomp;
 
@@ -562,4 +564,157 @@ TEST(FunctionFinder, HandlesEmptyCode) {
     EXPECT_GE(finder.getFunctionCount(), 1u);
 
     cleanupFile(path);
+}
+
+// Function Finder -- Linear Sweep
+//
+// The sweep is the only pass with no external reference to a function, so
+// every candidate has to stand on its own: all known encodings, and a return
+// before the next known entry.
+
+namespace {
+
+// Unique per test and process, so parallel ctest runs never share a file.
+std::string uniqueElfPath() {
+    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    return (std::filesystem::temp_directory_path() /
+            fmt::format("ps1_ff_{}_{}_{}.elf", info->test_suite_name(), info->name(),
+                        getpid()))
+        .string();
+}
+
+constexpr uint32_t kTextBase = 0x80010000;
+constexpr uint32_t kReserved = 0xFC000000; // opcode 0x3F: not an R3000A instruction
+
+uint32_t makeBEQ(uint32_t pc, uint32_t target) {
+    const int16_t off = static_cast<int16_t>(
+        (static_cast<int32_t>(target) - static_cast<int32_t>(pc + 4)) / 4);
+    return (0x04u << 26) | static_cast<uint16_t>(off);
+}
+
+struct SweepResult {
+    std::vector<FunctionInfo> funcs;
+    const FunctionInfo* at(uint32_t addr) const {
+        for (const auto& f : funcs)
+            if (f.address == addr) return &f;
+        return nullptr;
+    }
+};
+
+SweepResult runFinder(const std::vector<uint32_t>& code,
+                      const std::vector<std::pair<std::string, uint32_t>>& syms = {}) {
+    const std::string path = uniqueElfPath();
+    createElfWithCode(path, code, kTextBase, !syms.empty(), syms);
+    ElfParser elf;
+    SweepResult r;
+    if (elf.load(path)) {
+        FunctionFinder finder;
+        finder.findFunctions(elf);
+        r.funcs = finder.getFunctions();
+    }
+    cleanupFile(path);
+    return r;
+}
+
+} // namespace
+
+TEST(FunctionFinderSweep, UnreferencedBodyAfterAReturnBecomesAFunction) {
+    std::vector<uint32_t> code = {
+        makeJR_RA(), makeNOP(),                      // entry
+        makeADDU(2, 4, 5), makeJR_RA(), makeNOP(),   // reached only via jalr
+    };
+
+    auto r = runFinder(code);
+
+    ASSERT_NE(r.at(kTextBase + 8), nullptr);
+    EXPECT_EQ(r.at(kTextBase + 8)->source, FunctionSource::LinearSweep);
+}
+
+TEST(FunctionFinderSweep, UnknownEncodingIsSkippedOneWordAtATime) {
+    std::vector<uint32_t> code = {
+        makeJR_RA(), makeNOP(),
+        kReserved,                                   // data, not code
+        makeADDU(2, 4, 5), makeJR_RA(), makeNOP(),
+    };
+
+    auto r = runFinder(code);
+
+    EXPECT_EQ(r.at(kTextBase + 8), nullptr);
+    ASSERT_NE(r.at(kTextBase + 12), nullptr);
+    EXPECT_EQ(r.at(kTextBase + 12)->source, FunctionSource::LinearSweep);
+}
+
+TEST(FunctionFinderSweep, CandidateStopsAtTheNextKnownEntry) {
+    // The swept body must end before the symbol that follows it; a body
+    // without a return in that gap is not a function.
+    std::vector<uint32_t> code = {
+        makeJR_RA(), makeNOP(),
+        makeADDU(2, 4, 5), makeADDU(3, 4, 5),        // no return before 0x10
+        makeADDU(2, 2, 3), makeJR_RA(), makeNOP(),   // symbol "known" at +0x10
+    };
+
+    auto r = runFinder(code, {{"known", kTextBase + 0x10}});
+
+    EXPECT_EQ(r.at(kTextBase + 8), nullptr);
+    ASSERT_NE(r.at(kTextBase + 0x10), nullptr);
+    EXPECT_EQ(r.at(kTextBase + 0x10)->source, FunctionSource::Symbol);
+}
+
+TEST(FunctionFinderSweep, BodyExtendedByABranchOverUnknownWordsIsRejected) {
+    // The early `jr $ra` validates, but a branch reaches past it, so the real
+    // body runs on -- through a reserved encoding. That is not code.
+    const uint32_t a = kTextBase + 8;
+    std::vector<uint32_t> code = {
+        makeJR_RA(), makeNOP(),
+        makeBEQ(a, a + 16), makeNOP(), makeJR_RA(), makeNOP(),
+        kReserved, makeJR_RA(), makeNOP(),
+    };
+
+    auto r = runFinder(code);
+
+    EXPECT_EQ(r.at(a), nullptr);
+}
+
+TEST(FunctionFinder, FindContainingReturnsNullOutsideEveryFunction) {
+    const std::string path = uniqueElfPath();
+    std::vector<uint32_t> code(16, makeNOP());
+    createElfWithCode(path, code, kTextBase, true,
+                      {{"func_a", kTextBase}, {"func_b", kTextBase + 0x20}});
+    ElfParser elf;
+    ASSERT_TRUE(elf.load(path));
+    FunctionFinder finder;
+    finder.findFunctions(elf);
+
+    const auto* before = finder.findContaining(kTextBase - 4);
+    const auto* after = finder.findContaining(kTextBase + 0x40);
+
+    EXPECT_EQ(before, nullptr);
+    EXPECT_EQ(after, nullptr) << "func_b ends at the end of .text";
+    cleanupFile(path);
+}
+
+TEST(FunctionFinder, FindContainingOnEmptyFinderReturnsNull) {
+    FunctionFinder finder;
+
+    EXPECT_EQ(finder.findContaining(kTextBase), nullptr);
+}
+
+TEST(FunctionFinder, FindContainingTreatsUnsizedFunctionAsOpenEnded) {
+    FunctionFinder finder;
+    finder.addFunction(kTextBase, "unsized", FunctionSource::Symbol);
+
+    const auto* f = finder.findContaining(kTextBase + 0x1000);
+
+    ASSERT_NE(f, nullptr);
+    EXPECT_EQ(f->name, "unsized");
+}
+
+TEST(FunctionFinder, AddFunctionKeepsTheFirstNameForAnAddress) {
+    FunctionFinder finder;
+    finder.addFunction(kTextBase, "first", FunctionSource::Symbol);
+
+    finder.addFunction(kTextBase, "second", FunctionSource::JALTarget);
+
+    ASSERT_EQ(finder.getFunctionCount(), 1u);
+    EXPECT_EQ(finder.getFunctions()[0].name, "first");
 }

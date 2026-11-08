@@ -87,3 +87,31 @@ TEST_F(GpuBlendTest, BlendMode3_B_Plus_QuarterF) {
 
   EXPECT_EQ(expected.raw, actual.raw);
 }
+
+// psx-spx "Semi Transparency": each channel result saturates to 0..1Fh.
+TEST_F(GpuBlendTest, SubtractiveBlendClampsEveryChannelAtZero) {
+  gpu.writeGP0(0xE1000040); // Blend Mode 2: B - F
+
+  Color16 actual =
+      gpu.applyBlend(makeColor(200, 200, 200), makeColor(40, 40, 40));
+
+  EXPECT_EQ(actual.raw, makeColor(0, 0, 0).raw);
+}
+
+TEST_F(GpuBlendTest, AdditiveBlendClampsEveryChannelAtFull) {
+  gpu.writeGP0(0xE1000020); // Blend Mode 1: B + F
+
+  Color16 actual =
+      gpu.applyBlend(makeColor(200, 200, 200), makeColor(200, 200, 200));
+
+  EXPECT_EQ(actual.raw, makeColor(255, 255, 255).raw);
+}
+
+TEST_F(GpuBlendTest, ResultKeepsTheBackgroundMaskBit) {
+  gpu.writeGP0(0xE1000000); // Blend Mode 0
+
+  Color16 actual =
+      gpu.applyBlend(makeColor(0, 0, 0), makeColor(0, 0, 0, /*stp=*/true));
+
+  EXPECT_EQ(actual.raw & 0x8000, 0x8000);
+}

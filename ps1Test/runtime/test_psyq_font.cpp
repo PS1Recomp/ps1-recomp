@@ -284,3 +284,106 @@ TEST_F(PsyqFontTest, RegistryDispatchesAllFontNames) {
   EXPECT_NO_FATAL_FAILURE(psyq_dispatch("libgpu_FntSystem", &ctx));
   EXPECT_NO_FATAL_FAILURE(psyq_dispatch("libgpu_SetDumpFnt", &ctx));
 }
+
+// Remaining printf conversions and stream-id edge cases
+
+namespace {
+
+uint32_t openStream(recomp_context &ctx, Memory &mem,
+                    int16_t w, int16_t h, uint32_t isbg) {
+  ctx.r[A0] = 0; ctx.r[A1] = 0;
+  ctx.r[A2] = static_cast<uint16_t>(w); ctx.r[A3] = static_cast<uint16_t>(h);
+  mem.write32(ctx.r[SP] + 0x10u, isbg);
+  mem.write32(ctx.r[SP] + 0x14u, 0); // unlimited
+  hle_libgpu_FntOpen(&ctx);
+  return ctx.r[V0];
+}
+
+} // namespace
+
+TEST_F(PsyqFontTest, FntPrintFormatsCharUnsignedAndUpperHex) {
+  uint32_t id = openStream(ctx, mem, 320, 30, 0);
+  writeString(0x80100000u, "c=%c u=%u X=%X");
+  ctx.r[A0] = id;
+  ctx.r[A1] = 0x80100000u;
+  ctx.r[A2] = 'Z';
+  ctx.r[A3] = 0xFFFFFFFFu;
+  ctx.r[SP] = 0x801FF000u;
+  mem.write32(ctx.r[SP] + 0x10u, 0xBEEFu);
+
+  hle_libgpu_FntPrint(&ctx);
+
+  EXPECT_STREQ(psyq_font_slot_buffer(static_cast<int>(id)),
+               "c=Z u=4294967295 X=BEEF");
+}
+
+TEST_F(PsyqFontTest, FntPrintKeepsUnknownSpecifiersAndTrailingPercent) {
+  uint32_t id = openStream(ctx, mem, 320, 30, 0);
+  writeString(0x80100000u, "%q 100%");
+  ctx.r[A0] = id;
+  ctx.r[A1] = 0x80100000u;
+
+  hle_libgpu_FntPrint(&ctx);
+
+  EXPECT_STREQ(psyq_font_slot_buffer(static_cast<int>(id)), "%q 100%");
+}
+
+TEST_F(PsyqFontTest, FntPrintOfNullStringArgumentAppendsNothing) {
+  uint32_t id = openStream(ctx, mem, 320, 30, 0);
+  writeString(0x80100000u, "[%s]");
+  ctx.r[A0] = id;
+  ctx.r[A1] = 0x80100000u;
+  ctx.r[A2] = 0; // NULL char*
+
+  hle_libgpu_FntPrint(&ctx);
+
+  EXPECT_STREQ(psyq_font_slot_buffer(static_cast<int>(id)), "[]");
+}
+
+TEST_F(PsyqFontTest, FntPrintIdPastTheLastSlotUsesTheLastSlot) {
+  for (int i = 0; i < 8; ++i)
+    openStream(ctx, mem, 320, 30, 0);
+  writeString(0x80100000u, "seven");
+  ctx.r[A0] = 12;
+  ctx.r[A1] = 0x80100000u;
+
+  hle_libgpu_FntPrint(&ctx);
+
+  EXPECT_EQ(ctx.r[V0], 0u);
+  EXPECT_STREQ(psyq_font_slot_buffer(7), "seven");
+}
+
+TEST_F(PsyqFontTest, FntFlushOfUnopenedSlotEchoesTheIdAndDrawsNothing) {
+  ctx.r[A0] = 4;
+
+  hle_libgpu_FntFlush(&ctx);
+
+  EXPECT_EQ(ctx.r[V0], 4u);
+  EXPECT_TRUE(gp0Sink.empty());
+}
+
+TEST_F(PsyqFontTest, FntFlushOfEmptyWindowSkipsTheBackground) {
+  uint32_t id = openStream(ctx, mem, 0, 12, /*isbg=*/1);
+  ctx.r[A0] = id;
+
+  hle_libgpu_FntFlush(&ctx);
+
+  EXPECT_TRUE(gp0Sink.empty());
+}
+
+TEST_F(PsyqFontTest, FntSystemIgnoresOutOfRangeIds) {
+  ctx.r[A0] = 2;
+  hle_libgpu_FntSystem(&ctx);
+
+  ctx.r[A0] = 9;
+  hle_libgpu_FntSystem(&ctx);
+  ctx.r[A0] = 0;
+  hle_libgpu_FntSystem(&ctx);
+
+  EXPECT_EQ(ctx.r[V0], 2u); // the 9 never replaced the default
+}
+
+TEST_F(PsyqFontTest, SlotBufferOfInvalidIdIsEmpty) {
+  EXPECT_STREQ(psyq_font_slot_buffer(-1), "");
+  EXPECT_STREQ(psyq_font_slot_buffer(8), "");
+}

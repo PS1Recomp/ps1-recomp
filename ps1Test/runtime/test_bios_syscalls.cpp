@@ -8,6 +8,7 @@
 #include "runtime/cdrom/cdrom_controller.h"
 #include "runtime/cdrom/virtual_fs.h"
 #include "runtime/cpu_context.h"
+#include "runtime/dma/dma.h"
 #include "runtime/gpu/gpu.h"
 #include "runtime/input/input.h"
 #include "runtime/memory.h"
@@ -17,6 +18,8 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
+#include <vector>
 
 using namespace ps1;
 using namespace ps1::bios;
@@ -699,6 +702,237 @@ TEST_F(BiosSyscallTest, StreamingReadPumpsTheNextSectorAfterTheDataCallback) {
   EXPECT_GE(g_dispatchCount, 2) << "the drive was not pumped for more data";
   EXPECT_EQ(g_lastDispatch, 0x80047300u);
   EXPECT_EQ(g_lastA0, 1u);
+}
+
+} // namespace
+
+namespace {
+
+// More string functions (psx-spx "BIOS String Functions")
+
+TEST_F(BiosSyscallTest, StrncmpOfEqualStringsShorterThanMaxlenIsEqual) {
+  writeString(kBufA, "abc");
+  writeString(kBufB, "abc");
+  ctx.r[A0] = kBufA; ctx.r[A1] = kBufB; ctx.r[A2] = 10;
+  a0(0x18);
+  EXPECT_EQ(ctx.r[V0], 0u);
+}
+
+TEST_F(BiosSyscallTest, StrchrOfAnAbsentCharacterReturnsZero) {
+  writeString(kBufA, "hello");
+  ctx.r[A0] = kBufA; ctx.r[A1] = 'z'; ctx.r[V0] = 0xDEAD;
+  a0(0x1E);
+  EXPECT_EQ(ctx.r[V0], 0u);
+}
+
+// GPU status without a GPU attached
+
+TEST_F(BiosSyscallTest, GetGpuStatusWithoutAGpuReportsTheResetState) {
+  // psx-spx GPU "GP1(00h) Reset GPU": "GPUSTAT becomes 14802000h".
+  a0(0x4D);
+  EXPECT_EQ(ctx.r[V0], 0x14802000u);
+}
+
+// B(56h) GetC0Table / B(57h) GetB0Table
+
+TEST_F(BiosSyscallTest, GetB0AndC0TableReturnTheirOwnJumpLists) {
+  // psx-spx: "Retrieves the address of the jump lists for B(NNh) and C(NNh)
+  // functions".  Each entry holds this runtime's dispatch sentinel for that
+  // function number, so a game that calls through the list reaches it.
+  b0(0x57);
+  const uint32_t bTable = ctx.r[V0];
+  b0(0x56);
+  const uint32_t cTable = ctx.r[V0];
+
+  EXPECT_NE(bTable, cTable);
+  EXPECT_EQ(mem.read32(bTable + 0x3D * 4), 0xB03Du);
+  EXPECT_EQ(mem.read32(cTable + 0x0A * 4), 0xC00Au);
+}
+
+// B(0Ah) WaitEvent
+
+TEST_F(BiosSyscallTest, WaitEventReturnsOnceForADeliveredEventThenTurnsBusy) {
+  // psx-spx B(0Ah): "returns 1 once when it is ready (and automatically
+  // switches the event back to busy status)".
+  ctx.r[A0] = 0xF0000009; ctx.r[A1] = 0x20; ctx.r[A2] = 0x2000; ctx.r[A3] = 0;
+  b0(0x08);
+  const uint32_t ev = ctx.r[V0];
+  ctx.r[A0] = ev;
+  b0(0x0C);
+  ctx.r[A0] = 0xF0000009; ctx.r[A1] = 0x20;
+  b0(0x07); // DeliverEvent
+
+  ctx.r[A0] = ev;
+  b0(0x0A);
+  const uint32_t waited = ctx.r[V0];
+  ctx.r[A0] = ev;
+  b0(0x0B);
+
+  EXPECT_EQ(waited, 1u);
+  EXPECT_EQ(ctx.r[V0], 0u) << "event still ready after WaitEvent";
+}
+
+TEST_F(BiosSyscallTest, WaitEventOnADisabledEventReturnsZero) {
+  // psx-spx B(0Ah): "Returns 0 if the event is disabled."
+  ctx.r[A0] = 0xF0000009; ctx.r[A1] = 0x20; ctx.r[A2] = 0x2000; ctx.r[A3] = 0;
+  b0(0x08);
+  const uint32_t ev = ctx.r[V0];
+
+  ctx.r[A0] = ev;
+  b0(0x0A);
+
+  EXPECT_EQ(ctx.r[V0], 0u);
+}
+
+// TTY output: B(35h) write to std_out, B(3Dh) putchar
+
+TEST_F(BiosSyscallTest, WriteToStdoutPrintsTheBytesAndReturnsTheCount) {
+  // psx-spx B(35h): "out: V0 Number of bytes written"; fd 1 is std_out.
+  writeString(kBufA, "hi!");
+  ctx.r[A0] = 1; ctx.r[A1] = kBufA; ctx.r[A2] = 3;
+  testing::internal::CaptureStdout();
+  b0(0x35);
+  EXPECT_EQ(testing::internal::GetCapturedStdout(), "hi!");
+  EXPECT_EQ(ctx.r[V0], 3u);
+}
+
+TEST_F(BiosSyscallTest, PutcharWritesTheCharacterToStdout) {
+  ctx.r[A0] = 'Q';
+  testing::internal::CaptureStdout();
+  b0(0x3D);
+  EXPECT_EQ(testing::internal::GetCapturedStdout(), "Q");
+}
+
+TEST_F(BiosSyscallTest, PrintfPointerConversionPrintsTheAddressInHex) {
+  writeString(kBufA, "%p");
+  ctx.r[A0] = kBufA; ctx.r[A1] = 0x8001ABCD;
+  testing::internal::CaptureStdout();
+  a0(0x3F);
+  const std::string out = testing::internal::GetCapturedStdout();
+  EXPECT_NE(out.find("8001abcd"), std::string::npos) << out;
+}
+
+// CD-ROM files through B(32h) open / B(33h) lseek / B(34h) read
+
+class OneFileFs : public cdrom::VirtualFs {
+public:
+  std::optional<std::vector<uint8_t>>
+  readFile(const std::string &path) override {
+    if (path != "DATA.BIN")
+      return std::nullopt;
+    return std::vector<uint8_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+  }
+};
+
+TEST_F(BiosSyscallTest, LseekFromStartPositionsTheNextCdromRead) {
+  // psx-spx lseek: "seektype 0 = from start of file".
+  OneFileFs disc;
+  Bios cdBios(ctx, disc, mem);
+  writeString(kBufA, "cdrom:\\DATA.BIN;1");
+  ctx.r[A0] = kBufA; ctx.r[A1] = 1;
+  ctx.r[T1] = 0x32; cdBios.executeB0();
+  const uint32_t fd = ctx.r[V0];
+  ASSERT_NE(fd, static_cast<uint32_t>(-1));
+
+  ctx.r[A0] = fd; ctx.r[A1] = 4; ctx.r[A2] = 0;
+  ctx.r[T1] = 0x33; cdBios.executeB0();
+  const uint32_t pos = ctx.r[V0];
+  ctx.r[A0] = fd; ctx.r[A1] = kBufB; ctx.r[A2] = 2;
+  ctx.r[T1] = 0x34; cdBios.executeB0();
+
+  EXPECT_EQ(pos, 4u);
+  EXPECT_EQ(ctx.r[V0], 2u);
+  EXPECT_EQ(mem.read8(kBufB), 4);
+  EXPECT_EQ(mem.read8(kBufB + 1), 5);
+}
+
+// CD interrupts raised on the game thread are handled on the spot
+
+TEST_F(BiosSyscallTest, CdromInterruptRaisedOnTheGameThreadIsHandledAtOnce) {
+  bios->setGameThreadId(std::this_thread::get_id());
+  bios->setBssMirrors(kBufA, kBufA + 4);
+
+  bios->queueCdromEvent(2);
+
+  EXPECT_EQ(mem.read8(kBufA), 2);
+}
+
+TEST_F(BiosSyscallTest, CdromInterruptFromAnotherThreadWaitsForAYieldPoint) {
+  bios->setBssMirrors(kBufA, kBufA + 4);
+
+  bios->queueCdromEvent(2); // game thread id not set: not this thread
+  const uint8_t before = mem.read8(kBufA);
+  bios->drainPendingCallbacksSlow();
+
+  EXPECT_EQ(before, 0);
+  EXPECT_EQ(mem.read8(kBufA), 2);
+}
+
+TEST_F(BiosSyscallTest, DataReadyCopyNeverRunsPastTheSector) {
+  // A CdRead word count larger than one sector (2352 raw bytes, 2328 after
+  // the 24-byte header) must stop at the end of the sector instead of
+  // copying whatever follows the buffer.
+  RampFs disc;
+  cdrom::CdromController cd;
+  cd.attachVirtualFs(&disc);
+  bios->setCdromController(&cd);
+  startRead(cd);
+  ASSERT_TRUE(cd.hasSectorReady());
+  auto &st = ps1::psyq::psyq_state();
+  st.cdRemaining = 2;
+  st.cdDestPtr = kBufA;
+  st.cdWordCount = 0x400; // 4 KiB
+  constexpr uint32_t kSectorBytes = cdrom::SECTOR_SIZE_RAW - 24;
+  mem.write32(kBufA + kSectorBytes, 0xA5A5A5A5);
+
+  bios->triggerCdromEvent(1);
+  bios->setCdromController(nullptr);
+
+  EXPECT_EQ(mem.read32(kBufA + 0x7FC), 0xFFFEFDFCu) << "sector data missing";
+  EXPECT_EQ(mem.read32(kBufA + kSectorBytes), 0xA5A5A5A5u)
+      << "copied past the end of the sector";
+}
+
+TEST_F(BiosSyscallTest, DataReadyRunsADmaTransferTheGameArmedBeforeTheSector) {
+  // A game that programs DMA channel 3 itself (no libcd read in flight) arms
+  // it before the sector arrives; the transfer waits for the drive's data
+  // request and runs on INT1.
+  RampFs disc;
+  cdrom::CdromController cd;
+  cd.attachVirtualFs(&disc);
+  ps1::DMA dma;
+  dma.setMemory(&mem);
+  dma.setCDROM(&cd);
+  bios->setCdromController(&cd);
+  bios->setDma(&dma);
+  dma.writeRegister(0x1F8010F0, 0x00008000);    // DPCR: enable channel 3
+  dma.writeRegister(0x1F8010B0, kBufA & 0xFFFFFF); // MADR
+  dma.writeRegister(0x1F8010B4, 4);             // BCR: 4 words
+  dma.writeRegister(0x1F8010B8, 0x11000000);    // CHCR: start+trigger, to RAM
+  ASSERT_EQ(mem.read32(kBufA), 0u) << "ran before the sector was ready";
+  startRead(cd);
+  ASSERT_TRUE(cd.hasSectorReady());
+
+  bios->triggerCdromEvent(1);
+  bios->setDma(nullptr);
+  bios->setCdromController(nullptr);
+
+  EXPECT_EQ(mem.read32(kBufA), 0x03020100u);
+}
+
+// Pad buffers too small for the 4-byte header
+
+TEST_F(BiosPadTest, PadBufferSmallerThanItsHeaderIsNeverWritten) {
+  for (uint32_t i = 0; i < 4; ++i)
+    mem.write8(kBufA + i, 0x77);
+  ctx.r[A0] = kBufA; ctx.r[A1] = 2; ctx.r[A2] = 0; ctx.r[A3] = 0;
+  b0(0x12);
+  b0(0x13);
+
+  bios->updatePadBuffers();
+
+  EXPECT_EQ(mem.read8(kBufA + 0), 0x77);
+  EXPECT_EQ(mem.read8(kBufA + 1), 0x77);
 }
 
 } // namespace

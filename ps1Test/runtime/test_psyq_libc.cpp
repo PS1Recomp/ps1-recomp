@@ -331,3 +331,83 @@ TEST_F(PsyqLibcTest, RegistryDispatchesCanonicalAndAliases) {
   EXPECT_NO_FATAL_FAILURE(psyq_dispatch("libc_atoi", &ctx));
   EXPECT_EQ(static_cast<int32_t>(ctx.r[V0]), 99);
 }
+
+// More libc behaviour (C library semantics as shipped in PsyQ LIBC).
+
+TEST_F(PsyqLibcTest, LabsReturnsTheMagnitude) {
+  ctx.r[A0] = static_cast<uint32_t>(-1234567);
+  hle_libc_labs(&ctx);
+  EXPECT_EQ(ctx.r[V0], 1234567u);
+}
+
+TEST_F(PsyqLibcTest, StrncatAppendsAtMostNCharsAndTerminates) {
+  writeString(0x80100000u, "ab");
+  writeString(0x80100100u, "cdef");
+  ctx.r[A0] = 0x80100000u;
+  ctx.r[A1] = 0x80100100u;
+  ctx.r[A2] = 2;
+  hle_libc_strncat(&ctx);
+  EXPECT_EQ(readString(0x80100000u), "abcd");
+  EXPECT_EQ(ctx.r[V0], 0x80100000u);
+}
+
+TEST_F(PsyqLibcTest, AtoiAcceptsAnExplicitPlusSign) {
+  writeString(0x80100000u, "+42");
+  ctx.r[A0] = 0x80100000u;
+  hle_libc_atoi(&ctx);
+  EXPECT_EQ(static_cast<int32_t>(ctx.r[V0]), 42);
+}
+
+TEST_F(PsyqLibcTest, SprintfFormatsCharUnsignedAndUpperHex) {
+  writeString(0x80100020u, "%c|%u|%X");
+  ctx.r[A0] = 0x80100100u;
+  ctx.r[A1] = 0x80100020u;
+  ctx.r[A2] = 'Q';
+  ctx.r[A3] = 0xFFFFFFFFu;
+  mem.write32(ctx.r[SP] + 0x10, 0xBEEF);
+  hle_libc_sprintf(&ctx);
+  EXPECT_EQ(readString(0x80100100u), "Q|4294967295|BEEF");
+  EXPECT_EQ(ctx.r[V0], 17u);
+}
+
+TEST_F(PsyqLibcTest, SprintfReadsArgumentsPastA3FromTheCallersStackFrame) {
+  // o32: sprintf's varargs start at a2; the third and later live at
+  // sp+10h, sp+14h, ...
+  writeString(0x80100020u, "%d,%d,%d,%d");
+  ctx.r[A0] = 0x80100100u;
+  ctx.r[A1] = 0x80100020u;
+  ctx.r[A2] = 1;
+  ctx.r[A3] = 2;
+  mem.write32(ctx.r[SP] + 0x10, 3);
+  mem.write32(ctx.r[SP] + 0x14, static_cast<uint32_t>(-4));
+  hle_libc_sprintf(&ctx);
+  EXPECT_EQ(readString(0x80100100u), "1,2,3,-4");
+}
+
+TEST_F(PsyqLibcTest, SprintfAcceptsFlagsWidthPrecisionAndLengthModifiers) {
+  // Values chosen so every field already fills its width: the result is the
+  // same with or without padding support.
+  writeString(0x80100020u, "[%-3d][%+d][% d][%02x][%.2u][%hd][%lu][%#x]");
+  ctx.r[A0] = 0x80100100u;
+  ctx.r[A1] = 0x80100020u;
+  ctx.r[A2] = 123;
+  ctx.r[A3] = static_cast<uint32_t>(-6);
+  mem.write32(ctx.r[SP] + 0x10, static_cast<uint32_t>(-4));
+  mem.write32(ctx.r[SP] + 0x14, 0xAB);
+  mem.write32(ctx.r[SP] + 0x18, 123);
+  mem.write32(ctx.r[SP] + 0x1C, 7);
+  mem.write32(ctx.r[SP] + 0x20, 9);
+  mem.write32(ctx.r[SP] + 0x24, 0); // "%#x" of 0 has no 0x prefix
+  hle_libc_sprintf(&ctx);
+  EXPECT_EQ(readString(0x80100100u), "[123][-6][-4][ab][123][7][9][0]");
+}
+
+TEST_F(PsyqLibcTest, SprintfPointerConversionPrintsTheAddressInHex) {
+  writeString(0x80100020u, "%p");
+  ctx.r[A0] = 0x80100100u;
+  ctx.r[A1] = 0x80100020u;
+  ctx.r[A2] = 0x8001ABCDu;
+  hle_libc_sprintf(&ctx);
+  EXPECT_NE(readString(0x80100100u).find("8001abcd"), std::string::npos)
+      << readString(0x80100100u);
+}

@@ -161,3 +161,67 @@ TEST(StepControl, HostpadReportsTheHostButtons) {
   runUntilEof(step);
   EXPECT_EQ(out.str(), "frame 0\n4010\n");
 }
+
+TEST(StepControl, EndedSessionLetsNoFurtherVBlankThrough) {
+  std::istringstream in("quit\nstep 1 0\n");
+  std::ostringstream out;
+  FakeHost host;
+  StepControl step(in, out, host.hooks());
+  ASSERT_FALSE(step.beforeVBlank(0));
+
+  bool ticked = step.beforeVBlank(1);
+
+  EXPECT_FALSE(ticked);
+  EXPECT_TRUE(step.ended());
+  EXPECT_EQ(out.str(), "frame 0\n"); // the later step is never read
+}
+
+TEST(StepControl, ZeroSpinPollsBehavesLikeOne) {
+  std::istringstream in("step 1 0\n");
+  std::ostringstream out;
+  FakeHost host;
+  StepControl step(in, out, host.hooks(), /*spinPolls=*/0);
+
+  bool ticked = step.poll(0, /*waiting=*/false);
+
+  EXPECT_TRUE(ticked); // the first busy poll is already a VBlank's worth
+}
+
+TEST(StepControl, StepOfZeroFramesIsAnError) {
+  std::istringstream in("step 0 0\n");
+  std::ostringstream out;
+  FakeHost host;
+  StepControl step(in, out, host.hooks());
+
+  int ticks = runUntilEof(step);
+
+  EXPECT_EQ(ticks, 0);
+  EXPECT_EQ(out.str(), "frame 0\nerr step 0 0\n");
+}
+
+TEST(StepControl, CommandsMissingOperandsAreErrorsAndTouchNothing) {
+  std::istringstream in("peek\nhash 10\npoke 10\nshot\nstep 1\n");
+  std::ostringstream out;
+  FakeHost host;
+  StepControl step(in, out, host.hooks());
+
+  runUntilEof(step);
+
+  EXPECT_EQ(out.str(), "frame 0\nerr peek\nerr hash 10\nerr poke 10\n"
+                       "err shot\nerr step 1\n");
+  EXPECT_TRUE(host.ram.empty());
+  EXPECT_TRUE(host.shots.empty());
+}
+
+TEST(StepControl, ShotReportsErrWhenTheHostCannotWrite) {
+  std::istringstream in("shot /nonexistent/dir/f.ppm\n");
+  std::ostringstream out;
+  FakeHost host;
+  auto hooks = host.hooks();
+  hooks.shot = [](const std::string &) { return false; };
+  StepControl step(in, out, hooks);
+
+  runUntilEof(step);
+
+  EXPECT_EQ(out.str(), "frame 0\nerr\n");
+}

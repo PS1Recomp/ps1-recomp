@@ -339,3 +339,185 @@ TEST(RaComputedJump, JrRaJumpsInsideInsteadOfReturning) {
             std::string::npos)
       << out;
 }
+
+// Computed in-function jump: edges of the pattern
+//
+// A small synthetic function: 64 words at kFn, base at kFn+0x80, index in $a2
+// scaled by 4. Each test changes one thing about that shape.
+
+namespace {
+constexpr uint32_t kFn = 0x80050000;
+constexpr size_t kLen = 64;
+constexpr size_t kJr = 12;
+constexpr uint32_t kTblBase = kFn + 0x80;
+
+constexpr uint32_t addOp(uint8_t rd, uint8_t rs, uint8_t rt) { return addu(rd, rs, rt); }
+
+// sltiu $at,$a2,bound ; lui $t0 ; addiu $t0 ; sll $at,$a2,2 ; <combine> ; jr $t0
+std::vector<uint32_t> computedJump(uint32_t base, uint16_t bound, uint32_t combine) {
+  std::vector<uint32_t> f(kLen, kNop);
+  f[kJr - 5] = sltiu(1, 6, bound);
+  f[kJr - 4] = lui(8, static_cast<uint16_t>(base >> 16));
+  f[kJr - 3] = addiu(8, 8, static_cast<uint16_t>(base & 0xFFFFu));
+  f[kJr - 2] = sll(1, 6, 2);
+  f[kJr - 1] = combine;
+  f[kJr] = jr(8);
+  return f;
+}
+} // namespace
+
+TEST(ComputedCodeJump, JrIndexOutOfRangeYieldsNothing) {
+  auto f = computedJump(kTblBase, 4, addOp(8, 8, 1));
+
+  EXPECT_TRUE(detectComputedCodeJump(f, 0, kFn).empty());
+  EXPECT_TRUE(detectComputedCodeJump(f, f.size(), kFn).empty());
+}
+
+TEST(ComputedCodeJump, BaseMayBeTheSecondAdduOperand) {
+  // addu $t0, $at, $t0 -- operand order is the compiler's choice.
+  auto f = computedJump(kTblBase, 4, addOp(8, 1, 8));
+
+  auto targets = detectComputedCodeJump(f, kJr, kFn);
+
+  EXPECT_EQ(targets, (std::vector<uint32_t>{kTblBase, kTblBase + 4, kTblBase + 8,
+                                            kTblBase + 12}));
+}
+
+TEST(ComputedCodeJump, SubuWithTheBaseAsSubtrahendIsRejected) {
+  // scaled - base is not an address in the function.
+  auto f = computedJump(kTblBase, 4, subu(8, 1, 8));
+
+  EXPECT_TRUE(detectComputedCodeJump(f, kJr, kFn).empty());
+}
+
+TEST(ComputedCodeJump, NeitherOperandFromALuiIsRejected) {
+  auto f = computedJump(kTblBase, 4, addOp(8, 9, 1)); // $t1 never loaded
+  f[kJr - 4] = kNop;
+  f[kJr - 3] = kNop;
+
+  EXPECT_TRUE(detectComputedCodeJump(f, kJr, kFn).empty());
+}
+
+TEST(ComputedCodeJump, MisalignedBaseIsRejected) {
+  auto f = computedJump(kTblBase + 2, 4, addOp(8, 8, 1));
+
+  EXPECT_TRUE(detectComputedCodeJump(f, kJr, kFn).empty());
+}
+
+TEST(ComputedCodeJump, BaseAtOrPastTheFunctionEndIsRejected) {
+  auto f = computedJump(kFn + kLen * 4, 4, addOp(8, 8, 1));
+
+  EXPECT_TRUE(detectComputedCodeJump(f, kJr, kFn).empty());
+}
+
+TEST(ComputedCodeJump, UnscaledIndexIsNotAComputedJump) {
+  auto f = computedJump(kTblBase, 4, addOp(8, 8, 6)); // + $a2 directly
+
+  EXPECT_TRUE(detectComputedCodeJump(f, kJr, kFn).empty());
+}
+
+TEST(ComputedCodeJump, StrideAboveTheLimitIsRejected) {
+  // sll by 9 = x512 > kJumpTableMaxStride.
+  auto f = computedJump(kTblBase, 4, addOp(8, 8, 1));
+  f[kJr - 2] = sll(1, 6, 9);
+
+  EXPECT_TRUE(detectComputedCodeJump(f, kJr, kFn).empty());
+}
+
+TEST(ComputedCodeJump, MoveThroughZeroKeepsTheScale) {
+  // `addu $v0, $at, $zero` and `addu $v1, $zero, $v0` are moves.
+  auto f = computedJump(kTblBase, 3, addOp(8, 8, 3));
+  f[kJr - 7] = sltiu(1, 6, 3);
+  f[kJr - 6] = kNop;
+  f[kJr - 5] = lui(8, static_cast<uint16_t>(kTblBase >> 16));
+  f[kJr - 4] = sll(1, 6, 2);
+  f[kJr - 3] = addOp(2, 1, 0);
+  f[kJr - 2] = addOp(3, 0, 2);
+  f[kJr - 1] = addOp(8, 8, 3);
+  // $t0 = lui only: fold the low half into the lui by using a 64KB-aligned
+  // base inside a function placed there.
+  const uint32_t fn = kTblBase & 0xFFFF0000u;
+
+  auto targets = detectComputedCodeJump(f, kJr, fn);
+
+  EXPECT_EQ(targets, (std::vector<uint32_t>{fn, fn + 4, fn + 8}));
+}
+
+TEST(ComputedCodeJump, OutOfRangeBoundFallsBackToTheFixedWindowClippedToTheFunction) {
+  // Bound 0 carries no information; the fallback window is then clipped by
+  // the function end (16 words remain past the base).
+  auto f = computedJump(kFn + (kLen - 16) * 4, 0, addOp(8, 8, 1));
+
+  auto targets = detectComputedCodeJump(f, kJr, kFn);
+
+  ASSERT_EQ(targets.size(), 16u);
+  EXPECT_EQ(targets.back(), kFn + (kLen - 1) * 4);
+}
+
+TEST(ComputedCodeJump, DescendingWalkStopsAtTheFunctionStart) {
+  // base - i*4 for a large bound would run below the function.
+  auto f = computedJump(kFn + 8, 100, subu(8, 8, 1));
+
+  auto targets = detectComputedCodeJump(f, kJr, kFn);
+
+  EXPECT_EQ(targets, (std::vector<uint32_t>{kFn + 8, kFn + 4, kFn}));
+}
+
+TEST(HijackedReturnAddress, AddiuRaWithoutAPrecedingLuiIsIgnored) {
+  std::vector<uint32_t> f(16, kNop);
+  f[0] = addiu(31, 31, 0x0010);
+
+  EXPECT_TRUE(detectInternalReturnTargets(f, kFn).empty());
+}
+
+TEST(RaComputedJump, AddToRaWithoutAShiftedIndexAddsOnlyTheBase) {
+  // $sp was never the result of `sll`, so there is no stride to walk.
+  std::vector<uint32_t> f(64, kNop);
+  f[0] = lui(31, static_cast<uint16_t>(kFn >> 16));
+  f[1] = addiu(31, 31, 0x0040);
+  f[2] = addu(31, 31, 29);
+  f[3] = jr(31);
+
+  auto targets = detectInternalReturnTargets(f, kFn);
+
+  EXPECT_EQ(targets, (std::vector<uint32_t>{kFn + 0x40}));
+}
+
+TEST(RaComputedJump, IndexMayBeTheFirstAdduOperand) {
+  // addu $ra, $sp, $ra with $sp = idx << 5: 32-byte blocks from the base.
+  std::vector<uint32_t> f(32, kNop);
+  f[0] = lui(31, static_cast<uint16_t>(kFn >> 16));
+  f[1] = addiu(31, 31, 0x0040);
+  f[2] = sll(29, 1, 5);
+  f[3] = addu(31, 29, 31);
+  f[4] = jr(31);
+
+  auto targets = detectInternalReturnTargets(f, kFn);
+
+  EXPECT_EQ(targets, (std::vector<uint32_t>{kFn + 0x40, kFn + 0x60}));
+}
+
+TEST(RaComputedJump, ShiftTooSmallForABlockIsNotWalked) {
+  // A shift of 1 is not a multiple of an instruction.
+  std::vector<uint32_t> f(32, kNop);
+  f[0] = lui(31, static_cast<uint16_t>(kFn >> 16));
+  f[1] = addiu(31, 31, 0x0040);
+  f[2] = sll(29, 1, 1);
+  f[3] = addu(31, 31, 29);
+
+  auto targets = detectInternalReturnTargets(f, kFn);
+
+  EXPECT_EQ(targets, (std::vector<uint32_t>{kFn + 0x40}));
+}
+
+TEST(RaComputedJump, AdduIntoRaWithoutRaOperandIsIgnored) {
+  std::vector<uint32_t> f(32, kNop);
+  f[0] = lui(31, static_cast<uint16_t>(kFn >> 16));
+  f[1] = addiu(31, 31, 0x0040);
+  f[2] = sll(29, 1, 4);
+  f[3] = addu(31, 8, 29); // $ra = $t0 + $sp: the constant is gone
+
+  auto targets = detectInternalReturnTargets(f, kFn);
+
+  EXPECT_EQ(targets, (std::vector<uint32_t>{kFn + 0x40}));
+}

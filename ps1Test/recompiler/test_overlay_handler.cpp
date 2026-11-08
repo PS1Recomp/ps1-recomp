@@ -5,13 +5,19 @@
 #include <fstream>
 #include <gtest/gtest.h>
 #include <ps1recomp/overlay_handler.h>
+#include <string>
+#include <unistd.h>
 
 using namespace ps1recomp;
 
 // Helper: create a temporary TOML config
 
 static std::string createTempConfig(const std::string &content) {
-  auto path = std::filesystem::temp_directory_path() / "test_overlay.toml";
+  // Unique per process and call: ctest runs these tests concurrently.
+  static int counter = 0;
+  auto path = std::filesystem::temp_directory_path() /
+              ("test_overlay_" + std::to_string(getpid()) + "_" +
+               std::to_string(counter++) + ".toml");
   std::ofstream ofs(path);
   ofs << content;
   ofs.close();
@@ -213,4 +219,26 @@ TEST(OverlayHandler, LoadConfigInvalidPath) {
   OverlayHandler handler;
   EXPECT_FALSE(handler.loadFromConfig("/nonexistent/path/config.toml"));
   EXPECT_FALSE(handler.getError().empty());
+}
+
+TEST(OverlayHandler, QualifiedNameForSharedRamUsesTheFirstRegisteredOverlay) {
+  // Two overlays loaded into the same RAM window at different times.
+  OverlayHandler handler;
+  handler.addOverlay({"stage1", 0x10000, 0x80100000, 0x1000, {}});
+  handler.addOverlay({"stage2", 0x20000, 0x80100000, 0x1000, {}});
+
+  auto name = handler.qualifiedName(0x80100010);
+
+  EXPECT_EQ(name, "overlay_stage1__80100010");
+}
+
+TEST(OverlayHandler, LoadConfigWithMissingRequiredKeyFails) {
+  auto path = createTempConfig("[[overlays]]\nname = \"x\"\n"); // no ram_base
+
+  OverlayHandler handler;
+  bool ok = handler.loadFromConfig(path);
+
+  EXPECT_FALSE(ok);
+  EXPECT_NE(handler.getError().find("Failed to load overlay config"), std::string::npos);
+  std::filesystem::remove(path);
 }

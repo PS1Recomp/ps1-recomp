@@ -282,3 +282,40 @@ TEST_F(PsyqPadTest, RegistryDispatchesAllPadNames) {
 
   EXPECT_NO_FATAL_FAILURE(psyq_dispatch("libetc_PadRead", &ctx));
 }
+
+// Without an input backend the direct buffers report "no controller"
+// (byte 1 = FFh), so the game skips the slot instead of reading garbage.
+TEST_F(PsyqPadTest, PadInitDirectWithoutBackendMarksBothSlotsAbsent) {
+  bios->setInputController(nullptr);
+  const uint32_t buf1 = 0x80120000u, buf2 = 0x80120100u;
+  ctx.r[A0] = buf1;
+  ctx.r[A1] = buf2;
+
+  hle_libetc_PadInitDirect(&ctx);
+
+  EXPECT_EQ(mem.read8(buf1 + 0), 0xFF);
+  EXPECT_EQ(mem.read8(buf1 + 1), 0xFF);
+  EXPECT_EQ(mem.read8(buf2 + 1), 0xFF);
+}
+
+TEST_F(PsyqPadTest, RefreshDirectBuffersPicksUpNewButtonState) {
+  const uint32_t buf1 = 0x80120000u;
+  ctx.r[A0] = buf1;
+  ctx.r[A1] = 0;
+  hle_libetc_PadInitDirect(&ctx);
+  input.press(input::BTN_SQUARE, 0);
+
+  psyq_pad_refresh_direct_buffers(&ctx);
+
+  const uint16_t expected = 0xFFFFu & ~input::BTN_SQUARE;
+  EXPECT_EQ(mem.read8(buf1 + 3), static_cast<uint8_t>(expected >> 8));
+}
+
+TEST_F(PsyqPadTest, PadGetStateWithoutBackendReportsDiscovery) {
+  bios->setInputController(nullptr);
+  ctx.r[A0] = 0;
+
+  hle_libetc_PadGetState(&ctx);
+
+  EXPECT_EQ(ctx.r[V0], static_cast<uint32_t>(PAD_STATE_DISCOVERY));
+}

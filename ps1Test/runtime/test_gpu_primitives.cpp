@@ -738,3 +738,193 @@ TEST_F(GpuPrimitivesTest, ResetClearsTextureWindow) {
   gpu.writeGP0(16 | (1 << 16));
   EXPECT_EQ(px(510, 0), 0x001F);
 }
+
+// ---------------------------------------------------------------------------
+// Coverage of remaining rasterizer paths (psx-spx GPU chapters)
+// ---------------------------------------------------------------------------
+
+TEST_F(GpuPrimitivesTest, SemiTransparentFlatTriangleBlendsWithBackground) {
+  gpu.writeGP0(0xE1000000 | (1 << 5)); // mode 1: B+F
+  gpu.writeGP0(0x02000080);            // background r=128
+  gpu.writeGP0(xy(0, 0));
+  gpu.writeGP0(xy(64, 64));
+
+  gpu.writeGP0(0x22000040); // monochrome triangle, semi-transparent, r=64
+  gpu.writeGP0(xy(0, 0));
+  gpu.writeGP0(xy(40, 0));
+  gpu.writeGP0(xy(0, 40));
+
+  EXPECT_EQ(px(5, 5), rgb15(192, 0, 0));
+  EXPECT_EQ(px(50, 50), rgb15(128, 0, 0));
+}
+
+TEST_F(GpuPrimitivesTest, DegenerateTexturedTriangleDrawsNothing) {
+  upload(64, 0, 32, 32, rgb15(0, 248, 0));
+  gpu.writeGP0(0x25808080); // three collinear vertices
+  gpu.writeGP0(xy(0, 0));
+  gpu.writeGP0(0);
+  gpu.writeGP0(xy(10, 10));
+  gpu.writeGP0((static_cast<uint32_t>(kTpage15) << 16) | 10);
+  gpu.writeGP0(xy(20, 20));
+  gpu.writeGP0((20 << 8) | 20);
+
+  EXPECT_EQ(px(10, 10), 0);
+  EXPECT_EQ(px(0, 0), 0);
+}
+
+TEST_F(GpuPrimitivesTest, DegenerateGouraudTriangleDrawsNothing) {
+  gpu.writeGP0(0x300000FF);
+  gpu.writeGP0(xy(0, 0));
+  gpu.writeGP0(0x0000FF00);
+  gpu.writeGP0(xy(10, 10));
+  gpu.writeGP0(0x00FF0000);
+  gpu.writeGP0(xy(20, 20));
+
+  EXPECT_EQ(px(10, 10), 0);
+}
+
+TEST_F(GpuPrimitivesTest, DegenerateGouraudTexturedTriangleDrawsNothing) {
+  upload(64, 0, 32, 32, rgb15(0, 248, 0));
+  gpu.writeGP0(0x35808080);
+  gpu.writeGP0(xy(0, 0));
+  gpu.writeGP0(0);
+  gpu.writeGP0(0x00808080);
+  gpu.writeGP0(xy(10, 10));
+  gpu.writeGP0((static_cast<uint32_t>(kTpage15) << 16) | 10);
+  gpu.writeGP0(0x00808080);
+  gpu.writeGP0(xy(20, 20));
+  gpu.writeGP0((20 << 8) | 20);
+
+  EXPECT_EQ(px(10, 10), 0);
+}
+
+// psx-spx "Texture Color Black Limitations": texel 0000h is fully transparent
+// on every textured primitive, gouraud ones included.
+TEST_F(GpuPrimitivesTest, GouraudTexturedTriangleSkipsTransparentTexels) {
+  gpu.writeGP0(0x02000080); // background r=128
+  gpu.writeGP0(xy(0, 100));
+  gpu.writeGP0(xy(32, 32));
+  upload(64, 0, 32, 32, 0x0000);
+  const uint32_t white = 0x00808080;
+  gpu.writeGP0(0x34000000 | white);
+  gpu.writeGP0(xy(0, 100));
+  gpu.writeGP0(0);
+  gpu.writeGP0(white);
+  gpu.writeGP0(xy(30, 100));
+  gpu.writeGP0((static_cast<uint32_t>(kTpage15) << 16) | 30);
+  gpu.writeGP0(white);
+  gpu.writeGP0(xy(0, 130));
+  gpu.writeGP0(30 << 8);
+
+  EXPECT_EQ(px(5, 105), rgb15(128, 0, 0));
+}
+
+// GP0(E2h): texcoord = (texcoord AND NOT(mask*8)) OR ((offset AND mask)*8).
+// Mask 1 / offset 1 forces bit 3 of U (or V), so every sample comes from the
+// second 8-texel block.
+TEST_F(GpuPrimitivesTest, TextureWindowOffsetSelectsTheBlockForGouraudTextured) {
+  upload(64, 0, 8, 16, rgb15(248, 0, 0)); // u 0..7 red
+  upload(72, 0, 8, 16, rgb15(0, 248, 0)); // u 8..15 green, v 0..15
+  gpu.writeGP0(0xE2000000 | 1 | (1 << 5) | (1 << 10) | (1 << 15));
+  upload(64, 8, 16, 8, rgb15(0, 0, 248)); // v 8..15 blue (overwrites)
+  const uint32_t white = 0x00808080;
+  gpu.writeGP0(0x35000000 | white); // raw gouraud textured
+  gpu.writeGP0(xy(0, 100));
+  gpu.writeGP0(0);
+  gpu.writeGP0(white);
+  gpu.writeGP0(xy(16, 100));
+  gpu.writeGP0((static_cast<uint32_t>(kTpage15) << 16) | 16);
+  gpu.writeGP0(white);
+  gpu.writeGP0(xy(0, 116));
+  gpu.writeGP0(16 << 8);
+
+  // (1,101) samples u~1, v~1: forced to u=9, v=9 -> the blue block.
+  EXPECT_EQ(px(1, 101), rgb15(0, 0, 248));
+}
+
+// Sprites sample through the E1 texture page in every colour depth.
+TEST_F(GpuPrimitivesTest, TexturedSpriteSamples4BitClutTexels) {
+  upload(0, 500, 16, 1, 0);
+  gpu.writeGP0(0xA0000000); // CLUT entry 3 = red
+  gpu.writeGP0(xy(3, 500));
+  gpu.writeGP0(xy(1, 1));
+  gpu.writeGP0(rgb15(248, 0, 0));
+  upload(192, 0, 4, 8, 0x3333); // every nibble is index 3
+  gpu.writeGP0(0xE1000000 | 3); // X base 192, 4-bit
+
+  gpu.writeGP0(0x75808080); // 8x8 textured sprite, raw
+  gpu.writeGP0(xy(800, 0));
+  gpu.writeGP0(static_cast<uint32_t>(kClut) << 16);
+
+  EXPECT_EQ(px(800, 0), rgb15(248, 0, 0));
+  EXPECT_EQ(px(807, 7), rgb15(248, 0, 0));
+}
+
+TEST_F(GpuPrimitivesTest, TexturedSpriteSamples8BitClutTexels) {
+  upload(0, 500, 16, 1, 0);
+  gpu.writeGP0(0xA0000000); // CLUT entry 5 = blue
+  gpu.writeGP0(xy(5, 500));
+  gpu.writeGP0(xy(1, 1));
+  gpu.writeGP0(rgb15(0, 0, 248));
+  upload(128, 0, 8, 8, 0x0505);
+  gpu.writeGP0(0xE1000000 | kTpage8);
+
+  gpu.writeGP0(0x75808080);
+  gpu.writeGP0(xy(820, 0));
+  gpu.writeGP0(static_cast<uint32_t>(kClut) << 16);
+
+  EXPECT_EQ(px(820, 0), rgb15(0, 0, 248));
+  EXPECT_EQ(px(827, 7), rgb15(0, 0, 248));
+}
+
+TEST_F(GpuPrimitivesTest, NegativeVerticalDrawingOffsetMovesVerticesUp) {
+  // GP0(E5h): Y offset is bits 11-21, 11-bit signed; -4 = 7FCh.
+  gpu.writeGP0(0xE5000000 | ((0x800 - 4) << 11));
+  gpu.writeGP0(0x680000FF); // 1x1 dot
+  gpu.writeGP0(xy(30, 10));
+
+  EXPECT_EQ(px(30, 6), rgb15(255, 0, 0));
+  EXPECT_EQ(px(30, 10), 0);
+}
+
+// GP0(C0h) size 0 means 1024 x 512 (psx-spx: ((n-1) AND 3FFh)+1).
+TEST_F(GpuPrimitivesTest, VramToCpuZeroSizeReadsTheWholeFrameBuffer) {
+  gpu.writeGP0(0xA0000000);
+  gpu.writeGP0(xy(1022, 511));
+  gpu.writeGP0(xy(2, 1));
+  gpu.writeGP0(0xBBBBAAAA);
+  gpu.writeGP1(0x10000007);
+  const uint32_t latched = gpu.readGPUREAD();
+
+  gpu.writeGP0(0xC0000000);
+  gpu.writeGP0(xy(0, 0));
+  gpu.writeGP0(xy(0, 0));
+  uint32_t last = 0;
+  for (int i = 0; i < 1024 * 512 / 2; ++i)
+    last = gpu.readGPUREAD();
+
+  EXPECT_EQ(last, 0xBBBBAAAAu); // final word = pixels (1022..1023, 511)
+  EXPECT_EQ(gpu.readGPUREAD(), latched);
+}
+
+// Poly-lines start like a two-vertex line; the first segment is drawn as
+// soon as its second vertex arrives.
+TEST_F(GpuPrimitivesTest, MonochromePolylineDrawsItsFirstSegment) {
+  gpu.writeGP0(0x480000FF);
+  gpu.writeGP0(xy(0, 70));
+  gpu.writeGP0(xy(6, 70));
+
+  for (int x = 0; x <= 6; ++x)
+    EXPECT_EQ(px(x, 70), rgb15(255, 0, 0)) << "x=" << x;
+}
+
+TEST_F(GpuPrimitivesTest, GouraudPolylineDrawsItsFirstSegment) {
+  gpu.writeGP0(0x580000FF);
+  gpu.writeGP0(xy(0, 80));
+  gpu.writeGP0(0x0000FF00);
+  gpu.writeGP0(xy(6, 80));
+
+  EXPECT_EQ(px(0, 80), rgb15(255, 0, 0));
+  EXPECT_NE(px(6, 80), 0);
+  EXPECT_EQ(px(7, 80), 0);
+}

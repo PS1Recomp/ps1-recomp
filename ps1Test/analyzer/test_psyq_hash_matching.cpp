@@ -147,6 +147,73 @@ TEST(PsyqHashHash, ParseHashHex) {
     EXPECT_EQ(PsyQMatcher::parseHashHex("zzzzzzzzzzzzzzzz"), 0u);
 }
 
+TEST(PsyqHashHash, ParseHashHexAcceptsUppercaseDigits) {
+    EXPECT_EQ(PsyQMatcher::parseHashHex("BA7816BF8F01CFEA"), 0xBA7816BF8F01CFEAull);
+}
+
+TEST(PsyqHashHash, ParseHashHexRejectsCharactersAroundTheHexRanges) {
+    // Neighbours of '0'-'9', 'a'-'f' and 'A'-'F' in ASCII.
+    for (const char* bad : {"/a7816bf8f01cfea", ":a7816bf8f01cfea", "ga7816bf8f01cfea",
+                            "Ga7816bf8f01cfea", "@a7816bf8f01cfea", "`a7816bf8f01cfea"}) {
+        EXPECT_EQ(PsyQMatcher::parseHashHex(bad), 0u) << bad;
+    }
+}
+
+TEST(PsyqHashHash, ParseHashHexReadsOnlyTheFirstSixteenDigits) {
+    // The TOML stores full 64-char digests; only the high 64 bits are keyed.
+    EXPECT_EQ(PsyQMatcher::parseHashHex(
+                  "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"),
+              0xBA7816BF8F01CFEAull);
+}
+
+// FIPS 180-4 padding: a message whose last block leaves < 9 free bytes needs
+// a second padding block. Digests from `hashlib.sha256(b"a" * n)`.
+TEST(PsyqHashHash, HashFullPadsIntoASecondBlockAt56Bytes) {
+    const std::string s(56, 'a');
+    EXPECT_EQ(PsyQMatcher::hashFull(reinterpret_cast<const uint8_t*>(s.data()), s.size()),
+              0xB35439A4AC6F0948ull);
+}
+
+TEST(PsyqHashHash, HashFullOfExactlyOneBlockAddsAPaddingBlock) {
+    const std::string s(64, 'a');
+    EXPECT_EQ(PsyQMatcher::hashFull(reinterpret_cast<const uint8_t*>(s.data()), s.size()),
+              0xFFE054FE7AE0CB6Dull);
+}
+
+TEST(PsyqHashHash, HashFullOverMultipleBlocksWithLongTail) {
+    const std::string s(119, 'a');
+    EXPECT_EQ(PsyQMatcher::hashFull(reinterpret_cast<const uint8_t*>(s.data()), s.size()),
+              0x31EBA51C313A5C08ull);
+}
+
+TEST(PsyqHashHash, HashMaskedRejectsEmptyAndUnalignedInput) {
+    const uint8_t bytes[6] = {1, 2, 3, 4, 5, 6};
+    EXPECT_EQ(PsyQMatcher::hashMasked(bytes, 0), 0u);
+    EXPECT_EQ(PsyQMatcher::hashMasked(bytes, 6), 0u);
+}
+
+TEST(PsyqHashMasking, BranchLikelyOpcodesHaveTheirOffsetZeroed) {
+    // BEQL/BNEL/BLEZL/BGTZL (0x14..0x17) share the I-type layout.
+    for (uint32_t op = 0x14; op <= 0x17; ++op) {
+        const uint32_t w = (op << 26) | (4u << 21) | (5u << 16) | 0x0010u;
+        EXPECT_EQ(PsyQMatcher::maskImmediates(w), w & 0xFFFF0000u) << op;
+    }
+}
+
+TEST(PsyqHashMasking, SltiAndSltiuImmediatesAreZeroed) {
+    EXPECT_EQ(PsyQMatcher::maskImmediates(0x28A20010u), 0x28A20000u); // slti
+    EXPECT_EQ(PsyQMatcher::maskImmediates(0x2CA20010u), 0x2CA20000u); // sltiu
+    EXPECT_EQ(PsyQMatcher::maskImmediates(0x20A20010u), 0x20A20000u); // addi
+}
+
+TEST(PsyqHashMasking, OpcodesOutsideEveryImmediateGroupAreKeptExact) {
+    // 0x18..0x1F are reserved on the R3000A; COP1/COP3 (0x11, 0x13) too.
+    for (uint32_t op : {0x11u, 0x13u, 0x18u, 0x1Fu}) {
+        const uint32_t w = (op << 26) | 0x00A41234u;
+        EXPECT_EQ(PsyQMatcher::maskImmediates(w), w) << op;
+    }
+}
+
 // TOML loader -- verify the in-tree DB parses cleanly and populates the
 // matcher with a non-trivial number of signatures.
 

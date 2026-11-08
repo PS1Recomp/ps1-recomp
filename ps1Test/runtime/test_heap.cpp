@@ -85,3 +85,76 @@ TEST_F(HeapTest, FreeMergesBlocksCorrectly) {
   uint32_t actualSize1 = rawSize1 & 0x7FFFFFFF;
   EXPECT_EQ(actualSize1, 0x100 + 12 + 0x200); // Merged size
 }
+
+// Contract: psx-spx kernelbios.md A(33h) malloc / A(34h) free / A(39h)
+// InitHeap -- freed memory returns to the heap and can be allocated again.
+// The heap below is 0x1000 bytes; a request for everything left after the
+// first header only succeeds when every block has been merged back.
+namespace {
+constexpr uint32_t kBase = 0x80100000;
+constexpr uint32_t kSize = 0x1000;
+constexpr uint32_t kWhole = kSize - 12; // usable bytes of a single free block
+} // namespace
+
+TEST_F(HeapTest, FreeMergesABlockIntoAFreePredecessor) {
+  heap->initHeap(kBase, kSize);
+  const uint32_t a = heap->malloc(0x100);
+  const uint32_t b = heap->malloc(0x100);
+  const uint32_t c = heap->malloc(0x100);
+  heap->free(a);
+
+  heap->free(b); // b's predecessor (a) is free
+  heap->free(c);
+
+  EXPECT_EQ(heap->malloc(kWhole), kBase + 12) << "blocks were not merged";
+}
+
+TEST_F(HeapTest, ReusingAFreedHoleKeepsTheFollowingBlockLinked) {
+  // Splitting a freed middle block leaves a remainder between it and the
+  // still-allocated block after it; freeing everything must still coalesce.
+  heap->initHeap(kBase, kSize);
+  const uint32_t a = heap->malloc(0x200);
+  const uint32_t b = heap->malloc(0x100);
+  heap->free(a);
+  const uint32_t a2 = heap->malloc(0x80);
+  ASSERT_EQ(a2, a) << "the freed hole was not reused";
+
+  heap->free(b);
+  heap->free(a2);
+
+  EXPECT_EQ(heap->malloc(kWhole), kBase + 12);
+}
+
+TEST_F(HeapTest, DoubleFreeLeavesTheHeapUsable) {
+  heap->initHeap(kBase, kSize);
+  const uint32_t a = heap->malloc(0x100);
+  heap->free(a);
+
+  heap->free(a);
+
+  EXPECT_EQ(heap->malloc(kWhole), kBase + 12);
+}
+
+TEST_F(HeapTest, FreeOfNullOrAPointerBelowTheHeapIsIgnored) {
+  heap->initHeap(kBase, kSize);
+  const uint32_t a = heap->malloc(0x100);
+
+  heap->free(0);
+  heap->free(kBase - 0x100);
+
+  EXPECT_EQ(mem.read32(a - 12) & 0x80000000u, 0x80000000u)
+      << "the live allocation was released";
+  EXPECT_EQ(heap->malloc(0x100), a + 0x100 + 12);
+}
+
+TEST_F(HeapTest, MallocOfZeroBytesFails) {
+  heap->initHeap(kBase, kSize);
+
+  EXPECT_EQ(heap->malloc(0), 0u);
+}
+
+TEST_F(HeapTest, InitHeapTooSmallForAHeaderLeavesMallocFailing) {
+  heap->initHeap(kBase, 12);
+
+  EXPECT_EQ(heap->malloc(4), 0u);
+}

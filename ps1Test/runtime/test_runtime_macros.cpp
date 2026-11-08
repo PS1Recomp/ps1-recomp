@@ -2,6 +2,7 @@
 // Validates MEM_READ/WRITE macros, unaligned loads, and GTE register access
 
 #include <gtest/gtest.h>
+#include <memory>
 #include <runtime/ps1_runtime_macros.h>
 
 using namespace ps1;
@@ -202,5 +203,90 @@ TEST(RuntimeMacros, DivOfMinIntByMinusOneDoesNotTrap) {
   ctx.reset();
   DO_DIV(&ctx, 0x80000000u, 0xFFFFFFFFu);
   EXPECT_EQ(ctx.lo, 0x80000000u);
+  EXPECT_EQ(ctx.hi, 0u);
+}
+
+// Unaligned word access, every byte offset
+//
+// Contract: psx-spx cpuspecifications.md, "LWL/LWR/SWL/SWR": on the
+// little-endian R3000A the pair LWR(a) + LWL(a+3) loads the 4 bytes at a..a+3,
+// and SWR(a) + SWL(a+3) stores them, without touching the bytes around them.
+// The expected words are built byte by byte from memory, not from the macros.
+
+namespace {
+class UnalignedAccess : public ::testing::TestWithParam<uint32_t> {
+protected:
+  std::unique_ptr<Memory> mem = std::make_unique<Memory>();
+  recomp_context ctx;
+  static constexpr uint32_t kBase = 0x1000;
+
+  void SetUp() override {
+    ctx.reset();
+    ctx.mem = mem.get();
+    for (uint32_t i = 0; i < 12; ++i)
+      mem->write8(kBase + i, static_cast<uint8_t>(0x10 + i));
+  }
+  uint32_t bytesAt(uint32_t a) const {
+    return mem->read8(a) | (mem->read8(a + 1) << 8) | (mem->read8(a + 2) << 16) |
+           (static_cast<uint32_t>(mem->read8(a + 3)) << 24);
+  }
+};
+} // namespace
+
+TEST_P(UnalignedAccess, LwrThenLwlLoadsTheFourBytesAtTheAddress) {
+  const uint32_t a = kBase + 4 + GetParam();
+  const uint32_t expected = bytesAt(a);
+
+  uint32_t rt = DO_LWR(&ctx, 0xDEADBEEF, a);
+  rt = DO_LWL(&ctx, rt, a + 3);
+
+  EXPECT_EQ(rt, expected);
+}
+
+TEST_P(UnalignedAccess, LwlAloneKeepsTheLowBytesOfTheRegister) {
+  const uint32_t k = GetParam(); // LWL at offset k fills the top k+1 bytes
+  const uint32_t a = kBase + k;
+  const uint32_t keepMask = k == 3 ? 0 : (0xFFFFFFFFu >> (8 * (k + 1)));
+
+  const uint32_t rt = DO_LWL(&ctx, 0xA1B2C3D4, a);
+
+  EXPECT_EQ(rt & keepMask, 0xA1B2C3D4u & keepMask);
+  EXPECT_EQ(rt >> 24, mem->read8(a)) << "top byte is the addressed byte";
+}
+
+TEST_P(UnalignedAccess, LwrAloneKeepsTheHighBytesOfTheRegister) {
+  const uint32_t k = GetParam(); // LWR at offset k fills the low 4-k bytes
+  const uint32_t a = kBase + k;
+  const uint32_t keepMask = k == 0 ? 0 : (0xFFFFFFFFu << (8 * (4 - k)));
+
+  const uint32_t rt = DO_LWR(&ctx, 0xA1B2C3D4, a);
+
+  EXPECT_EQ(rt & keepMask, 0xA1B2C3D4u & keepMask);
+  EXPECT_EQ(rt & 0xFF, mem->read8(a)) << "low byte is the addressed byte";
+}
+
+TEST_P(UnalignedAccess, SwrThenSwlStoresTheWordAtTheAddressOnly) {
+  const uint32_t a = kBase + 4 + GetParam();
+  const uint8_t before = mem->read8(a - 1);
+  const uint8_t after = mem->read8(a + 4);
+
+  DO_SWR(&ctx, 0xCAFEF00D, a);
+  DO_SWL(&ctx, 0xCAFEF00D, a + 3);
+
+  EXPECT_EQ(bytesAt(a), 0xCAFEF00Du);
+  EXPECT_EQ(mem->read8(a - 1), before);
+  EXPECT_EQ(mem->read8(a + 4), after);
+}
+
+INSTANTIATE_TEST_SUITE_P(EveryByteOffset, UnalignedAccess,
+                         ::testing::Values(0u, 1u, 2u, 3u));
+
+TEST(RuntimeMacros, DivOfMinIntByAnotherDivisorIsOrdinary) {
+  CPUContext ctx;
+  ctx.reset();
+
+  DO_DIV(&ctx, 0x80000000u, 2);
+
+  EXPECT_EQ(ctx.lo, 0xC0000000u);
   EXPECT_EQ(ctx.hi, 0u);
 }

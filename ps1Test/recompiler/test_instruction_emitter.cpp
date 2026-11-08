@@ -436,3 +436,39 @@ TEST(InstructionEmitter, RegHelper) {
 TEST(InstructionEmitter, LabelHelper) {
   EXPECT_EQ(InstructionEmitter::label(0x80010040), "L_80010040");
 }
+
+// BLTZAL/BGEZAL link unconditionally: $ra = pc + 8 whether or not the branch
+// is taken (MIPS I, psx-spx "CPU Jump Opcodes").
+
+TEST(InstructionEmitter, BLTZAL_LinksBeforeTestingTheSign) {
+  auto emitter = makeEmitter();
+  // BLTZAL $a0, +4
+  auto inst = MipsDecoder::decode(encI(0x01, 4, 0x10, 4));
+
+  auto code = emitter.emitInstruction(inst, 0x80010000);
+
+  EXPECT_NE(code.find("ctx->r31 = 0x80010008;"), std::string::npos) << code;
+  EXPECT_NE(code.find("< 0) goto"), std::string::npos) << code;
+  EXPECT_LT(code.find("ctx->r31"), code.find("if ("));
+}
+
+TEST(InstructionEmitter, BGEZAL_LinksBeforeTestingTheSign) {
+  auto emitter = makeEmitter();
+  // BGEZAL $a0, +4
+  auto inst = MipsDecoder::decode(encI(0x01, 4, 0x11, 4));
+
+  auto code = emitter.emitInstruction(inst, 0x80010000);
+
+  EXPECT_NE(code.find("ctx->r31 = 0x80010008;"), std::string::npos) << code;
+  EXPECT_NE(code.find(">= 0) goto"), std::string::npos) << code;
+}
+
+TEST(InstructionEmitter, ReservedOpcodeEmitsACommentNotCode) {
+  auto emitter = makeEmitter();
+  auto inst = MipsDecoder::decode(0xFC000000u); // opcode 0x3F
+
+  auto code = emitter.emitInstruction(inst, 0x80010000);
+
+  EXPECT_EQ(code.rfind("//", 0), 0u) << code;
+  EXPECT_NE(code.find("0xFC000000"), std::string::npos) << code;
+}

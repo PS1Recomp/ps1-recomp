@@ -394,6 +394,22 @@ TEST_F(DiscReaderTest, BootFilenameIgnoresCommandLineArgument) {
   EXPECT_EQ(reader.getBootFilename(), "SCUS_123.45");
 }
 
+TEST_F(DiscReaderTest, BootFilenameWithoutVersionHasTrailingSpacesTrimmed) {
+  writeStandard("BOOT = cdrom:\\SCUS_123.45  \r\n");
+  DiscReader reader;
+  ASSERT_TRUE(reader.open(path));
+  ASSERT_TRUE(reader.parseFilesystem());
+  EXPECT_EQ(reader.getBootFilename(), "SCUS_123.45");
+}
+
+TEST_F(DiscReaderTest, BootLineWithoutPathSeparatorLeavesBootEmpty) {
+  writeStandard("BOOT = SCUS_123.45\r\n");
+  DiscReader reader;
+  ASSERT_TRUE(reader.open(path));
+  EXPECT_TRUE(reader.parseFilesystem());
+  EXPECT_EQ(reader.getBootFilename(), "");
+}
+
 TEST_F(DiscReaderTest, SystemCnfWithoutBootLineLeavesBootEmpty) {
   writeStandard("TCB = 4\r\nEVENT = 10\r\n");
   DiscReader reader;

@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <filesystem>
 #include <string>
+#include <cstdlib>
 
 using namespace ps1::bios;
 using namespace ps1::cdrom;
@@ -594,4 +595,315 @@ TEST_F(BiosCardTest, FileWriteReachesTheBackingFile) {
   ASSERT_TRUE(onDisk.loadFromFile(path));
   EXPECT_EQ(onDisk.image(), input.getMemoryCard(0).image());
   std::remove(path.c_str());
+}
+
+// More memory card behaviour (psx-spx kernelbios.md "Memory Card" functions,
+// controllersandmemorycards.md "Memory Card Data Format").
+
+TEST_F(BiosCardTest, CardLoadReadsAFreshlyInsertedCardWithoutAChangeError) {
+  // A(ACh) _card_load reads the directory; loading the "MC" id is one of the
+  // accesses B(50h) _new_card describes as ignoring the card-changed flag.
+  ctx.r[A0] = 0x00;
+  a0(0xAC);
+  EXPECT_EQ(ctx.r[V0], 1u);
+  EXPECT_TRUE(fired(0)) << "SwCARD done";
+  EXPECT_FALSE(fired(3)) << "reported as changed";
+}
+
+TEST_F(BiosCardTest, CardStatusIsReadyAfterACompletedRead) {
+  // B(5Ch) _card_status: "01h=ready".
+  b0(0x50);
+  ctx.r[A0] = 0x00; ctx.r[A1] = 5; ctx.r[A2] = 0x80020000;
+  b0(0x4F);
+  ctx.r[A0] = 0;
+  b0(0x5C);
+  EXPECT_EQ(ctx.r[V0], 0x01u);
+}
+
+TEST_F(BiosCardTest, CardStatusReportsATimeoutWhenNoCardIsInserted) {
+  // B(5Ch) _card_status: "11h=failed/timeout (eg. when no cartridge
+  // inserted)".  Slot = port/10h.
+  input.getMemoryCard(1).setPresent(false);
+  ctx.r[A0] = 0x10; ctx.r[A1] = 5; ctx.r[A2] = 0x80020000;
+  b0(0x4F);
+  ctx.r[A0] = 1;
+  b0(0x5C);
+  EXPECT_EQ(ctx.r[V0], 0x11u);
+}
+
+TEST_F(BiosCardTest, Sector400hIsAcceptedLikeTheBios) {
+  // B(4Eh)/B(4Fh): "for some strange reason, probably a BUG, the function
+  // also accepts sector 400h".
+  b0(0x50);
+  ctx.r[A0] = 0x00; ctx.r[A1] = 0x400; ctx.r[A2] = 0x80020000;
+  b0(0x4F);
+  EXPECT_EQ(ctx.r[V0], 1u);
+}
+
+TEST_F(BiosCardTest, CardAccessWithoutAControllerReportsNoCard) {
+  bios->setInputController(nullptr);
+  ctx.r[A0] = 0x00; ctx.r[A1] = 5; ctx.r[A2] = 0x80020000;
+  b0(0x4F);
+  EXPECT_EQ(ctx.r[V0], 1u);
+  EXPECT_TRUE(fired(2)) << "SwCARD 100h (no card)";
+}
+
+TEST_F(BiosCardTest, CardFilesAreUnavailableWithoutAController) {
+  bios->setInputController(nullptr);
+  writeString(0x80030000, "bu00:BASCUS-94900CRASH");
+  ctx.r[A0] = 0x80030000; ctx.r[A1] = 0x200 | (1u << 16);
+  b0(0x32);
+  const int32_t fd = static_cast<int32_t>(ctx.r[V0]);
+  ctx.r[A0] = 0x80030000; ctx.r[A1] = 0x80031000;
+  b0(0x42);
+  const uint32_t first = ctx.r[V0];
+  ctx.r[A0] = 0x80031000;
+  b0(0x43);
+
+  EXPECT_EQ(fd, -1);
+  EXPECT_EQ(first, 0u);
+  EXPECT_EQ(ctx.r[V0], 0u);
+}
+
+TEST_F(BiosCardTest, CreatingAFileInAnEmptySlotFails) {
+  input.getMemoryCard(1).setPresent(false);
+  writeString(0x80030000, "bu10:BASCUS-94900CRASH");
+  ctx.r[A0] = 0x80030000; ctx.r[A1] = 0x200 | (1u << 16);
+  b0(0x32);
+  EXPECT_EQ(static_cast<int32_t>(ctx.r[V0]), -1);
+}
+
+TEST_F(BiosCardTest, CardPathWithoutADeviceSeparatorFails) {
+  writeString(0x80030000, "bu00BASCUS-94900CRASH");
+  ctx.r[A0] = 0x80030000; ctx.r[A1] = 0x200 | (1u << 16);
+  b0(0x32);
+  EXPECT_EQ(static_cast<int32_t>(ctx.r[V0]), -1);
+}
+
+class BiosCardFileTest : public BiosCardTest {
+protected:
+  int32_t create(uint32_t blocks, const std::string &path =
+                                      "bu00:BASCUS-94900CRASH") {
+    writeString(0x80030000, path);
+    ctx.r[A0] = 0x80030000; ctx.r[A1] = 0x200 | 0x2 | (blocks << 16);
+    b0(0x32);
+    return static_cast<int32_t>(ctx.r[V0]);
+  }
+  int32_t openExisting(const std::string &path = "bu00:BASCUS-94900CRASH") {
+    writeString(0x80030000, path);
+    ctx.r[A0] = 0x80030000; ctx.r[A1] = 0x1;
+    b0(0x32);
+    return static_cast<int32_t>(ctx.r[V0]);
+  }
+  int32_t call(uint32_t fn, uint32_t a, uint32_t b = 0, uint32_t c = 0) {
+    ctx.r[A0] = a; ctx.r[A1] = b; ctx.r[A2] = c;
+    b0(fn);
+    return static_cast<int32_t>(ctx.r[V0]);
+  }
+  uint32_t firstfile(const std::string &pattern) {
+    writeString(0x80030100, pattern);
+    return static_cast<uint32_t>(call(0x42, 0x80030100, 0x80031000));
+  }
+};
+
+TEST_F(BiosCardFileTest, ClosingACardFileTwiceFails) {
+  // B(36h) close: "Returns r2=fd (or r2=-1 if failed)".
+  const int32_t fd = create(1);
+  ASSERT_GE(fd, 0);
+  EXPECT_EQ(call(0x36, fd), fd);
+
+  EXPECT_EQ(call(0x36, fd), -1);
+}
+
+TEST_F(BiosCardFileTest, LseekOnAClosedCardFileFails) {
+  const int32_t fd = create(1);
+  call(0x36, fd);
+
+  EXPECT_EQ(call(0x33, fd, 0, 0), -1);
+}
+
+TEST_F(BiosCardFileTest, AtMostSixteenFilesCanBeOpen) {
+  // B(32h) open: "The PSX can have a maximum of 16 files open at any time".
+  call(0x36, create(1));
+  for (int i = 0; i < 16; ++i)
+    ASSERT_GE(openExisting(), 0) << i;
+
+  EXPECT_EQ(openExisting(), -1);
+}
+
+TEST_F(BiosCardFileTest, LseekBeforeTheStartOfTheFileFailsAndKeepsThePosition) {
+  const int32_t fd = create(1);
+  call(0x33, fd, 0x10, 0);
+
+  EXPECT_EQ(call(0x33, fd, static_cast<uint32_t>(-0x20), 1), -1);
+  EXPECT_EQ(call(0x33, fd, 0, 1), 0x10);
+}
+
+TEST_F(BiosCardFileTest, ReadAtTheEndOfTheFileReturnsZero) {
+  const int32_t fd = create(1);
+  ASSERT_EQ(call(0x33, fd, 0x2000, 0), 0x2000);
+
+  EXPECT_EQ(call(0x34, fd, 0x80040000, 16), 0);
+}
+
+TEST_F(BiosCardFileTest, ReadWithANegativeLengthFails) {
+  // B(34h) read: "-1 if failed".
+  const int32_t fd = create(1);
+
+  EXPECT_EQ(call(0x34, fd, 0x80040000, static_cast<uint32_t>(-1)), -1);
+}
+
+TEST_F(BiosCardFileTest, CreatingAFileThatAlreadyExistsFails) {
+  call(0x36, create(1));
+
+  EXPECT_EQ(create(1), -1);
+}
+
+TEST_F(BiosCardFileTest, CreatingMoreBlocksThanTheCardHoldsFails) {
+  // A card holds 15 data blocks (directory frames 1..15).
+  EXPECT_EQ(create(16), -1);
+}
+
+TEST_F(BiosCardFileTest, MultiBlockFileDataContinuesInTheNextBlock) {
+  // A file spans its block chain: offset 2000h is the start of block two.
+  const int32_t fd = create(2);
+  ASSERT_GE(fd, 0);
+  for (uint32_t i = 0; i < 0x80; ++i)
+    mem.write8(0x80040000 + i, static_cast<uint8_t>(0xC0 ^ i));
+  call(0x33, fd, 0x2000, 0);
+  ASSERT_EQ(call(0x35, fd, 0x80040000, 0x80), 0x80);
+
+  call(0x33, fd, 0x2010, 0);
+  ASSERT_EQ(call(0x34, fd, 0x80050000, 4), 4);
+
+  EXPECT_EQ(mem.read8(0x80050000), 0xC0 ^ 0x10);
+  EXPECT_EQ(mem.read8(0x80050003), 0xC0 ^ 0x13);
+}
+
+TEST_F(BiosCardFileTest, FirstfileWithAPatternThatDiffersFindsNothing) {
+  call(0x36, create(1));
+
+  EXPECT_EQ(firstfile("bu00:BESLES*"), 0u);
+}
+
+TEST_F(BiosCardFileTest, FirstfileQuestionMarkMatchesOneCharacter) {
+  // psx-spx firstfile: wildcards "?" (any character) and "*" (rest).
+  call(0x36, create(1));
+
+  EXPECT_EQ(firstfile("bu00:BASCUS-94900CRAS?"), 0x80031000u);
+  EXPECT_EQ(readString(0x80031000), "BASCUS-94900CRASH");
+}
+
+TEST_F(BiosCardFileTest, NextfileKeepsReturningZeroOnceTheSearchEnded) {
+  call(0x36, create(1));
+  ASSERT_NE(firstfile("bu00:*"), 0u);
+  ASSERT_EQ(call(0x43, 0x80031000), 0);
+
+  EXPECT_EQ(call(0x43, 0x80031000), 0);
+}
+
+TEST_F(BiosCardFileTest, SlotTwoHasItsOwnDirectory) {
+  // "bu10:" is the card in slot 2 (port 10h).
+  call(0x36, create(1, "bu10:BASCUS-94900CRASH"));
+
+  EXPECT_EQ(firstfile("bu00:*"), 0u);
+  EXPECT_EQ(firstfile("bu10:*"), 0x80031000u);
+}
+
+// Host VBlank pump driven from the game thread's yield points.
+
+TEST_F(BiosTest, YieldPointsPumpTheVBlankClockPeriodically) {
+  int pumps = 0;
+  bool sawWaiting = false;
+  bios->setVBlankPump([&](bool waiting) {
+    ++pumps;
+    sawWaiting |= waiting;
+  });
+
+  for (int i = 0; i < 2048; ++i)
+    bios->drainPendingCallbacks();
+
+  EXPECT_EQ(pumps, 2);
+  EXPECT_FALSE(sawWaiting) << "a yield point is not an idle VSync wait";
+}
+
+TEST_F(BiosTest, PumpOnlyAdvancesTheClockButDispatchesNothing) {
+  auto &st = ps1::psyq::psyq_state();
+  st.reset();
+  st.intrCallback[0] = 0x8004B828;
+  st.vsyncCounter.store(1, std::memory_order_release);
+  g_dispatched.clear();
+  g_testRecompDispatchHook = &recordingHook;
+  int pumps = 0;
+  bios->setVBlankPump([&](bool) { ++pumps; });
+
+  for (int i = 0; i < 1024; ++i)
+    bios->pumpOnly();
+
+  g_testRecompDispatchHook = nullptr;
+  EXPECT_EQ(pumps, 1);
+  EXPECT_TRUE(g_dispatched.empty());
+  st.reset();
+}
+
+// PS1_SP_GUARD=1: a guest $sp outside RAM and the scratchpad is reported at
+// the next yield point, at most eight times.
+namespace {
+struct ScopedEnv {
+  explicit ScopedEnv(const char *name) : name_(name) { setenv(name, "1", 1); }
+  ~ScopedEnv() { unsetenv(name_); }
+  const char *name_;
+};
+} // namespace
+
+TEST_F(BiosTest, StackGuardReportsABadStackPointerAtMostEightTimes) {
+  std::unique_ptr<Bios> guarded;
+  {
+    ScopedEnv env("PS1_SP_GUARD");
+    guarded = std::make_unique<Bios>(ctx, *fs, mem);
+  }
+  ctx.r29 = 0x0905A8E4; // a data value, not an address
+
+  testing::internal::CaptureStderr();
+  for (int i = 0; i < 12; ++i)
+    guarded->drainPendingCallbacks();
+  const std::string err = testing::internal::GetCapturedStderr();
+
+  std::size_t reports = 0;
+  for (std::size_t p = 0; (p = err.find("guest $sp=0x0905A8E4", p)) !=
+                          std::string::npos; ++p)
+    ++reports;
+  EXPECT_EQ(reports, 8u);
+}
+
+TEST_F(BiosTest, StackGuardAlsoWatchesPumpOnlyYieldPoints) {
+  std::unique_ptr<Bios> guarded;
+  {
+    ScopedEnv env("PS1_SP_GUARD");
+    guarded = std::make_unique<Bios>(ctx, *fs, mem);
+  }
+  ctx.r29 = 0x0905A8E4;
+
+  testing::internal::CaptureStderr();
+  guarded->pumpOnly();
+  const std::string err = testing::internal::GetCapturedStderr();
+
+  EXPECT_NE(err.find("guest $sp=0x0905A8E4"), std::string::npos) << err;
+}
+
+TEST_F(BiosTest, StackGuardAcceptsRamAndScratchpadStacks) {
+  std::unique_ptr<Bios> guarded;
+  {
+    ScopedEnv env("PS1_SP_GUARD");
+    guarded = std::make_unique<Bios>(ctx, *fs, mem);
+  }
+
+  testing::internal::CaptureStderr();
+  ctx.r29 = 0x801FFFF0;
+  guarded->drainPendingCallbacks();
+  ctx.r29 = 0x1F8003F0;
+  guarded->drainPendingCallbacks();
+  const std::string err = testing::internal::GetCapturedStderr();
+
+  EXPECT_EQ(err.find("[SP-GUARD]"), std::string::npos) << err;
 }

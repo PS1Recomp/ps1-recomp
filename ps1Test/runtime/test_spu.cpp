@@ -1,5 +1,7 @@
+#include "runtime/metrics.h"
 #include "runtime/spu/spu.h"
 #include <cstring>
+#include <vector>
 #include <gtest/gtest.h>
 
 using namespace ps1::spu;
@@ -78,73 +80,74 @@ TEST_F(SpuAdpcmTest, AppliesFilterOneCoefficientsToPrediction) {
   }
 }
 
-TEST_F(SpuAdpcmTest, SilentBlockDecodesZeros) {
-  // Set up a silent ADPCM block (all zeros) at address 0
+TEST_F(SpuAdpcmTest, SilentBlockPlaysSilenceAtFullVolume) {
+  // Arrange: an all-zero block (end flag set), every volume at maximum.
   uint8_t *ram = spu.soundRamPtr();
-  std::memset(ram, 0, 16); // 16-byte block of zeros
-  ram[1] = 0x01;           // End flag to stop after one block
+  std::memset(ram, 0, 16);
+  ram[1] = 0x01;
+  spu.writeRegister(0x1F801C06, 0);      // start address
+  spu.writeRegister(0x1F801C04, 0x1000); // pitch 1.0
+  spu.writeRegister(0x1F801C00, 0x3FFF); // voice volume L
+  spu.writeRegister(0x1F801C02, 0x3FFF); // voice volume R
+  spu.writeRegister(0x1F801D80, 0x3FFF); // main volume L
+  spu.writeRegister(0x1F801D82, 0x3FFF); // main volume R
+  spu.writeRegister(0x1F801D88, 0x0001); // key on voice 0
 
-  // Write voice start address via register
-  spu.writeRegister(0x1F801C06, 0);      // start addr = 0 (in 8-byte units)
-  spu.writeRegister(0x1F801C04, 0x1000); // pitch = 1.0
-
-  // Key on voice 0
-  spu.writeRegister(0x1F801D88, 0x0001); // key on lo
-
-  // Generate samples to process
+  // Act
   int16_t buffer[128] = {};
   spu.generateSamples(buffer, 64);
 
-  // All output should be zero (silent input + ADSR attack starts at 0)
-  // This is a basic smoke test
-  EXPECT_TRUE(true); // If we got here without crash, ADPCM decode works
+  // Assert: zero ADPCM samples decode to zero whatever the envelope does.
+  for (int16_t sample : buffer)
+    EXPECT_EQ(sample, 0);
 }
 
-TEST_F(SpuAdpcmTest, AdpcmDecodesWithoutCrash) {
-  // ADPCM filter coefficients are private; we test them
-  // indirectly by decoding ADPCM blocks successfully
+TEST_F(SpuAdpcmTest, NonSilentBlockIsAudibleOnceKeyedOn) {
+  // Arrange: filter 1, shift 0, non-zero nibbles; fast attack; volumes up.
   uint8_t *ram = spu.soundRamPtr();
-  // Filter=1 (60, 0), shift=0
-  ram[0] = 0x10; // filter=1, shift=0
-  ram[1] = 0x01; // end flag
+  ram[0] = 0x10;
+  ram[1] = 0x03; // loop + end: keep playing the block
   for (int i = 2; i < 16; i++)
     ram[i] = 0x77;
-
   spu.writeRegister(0x1F801C06, 0);
   spu.writeRegister(0x1F801C04, 0x1000);
+  spu.writeRegister(0x1F801C08, 0x00FF); // attack rate 0 (fastest), sustain max
+  spu.writeRegister(0x1F801C00, 0x3FFF);
+  spu.writeRegister(0x1F801C02, 0x3FFF);
+  spu.writeRegister(0x1F801D80, 0x3FFF);
+  spu.writeRegister(0x1F801D82, 0x3FFF);
   spu.writeRegister(0x1F801D88, 0x0001);
 
-  int16_t buffer[128] = {};
-  spu.generateSamples(buffer, 64);
-  EXPECT_TRUE(true);
+  // Act
+  int16_t buffer[512] = {};
+  spu.generateSamples(buffer, 256);
+
+  // Assert
+  bool audible = false;
+  for (int16_t sample : buffer)
+    audible |= sample != 0;
+  EXPECT_TRUE(audible);
 }
 
-TEST_F(SpuAdpcmTest, MultipleBlocksDontCrash) {
-  // Fill several ADPCM blocks with data
+TEST_F(SpuAdpcmTest, EndxIsSetOnlyAfterTheEndFlagBlockIsReached) {
+  // Arrange: ten 28-sample blocks, end flag on the last one only (psx-spx ENDX).
   uint8_t *ram = spu.soundRamPtr();
   for (int block = 0; block < 10; block++) {
-    int addr = block * 16;
-    ram[addr] = 0x00;                           // shift=0, filter=0
-    ram[addr + 1] = (block == 9) ? 0x01 : 0x00; // end flag on last
-    for (int i = 2; i < 16; i++) {
-      ram[addr + i] =
-          static_cast<uint8_t>(i * 17 + block); // pseudo-random data
-    }
+    ram[block * 16] = 0x00;
+    ram[block * 16 + 1] = (block == 9) ? 0x01 : 0x00;
   }
-
   spu.writeRegister(0x1F801C06, 0);
-  spu.writeRegister(0x1F801C04, 0x1000);
-  spu.writeRegister(0x1F801C00, 0x3FFF); // volume left
-  spu.writeRegister(0x1F801C02, 0x3FFF); // volume right
-  spu.writeRegister(0x1F801D80, 0x7FFF); // main vol L
-  spu.writeRegister(0x1F801D82, 0x7FFF); // main vol R
-  spu.writeRegister(0x1F801D88, 0x0001); // key on
+  spu.writeRegister(0x1F801C04, 0x1000); // one ADPCM sample per output sample
+  spu.writeRegister(0x1F801D88, 0x0001);
+  int16_t buffer[2 * 400] = {};
 
-  int16_t buffer[1024] = {};
-  spu.generateSamples(buffer, 512);
+  // Act + Assert: after 100 samples the voice is still in block 3.
+  spu.generateSamples(buffer, 100);
+  EXPECT_EQ(spu.readRegister(0x1F801D9C) & 1, 0);
 
-  // Should complete without crashing
-  EXPECT_TRUE(true);
+  // Act + Assert: 300 more samples pass the 280-sample end.
+  spu.generateSamples(buffer, 300);
+  EXPECT_EQ(spu.readRegister(0x1F801D9C) & 1, 1);
 }
 
 // ADPCM Loop/End Flag Tests
@@ -264,48 +267,47 @@ TEST_F(SpuAdsrTest, VoiceStartsInOffPhase) {
   }
 }
 
-TEST_F(SpuAdsrTest, KeyOnStartsAttackPhase) {
-  // Set up a simple waveform
+TEST_F(SpuAdsrTest, KeyOnRaisesTheEnvelopeFromZero) {
+  // Arrange
   uint8_t *ram = spu.soundRamPtr();
   std::memset(ram, 0, 16);
   ram[1] = 0x03; // loop + end
-
   spu.writeRegister(0x1F801C06, 0);
   spu.writeRegister(0x1F801C04, 0x1000);
-  spu.writeRegister(0x1F801C08, 0x00FF); // ADSR lo: fast attack
-  spu.writeRegister(0x1F801C0A, 0x0000); // ADSR hi
+  spu.writeRegister(0x1F801C08, 0x00FF); // attack rate 0: fastest
+  spu.writeRegister(0x1F801C0A, 0x0000);
+  ASSERT_EQ(spu.readRegister(0x1F801C0C), 0) << "envelope idle before key on";
 
-  // Key on voice 0
+  // Act
   spu.writeRegister(0x1F801D88, 0x0001);
-
   int16_t buffer[64] = {};
   spu.generateSamples(buffer, 32);
 
-  // After key on, voice should be active (not all zeros necessarily,
-  // depends on ADPCM data, but the system shouldn't crash)
-  EXPECT_TRUE(true);
+  // Assert: ADSR current volume (voice reg +0Ch) has started to rise.
+  EXPECT_GT(spu.readRegister(0x1F801C0C), 0);
 }
 
-TEST_F(SpuAdsrTest, KeyOffTransitionsToRelease) {
+TEST_F(SpuAdsrTest, KeyOffReleasesTheEnvelope) {
+  // Arrange: a keyed-on voice whose envelope has risen.
   uint8_t *ram = spu.soundRamPtr();
   std::memset(ram, 0, 16);
   ram[1] = 0x03;
-
   spu.writeRegister(0x1F801C06, 0);
   spu.writeRegister(0x1F801C04, 0x1000);
   spu.writeRegister(0x1F801C08, 0x00FF);
-  spu.writeRegister(0x1F801C0A, 0x0000);
-  spu.writeRegister(0x1F801D88, 0x0001); // Key on
-
-  int16_t buffer[128] = {};
-  spu.generateSamples(buffer, 32);
-
-  // Now key off
-  spu.writeRegister(0x1F801D8C, 0x0001); // Key off
+  spu.writeRegister(0x1F801C0A, 0x0000); // release: linear, rate 0 (fastest)
+  spu.writeRegister(0x1F801D88, 0x0001);
+  int16_t buffer[2 * 256] = {};
   spu.generateSamples(buffer, 64);
+  const uint16_t held = spu.readRegister(0x1F801C0C);
+  ASSERT_GT(held, 0);
 
-  // Should still not crash
-  EXPECT_TRUE(true);
+  // Act
+  spu.writeRegister(0x1F801D8C, 0x0001);
+  spu.generateSamples(buffer, 256);
+
+  // Assert
+  EXPECT_LT(spu.readRegister(0x1F801C0C), held);
 }
 
 // Volume Tests
@@ -344,15 +346,20 @@ protected:
   void SetUp() override { spu.reset(); }
 };
 
-TEST_F(SpuReverbTest, ReverbRegisterWriteDoesntCrash) {
-  // Write all 32 reverb registers
-  for (uint32_t i = 0; i < 32; i++) {
+TEST_F(SpuReverbTest, ReverbConfigWithoutReverbEnableKeepsOutputSilent) {
+  // Arrange: every reverb register written, but no voice and no reverb enable.
+  for (uint32_t i = 0; i < 32; i++)
     spu.writeRegister(0x1F801DC0 + i * 2, 0x1234);
-  }
+  spu.writeRegister(0x1F801D80, 0x3FFF);
+  spu.writeRegister(0x1F801D82, 0x3FFF);
 
+  // Act
   int16_t buffer[128] = {};
   spu.generateSamples(buffer, 64);
-  EXPECT_TRUE(true);
+
+  // Assert: reverb parameters alone produce no sound.
+  for (int16_t sample : buffer)
+    EXPECT_EQ(sample, 0);
 }
 
 // XA-ADPCM Tests
@@ -834,4 +841,180 @@ TEST(SpuTransferAddress, ManualTransferWrapsAtTheEndOfSoundRam) {
     spu.writeRegister(0x1F801DA8, v);
   EXPECT_EQ(spu.readSoundRam(0x7FFFE), 0x4444);
   EXPECT_EQ(spu.readSoundRam(0x00000), 0x5555);
+}
+
+// ADPCM reserved shift values
+//
+// cdromformat.md "XA-ADPCM Header Bytes": "reserved shift values 13..15 will
+// act same as shift=9" (SPU-ADPCM shares the header, soundprocessingunitspu.md
+// "Sample Data").
+
+TEST_F(SpuAdpcmTest, ReservedShiftValuesDecodeLikeShift9) {
+  uint8_t block9[16] = {0x09, 0x00};
+  std::memset(block9 + 2, 0x71, 14); // nibbles 1 and 7
+  uint8_t block13[16];
+  std::memcpy(block13, block9, sizeof block13);
+
+  const auto ref = spu.decodeAdpcmBlockForTest(block9, 0, 0);
+  for (uint8_t shift : {13, 14, 15}) {
+    block13[0] = shift;
+    EXPECT_EQ(spu.decodeAdpcmBlockForTest(block13, 0, 0), ref) << int(shift);
+  }
+  EXPECT_EQ(ref[0], 1 << 3) << "shift 9: nibble SHL (12-9)";
+}
+
+// Upper voice halves of the per-voice bit registers
+
+TEST_F(SpuVoiceTest, PitchModulationHighHalfCoversVoicesAbove15) {
+  auto voice17AddrAfter = [this](uint16_t pmonHi) {
+    spu.reset();
+    loopBlock(0x1000, 0x00, 0x77); // loud modulator
+    keyOnVoice(16, 0x0000, 0x0000, 0x1000 / 8);
+    keyOnVoice(17, 0x0000, 0x0000, 0x8000 / 8);
+    spu.writeRegister(0x1F801D92, pmonHi); // PMON bits 16-23
+    spu.generateSamples(out, 280);
+    return spu.debugVoiceState(17).currentAddr;
+  };
+
+  const uint32_t modulated = voice17AddrAfter(0x0002); // voice 17
+  const uint32_t plain = voice17AddrAfter(0x0000);
+
+  EXPECT_GT(modulated, plain);
+}
+
+TEST_F(SpuVoiceTest, NoiseModeHighHalfCoversVoicesAbove15) {
+  loopBlock(0); // all-zero samples
+  spu.writeRegister(0x1F801D80, 0x3FFF);
+  spu.writeRegister(0x1F801D82, 0x3FFF);
+  spu.writeRegister(voiceReg(16, 0x00), 0x3FFF);
+  spu.writeRegister(voiceReg(16, 0x02), 0x3FFF);
+  spu.writeRegister(0x1F801D96, 0x0001); // NON voice 16
+  keyOnVoice(16, 0x0000, 0x0000);
+
+  spu.generateSamples(out, 64);
+
+  bool anyNonZero = false;
+  for (int i = 0; i < 128; ++i)
+    anyNonZero |= out[i] != 0;
+  EXPECT_TRUE(anyNonZero);
+}
+
+// Envelope edge cases (soundprocessingunitspu.md "SPU Volume and ADSR")
+
+TEST_F(SpuVoiceTest, SustainLevel15KeepsTheEnvelopeAtMaximum) {
+  // Sustain level (15+1)*800h is above 7FFFh: decay has nowhere to go.
+  // Level 15 in both ADSR halves, so the test holds whichever half is read.
+  loopBlock(0);
+  keyOnVoice(0, /*lo=*/0x000F, /*hi=*/0x000F);
+  step(3); // attack to 7FFFh
+
+  EXPECT_EQ(step(), 0x7FFF);
+  EXPECT_EQ(step(5), 0x7FFF);
+}
+
+TEST_F(SpuVoiceTest, ExponentialSustainIncreaseSlowsDownAboveLevel6000) {
+  auto ticksToFull = [this](uint16_t hi) {
+    spu.reset();
+    loopBlock(0);
+    keyOnVoice(0, /*lo=*/0x0007, hi);
+    step(4); // attack + decay to 4000h
+    for (int t = 1; t < 2000; ++t)
+      if (step() == 0x7FFF)
+        return t;
+    return 2000;
+  };
+
+  const int linear = ticksToFull(0x0807);      // increase, shift 8, step +7
+  const int exponential = ticksToFull(0x8807); // same, exponential
+
+  EXPECT_GT(exponential, linear);
+}
+
+TEST_F(SpuVoiceTest, SlowSustainIncreaseBarelyMoves) {
+  // Sustain shift 1Fh: one +7 step every 2^20 ticks.
+  loopBlock(0);
+  keyOnVoice(0, /*lo=*/0x0007, /*hi=*/0x1F07);
+  const uint16_t start = step(4);
+
+  const uint16_t later = step(100);
+
+  EXPECT_LT(later - start, 0x100);
+}
+
+// IRQ address
+
+TEST_F(SpuVoiceTest, IrqStaysQuietWhenNoVoiceReachesTheIrqAddress) {
+  loopBlock(0x100);
+  spu.writeRegister(0x1F801DA4, 0x800 / 8); // somewhere the voice never reads
+  spu.writeRegister(0x1F801DAA, 0x0040);
+  keyOnVoice(0, 0x0000, 0x0000, 0x100 / 8);
+
+  step(30);
+
+  EXPECT_FALSE(spu.hasIrq());
+}
+
+// Status and sound RAM bounds
+
+TEST(SpuControl, SpustatIsReadOnlyAndMirrorsSpucntBits0To5) {
+  SPU spu;
+  spu.reset();
+  spu.writeRegister(0x1F801DAA, 0x0015);
+
+  spu.writeRegister(0x1F801DAE, 0xFFFF);
+
+  EXPECT_EQ(spu.readRegister(0x1F801DAE) & 0x3F, 0x15);
+}
+
+TEST(SpuSoundRam, AccessesPastTheEndAreIgnored) {
+  SPU spu;
+  spu.reset();
+
+  spu.writeSoundRam(0x80000, 0xBEEF);
+
+  EXPECT_EQ(spu.readSoundRam(0x00000), 0) << "must not wrap";
+  EXPECT_EQ(spu.readSoundRam(0x80000), 0);
+}
+
+TEST(SpuSoundRam, LoadReplacesTheWholeImage) {
+  SPU spu;
+  spu.reset();
+  std::vector<uint8_t> image(SOUND_RAM_SIZE, 0x5A);
+
+  spu.loadSoundRam(image.data());
+
+  EXPECT_EQ(spu.readSoundRam(0x00000), 0x5A5A);
+  EXPECT_EQ(spu.readSoundRam(SOUND_RAM_SIZE - 2), 0x5A5A);
+}
+
+// Metrics census
+
+class SpuMetricsTest : public SpuVoiceTest {
+protected:
+  void SetUp() override {
+    SpuVoiceTest::SetUp();
+    ps1::metrics::reset();
+    ps1::metrics::setEnabledForTesting(true);
+  }
+  void TearDown() override {
+    ps1::metrics::setEnabledForTesting(false);
+    ps1::metrics::reset();
+  }
+};
+
+TEST_F(SpuMetricsTest, ProgrammingAStartAddressIsCountedPerVoice) {
+  spu.writeRegister(voiceReg(3, 0x06), 0x0200);
+  spu.writeRegister(voiceReg(3, 0x06), 0x0300);
+
+  EXPECT_EQ(ps1::metrics::get("spu.voice_start.03"), 2u);
+  EXPECT_EQ(ps1::metrics::get("spu.voice_start.04"), 0u);
+}
+
+TEST_F(SpuMetricsTest, KeyOnIsCountedPerVoiceWhenTheLatchIsRetired) {
+  loopBlock(0);
+  keyOnVoice(21, 0x0000, 0x0000);
+
+  step();
+
+  EXPECT_EQ(ps1::metrics::get("spu.key_on.21"), 1u);
 }

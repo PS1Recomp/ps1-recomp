@@ -743,6 +743,18 @@ TEST_F(GoolInterpTest, FalseConditionBranchesInsteadOfAccepting) {
   EXPECT_EQ(mem.read32(kStack), 0u) << "push skipped by the branch";
 }
 
+// condtype 2 accepts when the register is zero (c1c GOOL_OP_ReturnStateTransition).
+TEST_F(GoolInterpTest, InvertedConditionAcceptsWhenRegisterIsZero) {
+  mem.write32(kFp + 8, 0);
+  setReg(9, 0);
+  program({flow(0x89, 3, 2, 9, 0), ret()});
+
+  uint32_t result = run(8);
+
+  EXPECT_EQ(result, kSuccess) << "accepted: RETURNEVENT set";
+  EXPECT_EQ(mem.read32(kTrans + 4), 1u) << "guard";
+}
+
 // --- Events ----------------------------------------------------------------
 
 uint32_t eventIns(uint32_t op, uint32_t mode, uint32_t argc, uint32_t creg,
@@ -949,6 +961,24 @@ TEST_F(GoolInterpTest, ChangeAnimFrameTakesFrameFromOperandAndFlips) {
   EXPECT_EQ(field(offsetof(goolobj, scale)), 5u);
   ASSERT_EQ(g_calls.size(), 1u);
   EXPECT_EQ(g_calls[0].addr, kFnObjectFlip);
+}
+
+// c1c GOOL_OP_ChangeAnimFrame: flip 0 forces scale.x negative, 2 toggles it.
+TEST_F(GoolInterpTest, ChangeAnimFrameFlipZeroForcesNegativeScale) {
+  field(offsetof(goolobj, scale), 5);
+  program({(0x84u << 24) | (0u << 22) | reg(9)});
+
+  run(4);
+
+  EXPECT_EQ(static_cast<int32_t>(field(offsetof(goolobj, scale))), -5);
+}
+TEST_F(GoolInterpTest, ChangeAnimFrameFlipTwoTogglesScale) {
+  field(offsetof(goolobj, scale), static_cast<uint32_t>(-5));
+  program({(0x84u << 24) | (2u << 22) | reg(9)});
+
+  run(4);
+
+  EXPECT_EQ(static_cast<int32_t>(field(offsetof(goolobj, scale))), 5);
 }
 
 // --- NS paging (0x8B) --------------------------------------------------------

@@ -229,3 +229,174 @@ TEST(ClampOverlappingSizes, ToleratesDuplicateAddresses) {
   clampOverlappingSizes(funcs); // nao pode dividir por zero nem zerar tudo
   EXPECT_EQ(funcs[2].size, 16u);
 }
+
+// Instruction-set membership (MIPS I as implemented by the R3000A, psx-spx
+// "CPU Opcode Encoding"). The linear sweep rejects a candidate body on the
+// first word outside this set, so both sides of every row matter.
+
+namespace {
+
+constexpr uint32_t special(uint32_t fn) { return fn; }
+constexpr uint32_t regimm(uint32_t rt) { return (0x01u << 26) | (rt << 16); }
+constexpr uint32_t opOnly(uint32_t op) { return op << 26; }
+constexpr uint32_t cop(uint32_t op, uint32_t rs) { return (op << 26) | (rs << 21); }
+
+} // namespace
+
+TEST(IsKnownInstruction, AcceptsEveryR3000ASpecialFunction) {
+  for (uint32_t fn : {0x00u, 0x02u, 0x03u, 0x04u, 0x06u, 0x07u, 0x08u, 0x09u,
+                      0x0Cu, 0x0Du, 0x10u, 0x11u, 0x12u, 0x13u, 0x18u, 0x19u,
+                      0x1Au, 0x1Bu, 0x20u, 0x21u, 0x22u, 0x23u, 0x24u, 0x25u,
+                      0x26u, 0x27u, 0x2Au, 0x2Bu})
+    EXPECT_TRUE(mips::isKnownInstruction(special(fn))) << "fn " << fn;
+}
+
+TEST(IsKnownInstruction, RejectsReservedSpecialFunctions) {
+  for (uint32_t fn : {0x01u, 0x05u, 0x0Au, 0x0Fu, 0x1Cu, 0x28u, 0x2Cu, 0x3Fu})
+    EXPECT_FALSE(mips::isKnownInstruction(special(fn))) << "fn " << fn;
+}
+
+TEST(IsKnownInstruction, AcceptsOnlyTheFourRegimmBranches) {
+  for (uint32_t rt : {0x00u, 0x01u, 0x10u, 0x11u})
+    EXPECT_TRUE(mips::isKnownInstruction(regimm(rt))) << "rt " << rt;
+  for (uint32_t rt : {0x02u, 0x0Fu, 0x12u, 0x1Fu})
+    EXPECT_FALSE(mips::isKnownInstruction(regimm(rt))) << "rt " << rt;
+}
+
+TEST(IsKnownInstruction, AcceptsJumpsBranchesAndImmediateAlu) {
+  for (uint32_t op = 0x02; op <= 0x0F; ++op)
+    EXPECT_TRUE(mips::isKnownInstruction(opOnly(op) | 0x1234u)) << "op " << op;
+}
+
+TEST(IsKnownInstruction, Cop0AcceptsMfc0Mtc0AndRfe) {
+  for (uint32_t rs : {0u, 4u, 16u})
+    EXPECT_TRUE(mips::isKnownInstruction(cop(0x10, rs))) << "rs " << rs;
+  for (uint32_t rs : {1u, 2u, 8u})
+    EXPECT_FALSE(mips::isKnownInstruction(cop(0x10, rs))) << "rs " << rs;
+}
+
+TEST(IsKnownInstruction, Cop2AcceptsGteCommandsAndRegisterMoves) {
+  // Bit 25 set is an imm25 GTE command (e.g. RTPS 0x4A180001).
+  EXPECT_TRUE(mips::isKnownInstruction(0x4A180001u));
+  for (uint32_t rs : {0u, 2u, 4u, 6u, 8u}) // mfc2 cfc2 mtc2 ctc2 bc2
+    EXPECT_TRUE(mips::isKnownInstruction(cop(0x12, rs))) << "rs " << rs;
+  for (uint32_t rs : {1u, 3u, 5u, 7u})
+    EXPECT_FALSE(mips::isKnownInstruction(cop(0x12, rs))) << "rs " << rs;
+}
+
+TEST(IsKnownInstruction, AcceptsEveryLoadAndStoreIncludingGteTransfers) {
+  for (uint32_t op : {0x20u, 0x21u, 0x22u, 0x23u, 0x24u, 0x25u, 0x26u, 0x28u,
+                      0x29u, 0x2Au, 0x2Bu, 0x2Eu, 0x32u, 0x3Au})
+    EXPECT_TRUE(mips::isKnownInstruction(opOnly(op))) << "op " << op;
+}
+
+TEST(IsKnownInstruction, RejectsOpcodesAbsentFromTheR3000A) {
+  // COP1/COP3 (no FPU, no COP3), reserved 0x18.., lwc0/lwc1/swc3 etc.
+  for (uint32_t op : {0x11u, 0x13u, 0x18u, 0x1Fu, 0x27u, 0x2Cu, 0x2Fu, 0x30u,
+                      0x31u, 0x33u, 0x38u, 0x3Bu, 0x3Fu})
+    EXPECT_FALSE(mips::isKnownInstruction(opOnly(op))) << "op " << op;
+}
+
+TEST(WritesRegister, SpecialFunctionsWithoutAnRdResultWriteNothing) {
+  // jr jalr mthi mtlo mult multu div divu: rd bits are not a destination here.
+  for (uint32_t fn : {0x08u, 0x09u, 0x11u, 0x13u, 0x18u, 0x19u, 0x1Au, 0x1Bu})
+    EXPECT_FALSE(mips::writesRegister((8u << 11) | fn, 8)) << "fn " << fn;
+}
+
+TEST(WritesRegister, ImmediateAluWritesRt) {
+  EXPECT_TRUE(mips::writesRegister(0x35080001u, 8));  // ori $t0, $t0, 1
+  EXPECT_TRUE(mips::writesRegister(0x3C080001u, 8));  // lui $t0, 1
+  EXPECT_FALSE(mips::writesRegister(0x3C080001u, 9));
+}
+
+TEST(WritesRegister, StoresAndBranchesWriteNoRegister) {
+  EXPECT_FALSE(mips::writesRegister(0xAD080000u, 8)); // sw $t0, 0($t0)
+  EXPECT_FALSE(mips::writesRegister(beq(8, 8, 1), 8));
+}
+
+TEST(RefineFunctionEnd, EmptyInputKeepsTheBound) {
+  EXPECT_EQ(refineFunctionEnd({}, kBase, kBase + 16), kBase + 16);
+}
+
+TEST(RefineFunctionEnd, InvertedRangeKeepsTheBound) {
+  const std::vector<uint32_t> w{kJrRa, kNop};
+  EXPECT_EQ(refineFunctionEnd(w, kBase, kBase), kBase);
+}
+
+TEST(RefineFunctionEnd, JrThroughARegisterFromTheCallerIsAReturn) {
+  // Nothing in the body writes $t0, so it holds a caller-supplied address.
+  const std::vector<uint32_t> w{kNop, jr(8), kNop, kNop};
+  EXPECT_EQ(refineFunctionEnd(w, kBase, kBase + 16), kBase + 12);
+}
+
+TEST(RefineFunctionEnd, ForwardJumpOverTheReturnKeepsTheBodyTogether) {
+  // 0: j +5 (index 5)  1: nop  2: jr $ra  3: nop  4: nop  5: jr $ra  6: nop
+  const uint32_t j5 = (0x02u << 26) | (((kBase + 20) >> 2) & 0x03FFFFFFu);
+  const std::vector<uint32_t> w{j5, kNop, kJrRa, kNop, kNop, kJrRa, kNop, kNop};
+  EXPECT_EQ(refineFunctionEnd(w, kBase, kBase + 32), kBase + 28);
+}
+
+TEST(ValidatesAsFunction, AcceptsKnownCodeEndingInAReturn) {
+  const std::vector<uint32_t> w{addu(2, 4, 5), kJrRa, kNop};
+  EXPECT_TRUE(validatesAsFunction(w, kBase, kBase + 12));
+}
+
+TEST(ValidatesAsFunction, RejectsEmptyOrInvertedRange) {
+  EXPECT_FALSE(validatesAsFunction({}, kBase, kBase + 8));
+  EXPECT_FALSE(validatesAsFunction({kJrRa, kNop}, kBase, kBase));
+}
+
+TEST(ValidatesAsFunction, RejectsAnUnknownEncodingBeforeTheReturn) {
+  const std::vector<uint32_t> w{opOnly(0x3F), kJrRa, kNop};
+  EXPECT_FALSE(validatesAsFunction(w, kBase, kBase + 12));
+}
+
+TEST(ValidatesAsFunction, RejectsCodeThatNeverReturns) {
+  const std::vector<uint32_t> w{kNop, addu(2, 4, 5), kNop};
+  EXPECT_FALSE(validatesAsFunction(w, kBase, kBase + 12));
+}
+
+TEST(ValidatesAsFunction, ReturnPastTheBoundDoesNotCount) {
+  const std::vector<uint32_t> w{kNop, kNop, kJrRa, kNop};
+  EXPECT_FALSE(validatesAsFunction(w, kBase, kBase + 8));
+}
+
+TEST(MipsPredicates, StackPrologueNeedsAddiuSpSpWithNegativeImmediate) {
+  EXPECT_TRUE(mips::isStackPrologue(0x27BDFFE8u));  // addiu sp,sp,-24
+  EXPECT_FALSE(mips::isStackPrologue(0x27BD0018u)); // +24 is the epilogue
+  EXPECT_FALSE(mips::isStackPrologue(0x27A4FFE8u)); // rt = $a0
+  EXPECT_FALSE(mips::isStackPrologue(0x2485FFE8u)); // rs = $a0
+  EXPECT_FALSE(mips::isStackPrologue(0x23BDFFE8u)); // addi, not addiu
+}
+
+TEST(MipsPredicates, StackEpilogueNeedsAddiuSpSpWithPositiveImmediate) {
+  EXPECT_TRUE(mips::isStackEpilogue(0x27BD0018u));
+  EXPECT_FALSE(mips::isStackEpilogue(0x27BDFFE8u));
+  EXPECT_FALSE(mips::isStackEpilogue(0x27A40018u));
+  EXPECT_FALSE(mips::isStackEpilogue(0x24850018u));
+  EXPECT_FALSE(mips::isStackEpilogue(0x23BD0018u));
+}
+
+TEST(MipsPredicates, JrRaRequiresJrOnRegister31) {
+  EXPECT_TRUE(mips::isJR_RA(kJrRa));
+  EXPECT_FALSE(mips::isJR_RA(jr(8)));
+  EXPECT_FALSE(mips::isJR_RA(0x03E00009u)); // jalr, same rs
+  EXPECT_FALSE(mips::isJR_RA(0x0BE00008u)); // j with the same low bits
+}
+
+TEST(MipsPredicates, EveryControlTransferHasADelaySlot) {
+  EXPECT_TRUE(mips::hasDelaySlot(beq(1, 2, 3)));
+  EXPECT_TRUE(mips::hasDelaySlot(0x08000000u));    // j
+  EXPECT_TRUE(mips::hasDelaySlot(0x0C000000u));    // jal
+  EXPECT_TRUE(mips::hasDelaySlot(jr(8)));
+  EXPECT_TRUE(mips::hasDelaySlot(0x0100F809u));    // jalr $t0
+  EXPECT_FALSE(mips::hasDelaySlot(addu(2, 4, 5)));
+  EXPECT_FALSE(mips::hasDelaySlot(0x24020001u));   // addiu
+}
+
+TEST(MipsPredicates, IsLoadCoversLbThroughLwrOnly) {
+  for (uint32_t op = 0x20; op <= 0x26; ++op)
+    EXPECT_TRUE(mips::isLoad(opOnly(op))) << op;
+  EXPECT_FALSE(mips::isLoad(opOnly(0x1F)));
+  EXPECT_FALSE(mips::isLoad(opOnly(0x28))); // sb
+}

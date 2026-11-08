@@ -3,6 +3,9 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <sstream>
+#include <string>
+#include <unistd.h>
 
 using namespace ps1;
 
@@ -11,7 +14,12 @@ protected:
   std::string tmpPath;
 
   void SetUp() override {
-    tmpPath = std::filesystem::temp_directory_path() / "ps1_test_config.toml";
+    // Unique per process and test, so parallel ctest runs never share a file.
+    auto *info = ::testing::UnitTest::GetInstance()->current_test_info();
+    tmpPath = (std::filesystem::temp_directory_path() /
+               ("ps1_test_config_" + std::to_string(::getpid()) + "_" +
+                info->name() + ".toml"))
+                  .string();
   }
   void TearDown() override { std::remove(tmpPath.c_str()); }
 };
@@ -133,4 +141,111 @@ TEST(ParseConfigU32, RejectsTyposAndPartialNumbers) {
 TEST(ParseConfigU32, RejectsValuesWiderThan32Bits) {
   EXPECT_EQ(ps1::parseConfigU32("0x100000000"), std::nullopt);
   EXPECT_EQ(ps1::parseConfigU32("0xFFFFFFFF"), 0xFFFFFFFFu);
+}
+
+TEST(ParseConfigU32, AcceptsAnUppercaseHexPrefix) {
+  EXPECT_EQ(ps1::parseConfigU32("0X1F"), 0x1Fu);
+}
+
+TEST(ParseConfigU32, RejectsABareHexPrefix) {
+  EXPECT_EQ(ps1::parseConfigU32("0x"), std::nullopt);
+}
+
+TEST_F(ConfigTest, ParsesTheRemainingKeys) {
+  {
+    std::ofstream f(tmpPath);
+    f << "[video]\nres_scale = 3\n";
+    f << "[audio]\nbuffer_size = 512\nmute = true\n";
+    f << "[paths]\nbios = \"scph1001.bin\"\nsavestate_dir = \"./st\"\n";
+  }
+  ConfigReader reader;
+
+  ASSERT_TRUE(reader.load(tmpPath));
+
+  EXPECT_EQ(reader.config().video.internalResScale, 3);
+  EXPECT_EQ(reader.config().audio.bufferSize, 512);
+  EXPECT_TRUE(reader.config().audio.mute);
+  EXPECT_EQ(reader.config().paths.biosPath, "scph1001.bin");
+  EXPECT_EQ(reader.config().paths.saveStateDir, "./st");
+}
+
+TEST_F(ConfigTest, UnquotedPathsAreTakenVerbatim) {
+  {
+    std::ofstream f(tmpPath);
+    f << "[paths]\ndisc = /games/a.cue\n";
+  }
+  ConfigReader reader;
+
+  ASSERT_TRUE(reader.load(tmpPath));
+
+  EXPECT_EQ(reader.config().paths.discImage, "/games/a.cue");
+}
+
+TEST_F(ConfigTest, LinesWithoutAnEqualsSignAreIgnored) {
+  {
+    std::ofstream f(tmpPath);
+    f << "[video]\nwidth 1024\n[broken\nheight = 600\n";
+  }
+  ConfigReader reader;
+
+  ASSERT_TRUE(reader.load(tmpPath));
+
+  EXPECT_EQ(reader.config().video.windowWidth, 640) << "default kept";
+  EXPECT_EQ(reader.config().video.windowHeight, 600)
+      << "an unterminated header does not leave [video]";
+}
+
+TEST_F(ConfigTest, KeysOfUnknownSectionsAreIgnored) {
+  {
+    std::ofstream f(tmpPath);
+    f << "[timing]\nwidth = 1024\n";
+  }
+  ConfigReader reader;
+
+  ASSERT_TRUE(reader.load(tmpPath));
+
+  EXPECT_EQ(reader.config().video.windowWidth, 640);
+}
+
+TEST_F(ConfigTest, SaveAndReloadKeepsFlagsAndEveryPath) {
+  ConfigReader writer;
+  auto &c = writer.config();
+  c.video.fullscreen = true;
+  c.video.vsync = false;
+  c.audio.mute = true;
+  c.input.enableAnalog = true;
+  c.paths = {"/d.bin", "/b.bin", "/mc", "/ss"};
+  ASSERT_TRUE(writer.save(tmpPath));
+  ConfigReader reader;
+
+  ASSERT_TRUE(reader.load(tmpPath));
+
+  const auto &r = reader.config();
+  EXPECT_TRUE(r.video.fullscreen);
+  EXPECT_FALSE(r.video.vsync);
+  EXPECT_TRUE(r.audio.mute);
+  EXPECT_TRUE(r.input.enableAnalog);
+  EXPECT_EQ(r.paths.discImage, "/d.bin");
+  EXPECT_EQ(r.paths.biosPath, "/b.bin");
+  EXPECT_EQ(r.paths.memcardDir, "/mc");
+  EXPECT_EQ(r.paths.saveStateDir, "/ss");
+}
+
+TEST_F(ConfigTest, SaveOmitsEmptyPaths) {
+  ConfigReader writer;
+  ASSERT_TRUE(writer.save(tmpPath));
+
+  std::ifstream f(tmpPath);
+  std::stringstream text;
+  text << f.rdbuf();
+
+  EXPECT_EQ(text.str().find("disc ="), std::string::npos);
+  EXPECT_EQ(text.str().find("bios ="), std::string::npos);
+  EXPECT_NE(text.str().find("[paths]"), std::string::npos);
+}
+
+TEST_F(ConfigTest, SaveToAnUnwritablePathFails) {
+  ConfigReader writer;
+
+  EXPECT_FALSE(writer.save("/nonexistent_dir_ps1_test/config.toml"));
 }

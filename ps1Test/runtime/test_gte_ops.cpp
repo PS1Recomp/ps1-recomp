@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <string>
 #include <runtime/gte.h>
 
 using namespace ps1;
@@ -647,3 +648,73 @@ TEST_F(GteOpsTest, NcdtUnlitNormalsFadeToFarColor) {
   expectMAC(0x100, 0x200, 0x300);
   EXPECT_EQ(ctx.cop2d[GTE_RGB2], rgb(0x10, 0x20, 0x30, 0x38));
 }
+
+// psx-spx "GTE Saturation": FLAG bit 31 is the OR of bits 30..23 and 18..13,
+// and FLAG is reset at the start of every command.  Every command must raise
+// it when a stage saturates IRn, and leave it clear on in-range input.
+struct GteCommandCase {
+  const char *name;
+  void (*run)(CPUContext *, bool, bool);
+  bool sf;
+};
+
+class GteErrorFlagTest : public GteOpsTest,
+                         public ::testing::WithParamInterface<GteCommandCase> {
+protected:
+  // Far colour and background 10000h: one step that reaches them gives
+  // IR = 10000h > 7FFFh.  Projection: SX = 2000 * (H/SZ=1.0) > 3FFh.
+  void setupSaturatingInputs() {
+    setTriple(GTE_RFC, 0x10000, 0x10000, 0x10000);
+    setTriple(GTE_RBK, 0x10000, 0x10000, 0x10000);
+    ctx.cop2d[GTE_IR0] = 0x1000;
+    setIR(0x7FFF, 0x7FFF, 0x7FFF);
+    ctx.cop2d[GTE_RGBC] = rgb(0xFF, 0xFF, 0xFF, 0x30);
+    for (int i = 0; i < 3; ++i)
+      ctx.cop2d[GTE_RGB0 + i] = rgb(0xFF, 0xFF, 0xFF, 0x30);
+    setDiag(0, 4096, 4096, 4096);
+    setDiag(8, 4096, 4096, 4096);
+    setDiag(16, 4096, 4096, 4096);
+    for (int v = 0; v < 3; ++v)
+      setVec(v, 2000, 2000, 0);
+    setTriple(GTE_TRX, 0, 0, 1000);
+    ctx.cop2c[GTE_H] = 1000;
+  }
+};
+
+TEST_P(GteErrorFlagTest, SaturatingStageRaisesTheErrorFlag) {
+  setupSaturatingInputs();
+
+  GetParam().run(&ctx, GetParam().sf, /*lm=*/false);
+
+  EXPECT_NE(flag() & 0x7F87E000u, 0u);
+  EXPECT_NE(flag() & bit(31), 0u);
+}
+
+TEST_P(GteErrorFlagTest, InRangeInputLeavesTheErrorFlagClear) {
+  ctx.cop2c[GTE_FLAG] = bit(31) | bit(24); // stale flags from a prior op
+  setTriple(GTE_TRX, 0, 0, 1000);           // RTPT: SZ 1000, no divide overflow
+  ctx.cop2c[GTE_H] = 1000;
+
+  GetParam().run(&ctx, GetParam().sf, /*lm=*/false); // otherwise all zero
+
+  EXPECT_EQ(flag() & bit(31), 0u);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    AllCommands, GteErrorFlagTest,
+    ::testing::Values(GteCommandCase{"RTPT", &GTE::RTPT, true},
+                      GteCommandCase{"DPCS", &GTE::DPCS, true},
+                      GteCommandCase{"DPCT", &GTE::DPCT, true},
+                      GteCommandCase{"INTPL", &GTE::INTPL, true},
+                      GteCommandCase{"NCDS", &GTE::NCDS, true},
+                      GteCommandCase{"NCDT", &GTE::NCDT, true},
+                      GteCommandCase{"CDP", &GTE::CDP, true},
+                      GteCommandCase{"NCCS", &GTE::NCCS, true},
+                      GteCommandCase{"NCCT", &GTE::NCCT, true},
+                      GteCommandCase{"CC", &GTE::CC, true},
+                      GteCommandCase{"NCT", &GTE::NCT, true},
+                      GteCommandCase{"DCPL", &GTE::DCPL, true},
+                      GteCommandCase{"GPF", &GTE::GPF, false}),
+    [](const ::testing::TestParamInfo<GteCommandCase> &info) {
+      return std::string(info.param.name);
+    });

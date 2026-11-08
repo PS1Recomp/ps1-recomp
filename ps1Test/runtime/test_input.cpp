@@ -1,4 +1,10 @@
 #include "runtime/input/input.h"
+#include "runtime/metrics.h"
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <unistd.h>
 #include <vector>
 #include <gtest/gtest.h>
 
@@ -50,8 +56,18 @@ TEST(InputAnalog, SetAnalogValues) {
   InputController input;
   input.setPadType(0, PadType::Analog);
   input.setAnalog(0, 0x00, 0xFF, 0x40, 0xC0);
-  // Values are set internally, tested via SIO
-  EXPECT_TRUE(true);
+
+  input.writeRegister(0x1F801040, 0x01);
+  for (int i = 0; i < 4; ++i)
+    input.writeRegister(0x1F801040, i == 0 ? 0x42 : 0x00); // cmd, TAP, lo, hi
+  std::vector<uint32_t> sticks;
+  for (int i = 0; i < 4; ++i) {
+    input.writeRegister(0x1F801040, 0x00);
+    sticks.push_back(input.readRegister(0x1F801040));
+  }
+
+  // psx-spx: RightX, RightY, LeftX, LeftY.
+  EXPECT_EQ(sticks, (std::vector<uint32_t>{0x40, 0xC0, 0x00, 0xFF}));
 }
 
 // Memory Card Tests
@@ -92,11 +108,14 @@ TEST(MemCard, AbsentCardAnswersNothing) {
 
 // SIO Register Tests
 
-TEST(InputSIO, JoyCtrlReset) {
+TEST(InputSIO, JoyCtrlResetAbortsAnExchange) {
   InputController input;
-  input.writeRegister16(0x1F80104A, 0x0040); // Reset bit
-  // Should not crash
-  EXPECT_TRUE(true);
+  input.writeRegister(0x1F801040, 0x01); // pad selected, waiting for 42h
+
+  input.writeRegister16(0x1F80104A, 0x0040); // JOY_CTRL.6 reset
+  input.writeRegister(0x1F801040, 0x42);
+
+  EXPECT_EQ(input.readRegister(0x1F801040), 0xFFu) << "42h without 01h is ignored";
 }
 
 TEST(InputSIO, JoyStatReadback) {
@@ -345,4 +364,281 @@ TEST(InputHeldButtons, MaskIsTheUnionOfAllSources) {
   EXPECT_EQ(held.mask(), BTN_CROSS | BTN_UP);
   held.set(HeldButtons::Keyboard, BTN_CROSS, false, ic);
   EXPECT_EQ(held.mask(), BTN_UP);
+}
+
+// Controller SIO exchange
+//
+// Contract: psx-spx controllersandmemorycards.md "Controller Communication
+// Sequence": 01h/Hi-Z, 42h/ID-lo, TAP/5Ah, then the button halves (active
+// low), then for analog pads RightX, RightY, LeftX, LeftY.
+
+namespace {
+std::vector<uint8_t> padExchange(InputController &input, size_t replies) {
+  std::vector<uint8_t> got;
+  const uint8_t send[] = {0x01, 0x42};
+  for (size_t i = 0; i < replies; ++i) {
+    input.writeRegister(0x1F801040, i < 2 ? send[i] : 0x00);
+    got.push_back(static_cast<uint8_t>(input.readRegister(0x1F801040)));
+  }
+  return got;
+}
+} // namespace
+
+TEST(InputSIO, DigitalPadAnswersIdThenButtons) {
+  InputController input;
+  input.press(BTN_CROSS);
+  input.press(BTN_UP);
+
+  const auto got = padExchange(input, 5);
+
+  const uint16_t buttons = static_cast<uint16_t>(~(BTN_CROSS | BTN_UP));
+  EXPECT_EQ(got, (std::vector<uint8_t>{0xFF, 0x41, 0x5A,
+                                       static_cast<uint8_t>(buttons & 0xFF),
+                                       static_cast<uint8_t>(buttons >> 8)}));
+}
+
+TEST(InputSIO, DigitalPadReturnsToIdleAfterTheButtons) {
+  InputController input;
+  padExchange(input, 5);
+
+  const auto again = padExchange(input, 3);
+
+  EXPECT_EQ(again, (std::vector<uint8_t>{0xFF, 0x41, 0x5A}));
+}
+
+TEST(InputSIO, AnalogPadReportsItsIdAndCenteredSticks) {
+  InputController input;
+  input.setPadType(0, PadType::DualShock);
+
+  const auto got = padExchange(input, 9);
+
+  EXPECT_EQ(got[1], 0x79);
+  EXPECT_EQ((std::vector<uint8_t>(got.begin() + 5, got.end())),
+            (std::vector<uint8_t>{0x80, 0x80, 0x80, 0x80}));
+}
+
+TEST(InputSIO, AnUnknownDeviceCommandAbortsTheExchange) {
+  InputController input;
+  input.writeRegister(0x1F801040, 0x01);
+
+  input.writeRegister(0x1F801040, 0x77);
+  const uint32_t reply = input.readRegister(0x1F801040);
+  const auto next = padExchange(input, 2);
+
+  EXPECT_EQ(reply, 0xFFu);
+  EXPECT_EQ(next[1], 0x41) << "a fresh 01h starts over";
+}
+
+TEST(InputSIO, BytesOtherThanAnAddressAreIgnoredWhenIdle) {
+  InputController input;
+
+  input.writeRegister(0x1F801040, 0x42);
+
+  EXPECT_EQ(input.readRegister(0x1F801040), 0xFFu);
+}
+
+TEST(InputSIO, JoyCtrlBit13SelectsTheSecondPort) {
+  InputController input;
+  input.press(BTN_START, 1);
+  input.writeRegister16(0x1F80104A, 1u << 13);
+
+  const auto got = padExchange(input, 4);
+
+  EXPECT_EQ(got[3], static_cast<uint8_t>(~BTN_START & 0xFF));
+}
+
+TEST(InputSIO, EachByteRaisesTheAckInterruptUntilAcknowledged) {
+  InputController input;
+
+  input.writeRegister(0x1F801040, 0x01);
+  const bool raised = input.hasInterrupt();
+  input.writeRegister16(0x1F80104A, 1u << 4); // JOY_CTRL.4 acknowledge
+
+  EXPECT_TRUE(raised);
+  EXPECT_FALSE(input.hasInterrupt());
+}
+
+TEST(InputSIO, ModeControlAndBaudRegistersReadBack) {
+  InputController input;
+
+  input.writeRegister16(0x1F801048, 0x000D);
+  input.writeRegister16(0x1F80104A, 0x1003);
+  input.writeRegister16(0x1F80104E, 0x0088);
+
+  EXPECT_EQ(input.readRegister16(0x1F801048), 0x000D);
+  EXPECT_EQ(input.readRegister16(0x1F80104A), 0x1003);
+  EXPECT_EQ(input.readRegister16(0x1F80104E), 0x0088);
+  EXPECT_EQ(input.readRegister16(0x1F801044), input.readRegister(0x1F801044));
+}
+
+TEST(InputSIO, UnmappedRegistersReadZero) {
+  InputController input;
+
+  EXPECT_EQ(input.readRegister16(0x1F80104C), 0);
+  EXPECT_EQ(input.readRegister(0x1F801048), 0u);
+}
+
+TEST(InputSIO, MemoryCardIsReachedThroughTheSioPort) {
+  InputController input;
+  std::vector<uint8_t> got;
+
+  for (uint8_t b : {0x81, 0x53, 0x00, 0x00}) {
+    input.writeRegister(0x1F801040, b);
+    got.push_back(static_cast<uint8_t>(input.readRegister(0x1F801040)));
+  }
+
+  // 81h/Hi-Z, 53h(GetID)/FLAG, then the card IDs 5Ah 5Dh.
+  EXPECT_EQ(got, (std::vector<uint8_t>{0xFF, 0x08, 0x5A, 0x5D}));
+}
+
+TEST(InputSIO, PortReturnsToThePadOnceTheCardCommandEnds) {
+  InputController input;
+  for (int i = 0; i < 2 + 8; ++i) // GetID: address, command, 8 replies
+    input.writeRegister(0x1F801040, i == 0 ? 0x81 : i == 1 ? 0x53 : 0x00);
+
+  const auto pad = padExchange(input, 2);
+
+  EXPECT_EQ(pad[1], 0x41);
+}
+
+// Port bounds
+
+TEST(InputPorts, OutOfRangePortsAreIgnored) {
+  InputController input;
+
+  input.press(BTN_CROSS, 2);
+  input.release(BTN_CROSS, -1);
+  input.setAnalog(2, 0, 0, 0, 0);
+  input.setPadType(-1, PadType::Analog);
+
+  EXPECT_EQ(input.buttonState(2), 0xFFFF);
+  EXPECT_EQ(input.getPadType(2), PadType::None);
+  EXPECT_EQ(input.buttonState(0), 0xFFFF);
+  EXPECT_EQ(input.getPadType(0), PadType::Digital);
+}
+
+// Memory card backing file
+
+namespace {
+std::string uniqueCardPath(const char *tag) {
+  static int counter = 0;
+  return (std::filesystem::temp_directory_path() /
+          ("ps1_test_card_" + std::to_string(::getpid()) + "_" +
+           std::to_string(++counter) + "_" + tag + ".mcd"))
+      .string();
+}
+
+// Writes `fill` to `sector` through the SIO write command, with a good
+// checksum.  Returns the final status byte.
+uint8_t writeSectorViaSio(MemoryCard &card, uint16_t sector, uint8_t fill) {
+  std::vector<uint8_t> send{0x81, 0x57, 0x00, 0x00,
+                            static_cast<uint8_t>(sector >> 8),
+                            static_cast<uint8_t>(sector & 0xFF)};
+  uint8_t chk = static_cast<uint8_t>((sector >> 8) ^ (sector & 0xFF));
+  for (int i = 0; i < 128; ++i) {
+    send.push_back(fill);
+    chk ^= fill;
+  }
+  send.push_back(chk);
+  send.insert(send.end(), {0x00, 0x00, 0x00});
+  uint8_t last = 0;
+  for (uint8_t b : send)
+    last = card.transfer(b);
+  return last;
+}
+} // namespace
+
+TEST(MemoryCardFile, AttachingAMissingFileCreatesAFormattedImage) {
+  const std::string path = uniqueCardPath("create");
+  MemoryCard card;
+
+  const bool ok = card.attachFile(path);
+
+  EXPECT_TRUE(ok);
+  std::ifstream f(path, std::ios::binary | std::ios::ate);
+  EXPECT_EQ(static_cast<uint32_t>(f.tellg()), MemoryCard::CARD_SIZE);
+  std::filesystem::remove(path);
+}
+
+TEST(MemoryCardFile, AttachingAnExistingFileLoadsIt) {
+  const std::string path = uniqueCardPath("load");
+  {
+    MemoryCard writer;
+    writer.image()[0x2000] = 0xAB;
+    ASSERT_TRUE(writer.saveToFile(path));
+  }
+  MemoryCard card;
+
+  ASSERT_TRUE(card.attachFile(path));
+
+  EXPECT_EQ(card.image()[0x2000], 0xAB);
+  std::filesystem::remove(path);
+}
+
+TEST(MemoryCardFile, ASioWriteIsFlushedToTheBackingFile) {
+  const std::string path = uniqueCardPath("flush");
+  MemoryCard card;
+  ASSERT_TRUE(card.attachFile(path));
+
+  ASSERT_EQ(writeSectorViaSio(card, 0x40, 0x5E), 0x47);
+
+  MemoryCard reloaded;
+  ASSERT_TRUE(reloaded.loadFromFile(path));
+  EXPECT_EQ(reloaded.image()[0x40 * 128], 0x5E);
+  std::filesystem::remove(path);
+}
+
+TEST(MemoryCardProtocol, WriteToAnOutOfRangeSectorEndsWithBadSector) {
+  // psx-spx "Writing Data to Memory Card": the end byte is FFh for a bad
+  // sector (valid sectors are 0..3FFh).
+  MemoryCard card;
+
+  EXPECT_EQ(writeSectorViaSio(card, 0x0400, 0x11), 0xFF);
+}
+
+TEST(MemoryCardFile, LoadingAMissingFileFails) {
+  MemoryCard card;
+
+  EXPECT_FALSE(card.loadFromFile(uniqueCardPath("missing")));
+}
+
+TEST(MemoryCardFile, SavingIntoAMissingDirectoryFails) {
+  MemoryCard card;
+
+  EXPECT_FALSE(card.saveToFile("/nonexistent_dir_ps1_test/card.mcd"));
+}
+
+TEST(MemoryCardFile, FlushWithoutABackingFileKeepsTheImage) {
+  MemoryCard card;
+  uint8_t sector[128];
+  std::memset(sector, 0x33, sizeof sector);
+
+  card.writeSector(5, sector);
+  card.flush();
+
+  uint8_t back[128];
+  card.readSector(5, back);
+  EXPECT_EQ(back[0], 0x33);
+  EXPECT_EQ(back[127], 0x33);
+}
+
+// Metrics
+
+TEST(MemoryCardMetrics, CommandsAreCountedWhenMetricsAreOn) {
+  ps1::metrics::reset();
+  ps1::metrics::setEnabledForTesting(true);
+  MemoryCard card;
+
+  for (uint8_t cmd : {0x52, 0x57, 0x53, 0x99}) {
+    card.transfer(0x81);
+    card.transfer(cmd);
+    card.reset(); // abandon the command
+  }
+
+  EXPECT_EQ(ps1::metrics::get("memcard.cmd.read"), 1u);
+  EXPECT_EQ(ps1::metrics::get("memcard.cmd.write"), 1u);
+  EXPECT_EQ(ps1::metrics::get("memcard.cmd.getid"), 1u);
+  EXPECT_EQ(ps1::metrics::get("memcard.cmd.unknown"), 1u);
+  ps1::metrics::setEnabledForTesting(false);
+  ps1::metrics::reset();
 }

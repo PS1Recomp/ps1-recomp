@@ -230,3 +230,54 @@ TEST_P(MdecDepthTest, RepeatedMacroblockDecodesIdentically) {
 
 // Depth 2 = 24bpp, 3 = 15bpp (psx-spx MDEC(1) bits 28-27).
 INSTANTIATE_TEST_SUITE_P(ColorDepths, MdecDepthTest, ::testing::Values(2u, 3u));
+
+namespace {
+
+std::vector<uint32_t> decodeAll(MDEC &mdec, const std::vector<uint16_t> &hw) {
+  const auto words = toWords(hw);
+  mdec.writeCommand(decodeCmd(3, static_cast<uint32_t>(words.size())));
+  mdec.dmaIn(words.data(), static_cast<uint32_t>(words.size()));
+  std::vector<uint32_t> out;
+  while (!mdec.dataOutEmpty())
+    out.push_back(mdec.readData());
+  return out;
+}
+
+} // namespace
+
+// A colored macroblock is Cr, Cb, Y1..Y4 (psx-spx "MDEC Decompression"); a
+// command whose data ends before the sixth block yields no pixels.
+class MdecTruncatedTest : public MdecTest,
+                          public ::testing::WithParamInterface<int> {};
+
+TEST_P(MdecTruncatedTest, MacroblockMissingBlocksProducesNoOutput) {
+  std::vector<uint16_t> hw;
+  for (int b = 0; b < GetParam(); b++)
+    appendBlock(hw, 0, {});
+
+  auto out = decodeAll(mdec, hw);
+
+  EXPECT_TRUE(out.empty());
+  EXPECT_FALSE(mdec.isBusy());
+}
+
+INSTANTIATE_TEST_SUITE_P(BlocksPresent, MdecTruncatedTest,
+                         ::testing::Values(1, 4, 5));
+
+// psx-spx rl_decode_block: any entry whose run steps past coefficient 63
+// ends the block ("should end with n=FE00h (that sets k>63)"), so a run-63
+// entry acts as the end code and its level is never stored.
+TEST_F(MdecTest, AcRunPastTheLastCoefficientEndsTheBlock) {
+  std::vector<uint16_t> flat, overflowing;
+  for (int b = 0; b < 6; b++) {
+    appendBlock(flat, 0, {});
+    overflowing.push_back(1u << 10); // q_scale 1, DC 0
+    overflowing.push_back(static_cast<uint16_t>((63u << 10) | 100));
+  }
+
+  auto expected = decodeAll(mdec, flat);
+  auto actual = decodeAll(mdec, overflowing);
+
+  ASSERT_FALSE(expected.empty());
+  EXPECT_EQ(actual, expected);
+}

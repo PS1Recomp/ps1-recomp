@@ -7,6 +7,7 @@
 
 #include "runtime/cpu_context.h"
 #include "runtime/memory.h"
+#include "runtime/metrics.h"
 #include "runtime/psyq/psyq_hle.h"
 #include "runtime/psyq/psyq_libetc.h"
 #include "runtime/psyq/psyq_libgpu.h"
@@ -226,3 +227,114 @@ TEST_F(PsyqHleContractTest, CallbackControlRoundTrips) {
 INSTANTIATE_TEST_SUITE_P(OtherNoops, PsyqNoopStubTest,
                          ::testing::Values("libgpu_TermPrim",
                                            "libcd_StCdInterrupt2"));
+
+// Stop/Restart report the state they found, whichever it was.
+TEST_F(PsyqHleContractTest, StopCallbackTwiceReportsAlreadyStopped) {
+  psyq_dispatch("libetc_StopCallback", &ctx);
+
+  psyq_dispatch("libetc_StopCallback", &ctx);
+
+  EXPECT_EQ(ctx.r[V0], 0u) << "already disabled";
+}
+
+TEST_F(PsyqHleContractTest, RestartCallbackWhileEnabledReportsEnabled) {
+  psyq_dispatch("libetc_RestartCallback", &ctx);
+
+  EXPECT_EQ(ctx.r[V0], 1u);
+  EXPECT_TRUE(psyq_state().callbacksEnabled);
+}
+
+// With PS1_METRICS on, every registration is counted per line and handler,
+// and a handler displaced from its line is counted too (one slot per line).
+class PsyqHleMetricsTest : public PsyqHleContractTest {
+protected:
+  void SetUp() override {
+    PsyqHleContractTest::SetUp();
+    metrics::reset();
+    metrics::setEnabledForTesting(true);
+  }
+  void TearDown() override {
+    metrics::setEnabledForTesting(false);
+    metrics::reset();
+    PsyqHleContractTest::TearDown();
+  }
+};
+
+TEST_F(PsyqHleMetricsTest, InterruptCallbackCountsRegistrationAndDisplacement) {
+  ctx.r[A0] = 0;
+  ctx.r[A1] = 0x8004B828;
+  psyq_dispatch("libetc_InterruptCallback", &ctx);
+  ctx.r[A1] = 0x80012345;
+
+  psyq_dispatch("libetc_InterruptCallback", &ctx);
+
+  EXPECT_EQ(metrics::get("psyq.intr_cb.0.8004B828"), 1u);
+  EXPECT_EQ(metrics::get("psyq.intr_cb.0.80012345"), 1u);
+  EXPECT_EQ(metrics::get("psyq.intr_cb_displaced.0.8004B828"), 1u);
+}
+
+TEST_F(PsyqHleMetricsTest, DmaCallbackCountsRegistration) {
+  ctx.r[A0] = 4;
+  ctx.r[A1] = 0x800466A0;
+
+  psyq_dispatch("libetc_DMACallback", &ctx);
+
+  EXPECT_EQ(metrics::get("psyq.dma_cb.4.800466A0"), 1u);
+}
+
+TEST_F(PsyqHleMetricsTest, DispatchCountsEveryHleCallByName) {
+  psyq_dispatch("libetc_CheckCallback", &ctx);
+  psyq_dispatch("libetc_CheckCallback", &ctx);
+
+  EXPECT_EQ(metrics::get("hle.libetc_CheckCallback"), 2u);
+}
+
+TEST_F(PsyqHleMetricsTest, VSyncCallbackCountsRegistrationAndDisplacement) {
+  ctx.r[A0] = 0x80030000;
+  hle_libgpu_VSyncCallback(&ctx);
+  ctx.r[A0] = 0x80031000;
+
+  hle_libgpu_VSyncCallback(&ctx);
+
+  EXPECT_EQ(ctx.r[V0], 0x80030000u) << "previous handler";
+  EXPECT_EQ(metrics::get("psyq.vsync_cb.80031000"), 1u);
+  EXPECT_EQ(metrics::get("psyq.vsync_cb_displaced.80030000"), 1u);
+}
+
+// _addque(exec, p1, p2) with no executor queues nothing and reports 0.
+TEST_F(PsyqHleContractTest, AddqueWithoutExecutorReturnsZero) {
+  ctx.r[A0] = 0;
+  ctx.r[A1] = 0x80100000;
+  ctx.r[A2] = 0x80100010;
+  ctx.r[V0] = 0xFFFFFFFF;
+
+  psyq_dispatch("libgpu__addque", &ctx);
+
+  EXPECT_EQ(ctx.r[V0], 0u);
+  EXPECT_TRUE(gp0.empty());
+}
+
+// Headless runtime (no GPU sink wired): the GPU entry points keep their
+// return contract -- DrawOTag 0, Put*Env the env pointer (psyz sys.c).
+TEST_F(PsyqHleContractTest, HeadlessDrawOTagReturnsZero) {
+  configure(HleConfig{});
+  ctx.r[A0] = 0x80100000;
+  ctx.r[V0] = 0xFFFFFFFF;
+
+  psyq_dispatch("libgpu_DrawOTag", &ctx);
+
+  EXPECT_EQ(ctx.r[V0], 0u);
+}
+
+TEST_F(PsyqHleContractTest, HeadlessPutDispEnvAndPutDrawEnvReturnTheEnv) {
+  configure(HleConfig{});
+
+  ctx.r[A0] = 0x80100100;
+  psyq_dispatch("libgpu_PutDispEnv", &ctx);
+  const uint32_t disp = ctx.r[V0];
+  ctx.r[A0] = 0x80100200;
+  psyq_dispatch("libgpu_PutDrawEnv", &ctx);
+
+  EXPECT_EQ(disp, 0x80100100u);
+  EXPECT_EQ(ctx.r[V0], 0x80100200u);
+}

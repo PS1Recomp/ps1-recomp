@@ -698,3 +698,116 @@ TEST(PsyqCdWait, CdSyncTimesOutAfter300VBlanks) {
   configure(HleConfig{});
   psyq_state().reset();
 }
+
+// CdControl result drain, blocking waits and degraded wiring
+
+TEST_F(PsyqCdTest, CdControlCopiesTheStatusResponseIntoResult) {
+  const uint32_t resultPtr = 0x80100300u;
+  for (int i = 0; i < 4; ++i) mem.write8(resultPtr + i, 0xAA);
+  ctx.r[A0] = 0x01; // CdlGetstat
+  ctx.r[A1] = 0;
+  ctx.r[A2] = resultPtr;
+
+  hle_libcd_CdControl(&ctx);
+
+  // psx-spx: Getstat -> INT3(stat); stat bit 1 = motor on.
+  EXPECT_EQ(ctx.r[V0], 1u);
+  EXPECT_EQ(mem.read8(resultPtr), 0x02u);
+  EXPECT_EQ(mem.read8(resultPtr + 1), 0u) << "response FIFO drained";
+}
+
+TEST_F(PsyqCdTest, CdControlPassesTheTestSubfunctionParameter) {
+  const uint32_t paramPtr = 0x80100310u, resultPtr = 0x80100320u;
+  mem.write8(paramPtr, 0x20); // Test(20h): controller BIOS date/version
+  ctx.r[A0] = 0x19;
+  ctx.r[A1] = paramPtr;
+  ctx.r[A2] = resultPtr;
+
+  hle_libcd_CdControl(&ctx);
+
+  // psx-spx "19h,20h --> INT3(yy,mm,dd,ver)", e.g. 98h,06h,10h,C3h.
+  EXPECT_EQ(mem.read8(resultPtr + 0), 0x98u);
+  EXPECT_EQ(mem.read8(resultPtr + 1), 0x06u);
+  EXPECT_EQ(mem.read8(resultPtr + 2), 0x10u);
+  EXPECT_EQ(mem.read8(resultPtr + 3), 0xC3u);
+}
+
+TEST_F(PsyqCdTest, CdControlFReturnsZeroWithoutController) {
+  bios->setCdromController(nullptr);
+  ctx.r[A0] = 0x09;
+  ctx.r[A1] = 0;
+
+  hle_libcd_CdControlF(&ctx);
+
+  EXPECT_EQ(ctx.r[V0], 0u);
+}
+
+TEST_F(PsyqCdTest, CdSyncBlockingReturnsTheNextCompletionCode) {
+  HleConfig cfg{};
+  cfg.drainCallbacks = [] { psyq::psyq_state().cdSyncByte.store(2); };
+  configure(cfg);
+  ctx.r[A0] = 0; // block
+  ctx.r[A1] = 0;
+
+  hle_libcd_CdSync(&ctx);
+
+  EXPECT_EQ(ctx.r[V0], 2u); // CdlComplete
+  configure(HleConfig{});
+}
+
+TEST_F(PsyqCdTest, CdReadyFillsResultStructWhenProvided) {
+  HleConfig cfg{};
+  configure(cfg);
+  const uint32_t resultPtr = 0x80100400u;
+  for (int i = 0; i < 8; ++i) mem.write8(resultPtr + i, 0xAA);
+  psyq::psyq_state().cdReadyByte.store(4); // CdlDataEnd
+  ctx.r[A0] = 1;
+  ctx.r[A1] = resultPtr;
+
+  hle_libcd_CdReady(&ctx);
+
+  EXPECT_EQ(mem.read8(resultPtr), 4u);
+  for (int i = 1; i < 8; ++i)
+    EXPECT_EQ(mem.read8(resultPtr + i), 0u) << "byte " << i;
+}
+
+TEST_F(PsyqCdTest, CdReadSyncGivesUpAfter300VBlanksAndClearsResult) {
+  HleConfig cfg{};
+  cfg.drainCallbacks = [] {
+    psyq::psyq_state().vsyncCounter.fetch_add(1, std::memory_order_release);
+  };
+  configure(cfg);
+  const uint32_t resultPtr = 0x80100500u;
+  for (int i = 0; i < 8; ++i) mem.write8(resultPtr + i, 0xAA);
+  psyq::psyq_state().cdRemaining = 2; // nothing ever delivers the sectors
+  ctx.r[A0] = 0;
+  ctx.r[A1] = resultPtr;
+
+  hle_libcd_CdReadSync(&ctx);
+
+  EXPECT_EQ(static_cast<int32_t>(ctx.r[V0]), -1);
+  for (int i = 0; i < 8; ++i)
+    EXPECT_EQ(mem.read8(resultPtr + i), 0u) << "byte " << i;
+  configure(HleConfig{});
+}
+
+TEST_F(PsyqCdTest, CdReadBreakWithoutControllerStillDisarmsTheRead) {
+  bios->setCdromController(nullptr);
+  psyq::psyq_state().cdRemaining = 5;
+  psyq::psyq_state().cdDestPtr = 0x80100000u;
+
+  hle_libcd_CdReadBreak(&ctx);
+
+  EXPECT_EQ(ctx.r[V0], 1u);
+  EXPECT_EQ(psyq::psyq_state().cdRemaining, 0u);
+  EXPECT_EQ(psyq::psyq_state().cdDestPtr, 0u);
+}
+
+TEST_F(PsyqCdTest, CdDatasyncReportsReady) {
+  psyq_register_libcd();
+  ctx.r[V0] = 0xFFFFFFFFu;
+
+  psyq_dispatch("libcd_CD_datasync", &ctx);
+
+  EXPECT_EQ(ctx.r[V0], 0u);
+}

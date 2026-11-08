@@ -148,3 +148,228 @@ TEST(Timer, BulkTickMatchesSingleCycleTicks) {
     }
   }
 }
+
+// Register map and clock sources
+//
+// Contract: psx-spx timers.md "1F801100h+N*10h - Timer 0..2".
+
+namespace {
+constexpr uint32_t counterReg(uint32_t t) { return 0x1F801100 + t * 0x10; }
+constexpr uint32_t modeReg(uint32_t t) { return 0x1F801104 + t * 0x10; }
+constexpr uint32_t targetReg(uint32_t t) { return 0x1F801108 + t * 0x10; }
+constexpr uint16_t kSourceAlt = 1u << 8; // clock source 1
+constexpr uint16_t kSourceDiv8 = 2u << 8;
+constexpr uint16_t kIrqOnTarget = 1u << 4;
+constexpr uint16_t kIrqOnOverflow = 1u << 5;
+constexpr uint16_t kIrqRepeat = 1u << 6;
+constexpr uint16_t kResetOnTarget = 1u << 3;
+} // namespace
+
+TEST(Timer, TargetRegisterReadsBack) {
+  Timers timers;
+
+  timers.writeRegister(targetReg(2), 0x1234);
+
+  EXPECT_EQ(timers.readRegister(targetReg(2)), 0x1234);
+}
+
+TEST(Timer, CounterRegisterIsWritable) {
+  Timers timers;
+
+  timers.writeRegister(counterReg(1), 0x0042);
+
+  EXPECT_EQ(timers.readRegister(counterReg(1)), 0x0042);
+}
+
+TEST(Timer, ModeRegisterReadsBackItsControlBits) {
+  Timers timers;
+
+  timers.writeRegister(modeReg(0), kIrqOnTarget | kResetOnTarget);
+
+  EXPECT_EQ(timers.readRegister(modeReg(0)) & 0x3FF, kIrqOnTarget | kResetOnTarget);
+}
+
+TEST(Timer, ThereIsNoFourthTimer) {
+  Timers timers;
+
+  timers.writeRegister(0x1F801138, 0x1234); // would be timer 3 target
+
+  EXPECT_EQ(timers.readRegister(0x1F801138), 0);
+  EXPECT_EQ(timers.readRegister(targetReg(0)), 0) << "must not alias timer 0";
+}
+
+TEST(Timer, UnusedRegisterSlotReadsZero) {
+  Timers timers;
+
+  EXPECT_EQ(timers.readRegister(0x1F80110C), 0);
+}
+
+TEST(Timer, ReachingTheTargetSetsModeBit11) {
+  Timers timers;
+  timers.writeRegister(modeReg(0), 0);
+  timers.writeRegister(targetReg(0), 10);
+
+  timers.tick(10);
+
+  EXPECT_NE(timers.readRegister(modeReg(0)) & (1u << 11), 0u);
+  EXPECT_EQ(timers.readRegister(modeReg(0)) & (1u << 12), 0u) << "no wrap yet";
+}
+
+TEST(Timer, WrappingPastFfffSetsModeBit12) {
+  Timers timers;
+  timers.writeRegister(modeReg(0), 0);
+  timers.writeRegister(counterReg(0), 0xFFFF);
+
+  timers.tick(1);
+
+  EXPECT_NE(timers.readRegister(modeReg(0)) & (1u << 12), 0u);
+}
+
+TEST(Timer, WritingTheModeClearsTheReachedFlags) {
+  Timers timers;
+  timers.writeRegister(targetReg(0), 10);
+  timers.tick(10);
+
+  timers.writeRegister(modeReg(0), 0);
+
+  EXPECT_EQ(timers.readRegister(modeReg(0)) & (3u << 11), 0u);
+}
+
+TEST(Timer, Timer0CountsDotclockPulsesWhenSourceIsDotclock) {
+  Timers timers;
+  timers.writeRegister(modeReg(0), kSourceAlt);
+
+  timers.tick(1000, false, true); // one dotclock pulse
+  timers.tick(1000, false, false); // system clock only
+
+  EXPECT_EQ(timers.readRegister(counterReg(0)), 1);
+}
+
+TEST(Timer, Timer1CountsHblanksWhenSourceIsHblank) {
+  Timers timers;
+  timers.writeRegister(modeReg(1), kSourceAlt);
+
+  timers.tick(1000, true, false);
+  timers.tick(1000, true, false);
+  timers.tick(1000, false, false);
+
+  EXPECT_EQ(timers.readRegister(counterReg(1)), 2);
+}
+
+TEST(Timer, Timer1CountsTheSystemClockBySource0) {
+  Timers timers;
+
+  timers.tick(300);
+
+  EXPECT_EQ(timers.readRegister(counterReg(1)), 300);
+}
+
+TEST(Timer, Timer2DividesTheSystemClockByEightForSource2) {
+  Timers timers;
+  timers.writeRegister(modeReg(2), kSourceDiv8);
+
+  timers.tick(800);
+
+  EXPECT_EQ(timers.readRegister(counterReg(2)), 100);
+}
+
+TEST(Timer, Timer2DividesTheSystemClockByEightForSource3) {
+  Timers timers;
+  timers.writeRegister(modeReg(2), 3u << 8);
+
+  timers.tick(80);
+
+  EXPECT_EQ(timers.readRegister(counterReg(2)), 10);
+}
+
+TEST(Timer, Timer2CountsTheSystemClockForSource1) {
+  Timers timers;
+  timers.writeRegister(modeReg(2), kSourceAlt);
+
+  timers.tick(80);
+
+  EXPECT_EQ(timers.readRegister(counterReg(2)), 80);
+}
+
+TEST(Timer, Timer1TargetIrqIsReportedAsTmr1) {
+  Timers timers;
+  timers.writeRegister(targetReg(1), 20);
+  timers.writeRegister(modeReg(1), kIrqOnTarget);
+
+  const uint32_t irqs = timers.tick(20);
+
+  EXPECT_EQ(irqs, static_cast<uint32_t>(IRQ_TMR1));
+}
+
+TEST(Timer, Timer2TargetIrqIsReportedAsTmr2) {
+  Timers timers;
+  timers.writeRegister(targetReg(2), 20);
+  timers.writeRegister(modeReg(2), kIrqOnTarget);
+
+  const uint32_t irqs = timers.tick(20);
+
+  EXPECT_EQ(irqs, static_cast<uint32_t>(IRQ_TMR2));
+}
+
+TEST(Timer, OneShotIrqFiresOnlyOnceUntilTheModeIsRewritten) {
+  Timers timers;
+  timers.writeRegister(targetReg(0), 10);
+  timers.writeRegister(modeReg(0), kIrqOnTarget | kResetOnTarget);
+
+  const uint32_t first = timers.tick(10);
+  const uint32_t second = timers.tick(10);
+
+  EXPECT_EQ(first, static_cast<uint32_t>(IRQ_TMR0));
+  EXPECT_EQ(second, 0u);
+}
+
+TEST(Timer, RepeatIrqFiresOnEveryTargetHit) {
+  Timers timers;
+  timers.writeRegister(targetReg(0), 10);
+  timers.writeRegister(modeReg(0), kIrqOnTarget | kResetOnTarget | kIrqRepeat);
+
+  timers.tick(10);
+  const uint32_t second = timers.tick(10);
+
+  EXPECT_EQ(second, static_cast<uint32_t>(IRQ_TMR0));
+}
+
+TEST(Timer, OverflowIrqIsNotRaisedWhenOnlyTargetIrqIsEnabled) {
+  Timers timers;
+  timers.writeRegister(targetReg(0), 0x100);
+  timers.writeRegister(modeReg(0), kIrqOnTarget);
+  timers.writeRegister(counterReg(0), 0xFFF0);
+
+  const uint32_t irqs = timers.tick(0x20); // wraps, stays below the target
+
+  EXPECT_EQ(irqs, 0u);
+}
+
+TEST(Timer, OverflowIrqWithRepeatFiresOnEveryWrap) {
+  Timers timers;
+  timers.writeRegister(modeReg(0), kIrqOnOverflow | kIrqRepeat);
+
+  timers.tick(0x10000);
+  const uint32_t second = timers.tick(0x10000);
+
+  EXPECT_EQ(second, static_cast<uint32_t>(IRQ_TMR0));
+}
+
+TEST(InterruptController, MaskKeepsOnlyTheElevenSources) {
+  InterruptController ic;
+
+  ic.writeIMask(0xFFFFFFFF);
+
+  EXPECT_EQ(ic.readIMask(), 0x7FFu);
+}
+
+TEST(InterruptController, ResetClearsStatusAndMask) {
+  InterruptController ic;
+  ic.writeIMask(IRQ_DMA);
+  ic.raiseInterrupt(IRQ_DMA);
+
+  ic.reset();
+
+  EXPECT_EQ(ic.readIStat(), 0u);
+  EXPECT_EQ(ic.readIMask(), 0u);
+}

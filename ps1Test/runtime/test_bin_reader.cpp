@@ -2,6 +2,8 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <string>
+#include <unistd.h>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -9,7 +11,10 @@ namespace fs = std::filesystem;
 class BinReaderTest : public ::testing::Test {
 protected:
   void SetUp() override {
-    testBinPath = fs::temp_directory_path() / "test_dummy.bin";
+    static int counter = 0;
+    testBinPath = fs::temp_directory_path() /
+                  ("ps1_bin_" + std::to_string(getpid()) + "_" +
+                   std::to_string(counter++) + ".bin");
     std::ofstream off(testBinPath, std::ios::binary);
 
     // Create 2 dummy sectors (4704 bytes)
@@ -60,4 +65,29 @@ TEST_F(BinReaderTest, ReadInvalidSector) {
 
   auto s2 = reader.readSector(2); // Out of bounds
   EXPECT_FALSE(s2.has_value());
+}
+
+TEST_F(BinReaderTest, OpeningAMissingFileFails) {
+  ps1::cdrom::BinReader reader;
+
+  bool ok = reader.open(testBinPath.string() + ".absent");
+
+  EXPECT_FALSE(ok);
+  EXPECT_EQ(reader.getTotalSectors(), 0u);
+}
+
+TEST_F(BinReaderTest, ReadingBeforeOpenReturnsNothing) {
+  ps1::cdrom::BinReader reader;
+
+  EXPECT_FALSE(reader.readSector(0).has_value());
+}
+
+// Sector count is whole 2352-byte sectors; a trailing partial one is ignored.
+TEST_F(BinReaderTest, TrailingPartialSectorIsNotCounted) {
+  fs::resize_file(testBinPath, ps1::cdrom::SECTOR_SIZE_RAW * 2 + 100);
+  ps1::cdrom::BinReader reader;
+  ASSERT_TRUE(reader.open(testBinPath));
+
+  EXPECT_EQ(reader.getTotalSectors(), 2u);
+  EXPECT_FALSE(reader.readSector(2).has_value());
 }

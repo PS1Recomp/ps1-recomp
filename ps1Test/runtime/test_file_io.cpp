@@ -94,3 +94,64 @@ TEST_F(FileIOTest, CloseFreesFd) {
   int32_t fd2 = file_io->open("SYSTEM.CNF", 0);
   EXPECT_EQ(fd2, fd);
 }
+
+// Contract: psx-spx kernelbios.md "BIOS File Functions" -- open/read/close
+// return -1 on failure; "The PSX can have a maximum of 16 files open at any
+// time"; lseek seektype 0 = from start, 1 = from current, 2 = from end.
+
+TEST_F(FileIOTest, OpeningMoreThanSixteenFilesFails) {
+  for (int i = 0; i < 16; ++i)
+    ASSERT_GE(file_io->open("SYSTEM.CNF", 1), 0) << i;
+
+  const int32_t fd = file_io->open("SYSTEM.CNF", 1);
+
+  EXPECT_EQ(fd, -1);
+}
+
+TEST_F(FileIOTest, LeadingSlashesAndVersionSuffixAreNotPartOfTheName) {
+  const int32_t fd = file_io->open("cdrom:\\\\/SYSTEM.CNF;1", 1);
+
+  ASSERT_GE(fd, 0);
+  EXPECT_EQ(file_io->read(fd, 0x80000000, 4), 4);
+  EXPECT_EQ(mem->read8(0x80000000), 'B');
+}
+
+TEST_F(FileIOTest, ReadOfAClosedOrInvalidHandleFails) {
+  const int32_t fd = file_io->open("SYSTEM.CNF", 1);
+  file_io->close(fd);
+
+  EXPECT_EQ(file_io->read(fd, 0x80000000, 4), -1);
+  EXPECT_EQ(file_io->read(-1, 0x80000000, 4), -1);
+  EXPECT_EQ(file_io->read(16, 0x80000000, 4), -1);
+}
+
+TEST_F(FileIOTest, CloseOfAnInvalidHandleFails) {
+  EXPECT_EQ(file_io->close(3), -1);
+  EXPECT_EQ(file_io->close(-1), -1);
+  EXPECT_EQ(file_io->close(16), -1);
+}
+
+TEST_F(FileIOTest, LseekOfAnInvalidHandleFails) {
+  EXPECT_EQ(file_io->lseek(5, 0, 0), -1);
+}
+
+TEST_F(FileIOTest, LseekWithAnUnknownSeektypeFailsAndKeepsThePosition) {
+  const int32_t fd = file_io->open("SYSTEM.CNF", 1);
+  file_io->lseek(fd, 5, 0);
+
+  EXPECT_EQ(file_io->lseek(fd, 0, 3), -1);
+  EXPECT_EQ(file_io->lseek(fd, 0, 1), 5);
+}
+
+TEST_F(FileIOTest, ReadTellsTheOverlayManagerWhichRamItWrote) {
+  // Loading code from disc is how an overlay arrives; the manager activates
+  // the overlay whose RAM range the read covered.
+  OverlayManager overlays;
+  overlays.registerOverlay("OVL", 0x80000000, 4, 0);
+  file_io->setOverlayManager(&overlays);
+  const int32_t fd = file_io->open("SYSTEM.CNF", 1);
+
+  file_io->read(fd, 0x80000000, 4);
+
+  EXPECT_TRUE(overlays.isActive("OVL"));
+}

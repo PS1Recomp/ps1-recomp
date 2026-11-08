@@ -5,9 +5,26 @@
 #include <cstdio>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <cstdlib>
 #include <sstream>
+#include <string>
+#include <unistd.h>
 
 namespace {
+
+// Unique per process and call, so parallel ctest runs never share a file.
+std::string uniqueJsonPath(const char *tag) {
+  static int counter = 0;
+  return "/tmp/ps1_metrics_" + std::to_string(::getpid()) + "_" +
+         std::to_string(++counter) + "_" + tag + ".json";
+}
+
+std::string slurp(const std::string &path) {
+  std::ifstream in(path);
+  std::stringstream buf;
+  buf << in.rdbuf();
+  return buf.str();
+}
 
 class MetricsTest : public ::testing::Test {
 protected:
@@ -54,8 +71,8 @@ TEST_F(MetricsTest, DumpJsonWritesCountersAndState) {
   ps1::metrics::count("frames", 42);
   ps1::metrics::setState("display.y", -7);
 
-  const char *path = "/tmp/ps1_metrics_dump_test.json";
-  std::remove(path);
+  const std::string pathStr = uniqueJsonPath("dump");
+  const char *path = pathStr.c_str();
   ASSERT_TRUE(ps1::metrics::dumpJsonTo(path));
 
   std::ifstream in(path);
@@ -107,3 +124,68 @@ TEST_F(MetricsTest, GpuPublishMetricsReportsTrafficBetweenCalls) {
 }
 
 } // namespace
+
+TEST_F(MetricsTest, DumpJsonToANullPathFails) {
+  EXPECT_FALSE(ps1::metrics::dumpJsonTo(nullptr));
+}
+
+TEST_F(MetricsTest, DumpJsonToAnUnwritablePathFails) {
+  EXPECT_FALSE(ps1::metrics::dumpJsonTo("/nonexistent_dir_ps1_test/m.json"));
+}
+
+TEST_F(MetricsTest, AnEmptyCollectorDumpsEmptySections) {
+  const std::string path = uniqueJsonPath("empty");
+
+  ASSERT_TRUE(ps1::metrics::dumpJsonTo(path.c_str()));
+
+  const std::string body = slurp(path);
+  EXPECT_NE(body.find("\"counters\": {  }"), std::string::npos) << body;
+  EXPECT_NE(body.find("\"state\": {  }"), std::string::npos) << body;
+  std::remove(path.c_str());
+}
+
+TEST_F(MetricsTest, SeveralEntriesAreCommaSeparatedInNameOrder) {
+  ps1::metrics::count("b", 2);
+  ps1::metrics::count("a", 1);
+  ps1::metrics::setState("y", 4);
+  ps1::metrics::setState("x", 3);
+  const std::string path = uniqueJsonPath("many");
+
+  ASSERT_TRUE(ps1::metrics::dumpJsonTo(path.c_str()));
+
+  const std::string body = slurp(path);
+  EXPECT_NE(body.find("\"a\": 1,\n    \"b\": 2\n"), std::string::npos) << body;
+  EXPECT_NE(body.find("\"x\": 3,\n    \"y\": 4\n"), std::string::npos) << body;
+  std::remove(path.c_str());
+}
+
+TEST_F(MetricsTest, DisabledCollectorKeepsNoState) {
+  ps1::metrics::setEnabledForTesting(false);
+
+  ps1::metrics::setState("ignored", 9);
+
+  EXPECT_EQ(ps1::metrics::getState("ignored"), 0);
+}
+
+TEST_F(MetricsTest, UnknownStateReadsZero) {
+  EXPECT_EQ(ps1::metrics::getState("never.set"), 0);
+}
+
+TEST_F(MetricsTest, DumpJsonDoesNothingWhileDisabled) {
+  ps1::metrics::setEnabledForTesting(false);
+
+  EXPECT_FALSE(ps1::metrics::dumpJson());
+}
+
+TEST_F(MetricsTest, DumpJsonWritesToThePathNamedByPs1Metrics) {
+  const std::string path = uniqueJsonPath("env");
+  ps1::metrics::count("frames", 3);
+  ::setenv("PS1_METRICS", path.c_str(), 1);
+
+  const bool ok = ps1::metrics::dumpJson();
+  ::unsetenv("PS1_METRICS");
+
+  EXPECT_TRUE(ok);
+  EXPECT_NE(slurp(path).find("\"frames\": 3"), std::string::npos);
+  std::remove(path.c_str());
+}

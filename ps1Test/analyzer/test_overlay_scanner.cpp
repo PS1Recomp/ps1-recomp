@@ -285,3 +285,154 @@ TEST(OverlayScannerTest, ExportTomlEmpty) {
   EXPECT_NE(toml.find("Auto-generated"), std::string::npos);
   EXPECT_EQ(toml.find("[[overlays]]"), std::string::npos);
 }
+
+// Instruction-class validity (psx-spx "CPU Opcode Encoding")
+
+TEST(OverlayScannerTest, MipsScoreAcceptsTheFourRegimmBranchesOnly) {
+  // bltz bgez bltzal bgezal, then rt=2 and rt=0x12 (reserved).
+  auto code = makeMipsCode({0x04800001, 0x04810001, 0x04900001, 0x04910001,
+                            0x04820001, 0x04920001});
+
+  float score = OverlayScanner::computeMipsScore(code.data(), code.size());
+
+  EXPECT_FLOAT_EQ(score, 4.0f / 6.0f);
+}
+
+TEST(OverlayScannerTest, MipsScoreAcceptsMfc0Mtc0AndRfeOnly) {
+  // mfc0, mtc0, rfe (CO), then rs=1 and rs=8 (not on the R3000A).
+  auto code = makeMipsCode({0x40026000, 0x40826000, 0x42000010, 0x40226000,
+                            0x41026000});
+
+  float score = OverlayScanner::computeMipsScore(code.data(), code.size());
+
+  EXPECT_FLOAT_EQ(score, 3.0f / 5.0f);
+}
+
+TEST(OverlayScannerTest, MipsScoreCountsEveryCop2WordAsGte) {
+  auto code = makeMipsCode({0x4A180001 /* rtps */, 0x48024800 /* mfc2 */});
+
+  EXPECT_FLOAT_EQ(OverlayScanner::computeMipsScore(code.data(), code.size()), 1.0f);
+}
+
+TEST(OverlayScannerTest, MipsScoreRejectsReservedSpecialFunctions) {
+  // funct 0x01 and 0x3F are reserved; addu (0x21) is valid.
+  auto code = makeMipsCode({0x00851001, 0x0085103F, 0x00851021, 0x00851021});
+
+  EXPECT_FLOAT_EQ(OverlayScanner::computeMipsScore(code.data(), code.size()), 0.5f);
+}
+
+TEST(OverlayScannerTest, DetectFunctionsNeedsAtLeastTwoWords) {
+  auto code = makeMipsCode({0x27BDFFE8});
+
+  auto [score, funcs] = OverlayScanner::detectFunctions(code.data(), code.size(),
+                                                        0x80100000);
+
+  EXPECT_FLOAT_EQ(score, 0.0f);
+  EXPECT_TRUE(funcs.empty());
+}
+
+TEST(OverlayScannerTest, DetectFunctionsIgnoresPositiveAndNonSpAdjustments) {
+  // addiu sp,sp,+24 (epilogue), addiu a0,sp,-24, addiu sp,a0,-24.
+  auto code = makeMipsCode({0x27BD0018, 0x27A4FFE8, 0x249DFFE8, 0x00000000});
+
+  auto [score, funcs] = OverlayScanner::detectFunctions(code.data(), code.size(),
+                                                        0x80100000);
+
+  EXPECT_TRUE(funcs.empty());
+}
+
+TEST(OverlayScannerTest, InferRamBaseIgnoresLuiOutsideMainRam) {
+  // lui $at, 0x1F80 (I/O ports) and 0xA000 (KSEG1) are not RAM references.
+  auto code = makeMipsCode({0x3C011F80, 0x3C01A000, 0x00000000});
+
+  EXPECT_EQ(OverlayScanner::inferRamBase(code.data(), code.size()), 0u);
+}
+
+TEST(OverlayScannerTest, InferRamBaseUsesTheMostFrequentUpperHalf) {
+  // 0x8010 twice, 0x8004 once: the overlay lives at 0x8010xxxx.
+  auto code = makeMipsCode({0x3C048004, 0x3C048010, 0x3C058010, 0x00000000});
+
+  EXPECT_EQ(OverlayScanner::inferRamBase(code.data(), code.size()), 0x80100000u);
+}
+
+TEST(OverlayScannerTest, InferRamBaseIgnoresLowHalfOnAnotherRegister) {
+  // lui $a0, 0x8010 ; ori $a1, $a1, 0x0900 -- the ori is not paired.
+  auto code = makeMipsCode({0x3C048010, 0x34A50900, 0x00000000});
+
+  EXPECT_EQ(OverlayScanner::inferRamBase(code.data(), code.size()), 0x80100000u);
+}
+
+TEST(OverlayScannerTest, InferRamBaseIgnoresPairsBelowKseg0) {
+  // lui 0x8000 + addiu -16 sign-extends to 0x7FFFFFF0, outside KSEG0.
+  auto code = makeMipsCode({0x3C048000, 0x2484FFF0, 0x00000000});
+
+  EXPECT_EQ(OverlayScanner::inferRamBase(code.data(), code.size()), 0x80000000u);
+}
+
+TEST(OverlayScannerTest, InferRamBaseKeepsTheLowestPairedAddress) {
+  // 0x80101000 then 0x80100900: the lower one, 2 KB aligned, is the base.
+  auto code = makeMipsCode({0x3C048010, 0x34841000, 0x3C058010, 0x34A50900,
+                            0x3C068010, 0x34C61800, 0x00000000});
+
+  EXPECT_EQ(OverlayScanner::inferRamBase(code.data(), code.size()), 0x80100800u);
+}
+
+TEST(OverlayScannerTest, ScanFileBelowMinimumSizeIsNotAnalysed) {
+  OverlayScanner scanner;
+  OverlayScanOptions opts;
+  auto exe = makePsxExe(0x80100000, 0x80100000, 16);
+  opts.minCodeSize = static_cast<uint32_t>(exe.size() + 1);
+
+  auto result = scanner.scanFile(exe, "TINY.EXE", opts);
+
+  EXPECT_FALSE(result.hasPsxExeHeader);
+  EXPECT_FALSE(result.isLikelyCode());
+  EXPECT_EQ(result.fileSize, exe.size());
+}
+
+TEST(OverlayScannerTest, ValidMipsWithoutFunctionsIsNotLikelyCode) {
+  OverlayCandidate c{};
+  c.mipsScore = 0.9f;
+  c.functionScore = 0.05f;
+
+  EXPECT_FALSE(c.isLikelyCode());
+}
+
+TEST(OverlayScannerTest, ExportTomlSkipsCandidatesThatAreNotCode) {
+  OverlayCandidate c{};
+  c.name = "DATA.BIN";
+  c.mipsScore = 0.1f;
+
+  auto toml = OverlayScanner::exportToml({c});
+
+  EXPECT_EQ(toml.find("[[overlays]]"), std::string::npos);
+}
+
+TEST(OverlayScannerTest, ExportTomlSanitisesTheOverlayName) {
+  OverlayCandidate dashed{};
+  dashed.name = "MY-OVL.BIN";
+  dashed.hasPsxExeHeader = true;
+  OverlayCandidate versioned{};
+  versioned.name = "STAGE1;1";
+  versioned.hasPsxExeHeader = true;
+
+  auto toml = OverlayScanner::exportToml({dashed, versioned});
+
+  // Extension and ISO9660 version are dropped; other punctuation becomes '_'.
+  EXPECT_NE(toml.find("name = \"MY_OVL\""), std::string::npos) << toml;
+  EXPECT_NE(toml.find("name = \"STAGE1\""), std::string::npos) << toml;
+  EXPECT_NE(toml.find("# PS-X EXE: yes"), std::string::npos);
+}
+
+TEST(OverlayScannerTest, ExportTomlOmitsEmptyFunctionList) {
+  OverlayCandidate c{};
+  c.name = "RAW.BIN";
+  c.mipsScore = 0.9f;
+  c.functionScore = 0.5f;
+
+  auto toml = OverlayScanner::exportToml({c});
+
+  EXPECT_NE(toml.find("[[overlays]]"), std::string::npos);
+  EXPECT_EQ(toml.find("functions = ["), std::string::npos);
+  EXPECT_NE(toml.find("# PS-X EXE: no"), std::string::npos);
+}
