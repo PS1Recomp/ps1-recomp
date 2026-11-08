@@ -79,3 +79,28 @@ TEST_F(GpuDisplayTest, DisplayModeSetsGpuStatCorrectly) {
   EXPECT_NE(stat & (1 << 21), 0); // Depth
   EXPECT_NE(stat & (1 << 22), 0); // Interlace
 }
+
+// The window shows the largest centred 4:3 picture, never the stretched full
+// window, and never a small one: a 450-line window used to get only 240.
+#include "runtime/gpu/renderer_opengl.h"
+
+TEST(Viewport, FullHdFillsTheHeightCentred) {
+  const auto vp = ps1::gpu::fitViewport(1920, 1080);
+  EXPECT_EQ(vp.h, 1080);
+  EXPECT_EQ(vp.w, 1440);
+  EXPECT_EQ(vp.x, 240);
+  EXPECT_EQ(vp.y, 0);
+}
+
+TEST(Viewport, ShortWindowIsNotShrunkToOneScanlineMultiple) {
+  const auto vp = ps1::gpu::fitViewport(930, 450);
+  EXPECT_EQ(vp.h, 450);
+  EXPECT_EQ(vp.w, 600);
+}
+
+TEST(Viewport, NarrowWindowKeepsFourThreeByWidth) {
+  const auto vp = ps1::gpu::fitViewport(400, 1000);
+  EXPECT_EQ(vp.w, 400);
+  EXPECT_EQ(vp.h, 300);
+  EXPECT_EQ(vp.y, 350);
+}

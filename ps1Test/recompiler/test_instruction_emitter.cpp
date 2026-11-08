@@ -136,10 +136,10 @@ TEST(InstructionEmitter, MulDiv) {
   EXPECT_NE(code.find("ctx->r2"), std::string::npos);
   EXPECT_NE(code.find("ctx->lo"), std::string::npos);
 
-  // DIV -- should check for zero
+  // DIV -- the runtime helper handles a zero divisor
   code = emitter.emitInstruction(MipsDecoder::decode(encR(0, 4, 5, 0, 0, 0x1A)),
                                  0);
-  EXPECT_NE(code.find("!= 0"), std::string::npos);
+  EXPECT_NE(code.find("DO_DIV(ctx"), std::string::npos);
 }
 
 // Load/Store Tests
@@ -321,13 +321,13 @@ TEST(InstructionEmitter, GTE_RegisterMoves) {
   // MFC2 $v0, r5
   auto code = emitter.emitInstruction(
       MipsDecoder::decode(encR(0x12, 0x00, 2, 5, 0, 0)), 0);
-  EXPECT_NE(code.find("cop2d"), std::string::npos);
+  EXPECT_NE(code.find("gte_read_data(ctx, 5)"), std::string::npos);
   EXPECT_NE(code.find("ctx->r2"), std::string::npos);
 
   // MTC2 $v0, r5
   code = emitter.emitInstruction(
       MipsDecoder::decode(encR(0x12, 0x04, 2, 5, 0, 0)), 0);
-  EXPECT_NE(code.find("cop2d"), std::string::npos);
+  EXPECT_NE(code.find("gte_write_data(ctx, 5, ctx->r2)"), std::string::npos);
 }
 
 TEST(InstructionEmitter, GTE_Commands) {

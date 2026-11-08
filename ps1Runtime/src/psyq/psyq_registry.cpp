@@ -127,7 +127,7 @@ void psyq_registry_init_defaults() {
   // consistent with Start/StopRCnt above. What the target *implies* is not
   // discarded, though: for a game whose frame delta is driven by a root-counter
   // handler, `[timing] rcnt_ticks_per_vblank` in the game TOML carries the
-  // resulting rate, and `applyRootCounterTicks` advances the word from VSync.
+  // resulting rate, and `applyRootCounterTicks` advances the word every VBlank.
   // (Crash: target 0x1000 on counter 2 at sysclk/8 => ~17 ticks per VBlank.)
   psyq_register("libapi_SetRCnt",        &hle_noop_stub);
   psyq_register("libcd_StCdInterrupt2",  &hle_noop_stub);

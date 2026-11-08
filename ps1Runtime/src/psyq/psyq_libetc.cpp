@@ -85,8 +85,8 @@ void hle_libetc_InterruptCallback(recomp_context *ctx) {
   ctx->r[V0] = prev;
   // Which IRQ lines a game actually hooks, and with what.  There is one slot
   // per line, so a second registration on the same line silently displaces
-  // the first -- and the drain only ticks lines 4..6, so a handler parked
-  // anywhere else never runs at all.
+  // the first -- and the drain only ticks lines 0 and 4..6, so a handler
+  // parked anywhere else never runs at all.
   if (ps1::metrics::enabled()) {
     ps1::metrics::count(fmt::format("psyq.intr_cb.{}.{:08X}", n, ctx->r[A1]));
     if (prev != 0 && prev != ctx->r[A1])
@@ -100,6 +100,8 @@ void hle_libetc_DMACallback(recomp_context *ctx) {
   uint32_t prev = s.dmaCallback[n];
   s.dmaCallback[n] = ctx->r[A1];
   ctx->r[V0] = prev;
+  if (ps1::metrics::enabled())
+    ps1::metrics::count(fmt::format("psyq.dma_cb.{}.{:08X}", n, ctx->r[A1]));
 }
 
 // SetIntrMask / GetIntrMask: round-trip the I_MASK hardware register.

@@ -277,7 +277,7 @@ uint32_t OverlayScanner::inferRamBase(const uint8_t *data, size_t size) {
   }
 
   // Align to 2KB boundary (typical overlay alignment)
-  if (minAddr < (static_cast<uint32_t>(bestUpper) << 16) | 0xFFFF) {
+  if (minAddr < ((static_cast<uint32_t>(bestUpper) << 16) | 0xFFFF)) {
     return minAddr & 0xFFFFF800;
   }
 

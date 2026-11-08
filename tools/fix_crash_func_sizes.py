@@ -40,6 +40,14 @@ CORRECTIONS = {
     # address.  Reaching the level-select map is enough to hit it.
     # Real extent runs to 0x80033EF8, where func_80033EF8 begins: 2648 bytes.
     "0x800334A0": (984, 2648),
+    # 0x80036BF4 is a hand-written polygon renderer that picks its per-polygon
+    # block with `jr $ra`, $ra = 0x80036D9C + index*128.  The analyzer starts a
+    # function at the table base (linear sweep; nothing calls it), so the
+    # blocks fall outside 0x80036BF4 and its `jr $ra` is emitted as a return --
+    # leaving mid-body with $sp still a data register, the defect that froze
+    # the Papu Papu fight in the twin routine 0x80036340.  Real extent runs to
+    # 0x800375EC, where func_800375EC begins: 2552 bytes.
+    "0x80036BF4": (424, 2552),
 }
 
 

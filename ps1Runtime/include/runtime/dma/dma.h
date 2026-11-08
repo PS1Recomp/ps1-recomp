@@ -3,6 +3,7 @@
 // ps1Runtime -- DMA Controller
 // PS1 DMA: 7 channels for high-speed data transfer between devices
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -72,10 +73,14 @@ public:
   // Process pending DMA transfers
   void checkAndRunTransfers();
 
+  // Channels whose transfer finished since the last call (bit n = channel n).
+  uint8_t takeCompleted() { return completed_.exchange(0); }
+
 private:
   ChannelRegs channels_[NUM_CHANNELS];
   uint32_t dpcr_ = 0x07654321; // DMA Priority Control Register
   uint32_t dicr_ = 0;          // DMA Interrupt Control Register
+  std::atomic<uint8_t> completed_{0};
 
   Memory *mem_ = nullptr;
   gpu::GPU *gpu_ = nullptr;

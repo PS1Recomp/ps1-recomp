@@ -20,6 +20,7 @@ add_library(ps1Runtime_lib STATIC
     src/bios/heap.cpp
     src/bios/event_system.cpp
     src/bios/file_io.cpp
+    src/bios/card_fs.cpp
     src/gpu/gpu.cpp
     src/gpu/renderer_opengl.cpp
     src/spu/spu.cpp
@@ -29,6 +30,7 @@ add_library(ps1Runtime_lib STATIC
     src/timers/timers.cpp
     src/save_state.cpp
     src/config.cpp
+    src/step_control.cpp
     src/overlay_manager.cpp
     src/psyq/psyq_hle.cpp
     src/psyq/psyq_registry.cpp

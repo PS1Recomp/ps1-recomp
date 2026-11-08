@@ -10,6 +10,7 @@
 #include <cstring>
 #include <iostream>
 #include <runtime/cpu_context.h>
+#include <runtime/gte.h>
 #include <runtime/memory.h>
 
 // Memory Access Macros
@@ -108,15 +109,36 @@ inline void DO_SWR(recomp_context *ctx, uint32_t rt, uint32_t addr) {
   ctx->mem->write32(aligned, word);
 }
 
+// Divide (psx-spx "CPU Specifications"): the hardware defines the results C++
+// leaves undefined -- a zero divisor, and 80000000h / -1.
+inline void DO_DIV(ps1::CPUContext *ctx, uint32_t rs, uint32_t rt) {
+  const int32_t n = static_cast<int32_t>(rs), d = static_cast<int32_t>(rt);
+  if (d == 0) {
+    ctx->lo = n >= 0 ? 0xFFFFFFFFu : 1u;
+    ctx->hi = rs;
+  } else if (rs == 0x80000000u && d == -1) {
+    ctx->lo = 0x80000000u;
+    ctx->hi = 0;
+  } else {
+    ctx->lo = static_cast<uint32_t>(n / d);
+    ctx->hi = static_cast<uint32_t>(n % d);
+  }
+}
+
+inline void DO_DIVU(ps1::CPUContext *ctx, uint32_t rs, uint32_t rt) {
+  ctx->lo = rt ? rs / rt : 0xFFFFFFFFu;
+  ctx->hi = rt ? rs % rt : rs;
+}
+
 // GTE Register Access
 // Used by GteEmitter for MFC2/MTC2/CFC2/CTC2
 
 inline uint32_t gte_read_data(ps1::CPUContext *ctx, uint8_t reg) {
-  return ctx->cop2d[reg & 0x1F];
+  return ps1::GTE::readData(ctx, reg);
 }
 
 inline void gte_write_data(ps1::CPUContext *ctx, uint8_t reg, uint32_t val) {
-  ctx->cop2d[reg & 0x1F] = val;
+  ps1::GTE::writeData(ctx, reg, val);
 }
 
 inline uint32_t gte_read_control(ps1::CPUContext *ctx, uint8_t reg) {

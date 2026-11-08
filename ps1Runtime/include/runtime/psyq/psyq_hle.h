@@ -67,8 +67,9 @@ const HleConfig &getConfig();
  * (`rcntTickAddr` / `rcntTicksPerVBlank`, populated from the game TOML's
  * `[timing]` block); when either is zero this is a no-op.
  *
- * Runs on the game thread, from `hle_VSync`, so it serialises with the game's
- * own writes to the same word.
+ * Called once per VBlank from the host's VBlank tick, which runs on the game
+ * thread, so it serialises with the game's own writes to the same word.  Not
+ * from VSync: the counter keeps running while a long frame is still drawing.
  */
 void applyRootCounterTicks(recomp_context *ctx, uint32_t vblanks);
 

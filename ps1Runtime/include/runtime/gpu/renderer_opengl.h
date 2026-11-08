@@ -7,6 +7,22 @@
 
 namespace ps1::gpu {
 
+/// Where the PS1 picture goes inside a window of `w` x `h` pixels: the
+/// largest centred 4:3 box (the TV shape, whatever the pixel width).  Any
+/// scale is fine -- the sharp-bilinear shader keeps pixels even.
+struct Viewport {
+  int x, y, w, h;
+};
+inline Viewport fitViewport(int w, int h) {
+  int vh = h;
+  int vw = vh * 4 / 3;
+  if (vw > w) {
+    vw = w;
+    vh = w * 3 / 4;
+  }
+  return {(w - vw) / 2, (h - vh) / 2, vw, vh};
+}
+
 class RendererOpenGL {
 public:
   RendererOpenGL(GPU &gpu);

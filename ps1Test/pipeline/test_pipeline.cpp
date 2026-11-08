@@ -13,7 +13,7 @@ using namespace ps1recomp;
 TEST(PipelineE2E, EndToEndSimulation) {
   // 1. Analyze
   ElfParser parser;
-  if (!parser.load("../test_roms/example08_spinningCube.elf")) {
+  if (!parser.load(PS1RECOMP_TEST_ROMS "/example08_spinningCube.elf")) {
     GTEST_SKIP() << "Test ROM not found. Skipping.";
   }
 
@@ -45,25 +45,6 @@ TEST(PipelineE2E, EndToEndSimulation) {
             std::string::npos); // Target out of bounds
 }
 
-TEST(PipelineE2E, SmokeTest100Frames) {
-  // To truly run 100 frames, we would need to invoke the recompiled output.
-  // However, C++ doesn't easily let us call functions from a generated .cpp
-  // within the same build step before it's linked, and GoogleTest runs
-  // statically. For a true "smoke test", we can run the `ps1Runtime` process
-  // with the ELF programmatically and intercept its exit status or output.
-
-  // Check if ROM exists first
-  FILE *f = fopen("../test_roms/example08_spinningCube.elf", "r");
-  if (!f) {
-    GTEST_SKIP() << "Test ROM not found. Skipping.";
-  }
-  fclose(f);
-
-  // To simulate the concept and ensure our execution host didn't crash on
-  // standard init:
-  int result = system("timeout 1s ../runtime/ps1Runtime "
-                      "../test_roms/example08_spinningCube.elf > "
-                      "/dev/null 2>&1");
-  // timeout exits with 124 when interrupted, instead of 0
-  EXPECT_EQ(WEXITSTATUS(result), 124);
-}
+// Running a game is covered by GoldenFrame.CrashRendersContentAtFrame400: the
+// runtime binary is built around one game's recompiled code, so it cannot boot
+// an arbitrary ELF such as this homebrew one.

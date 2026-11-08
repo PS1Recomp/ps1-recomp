@@ -991,6 +991,21 @@ TEST_F(PsyqHleTest, PutDrawEnvReturnsEnvPointer) {
 // ~17 per VBlank. Advancing 1 per VBlank instead ran the game ~18x too slow:
 // `frames_elapsed` measured 69 in 40 s versus 1261 with the correct rate.
 
+// The root counter runs whether or not the game is in VSync, so the ticks are
+// credited by the VBlank tick itself.  Crediting only the VBlanks spent inside
+// VSync lost every VBlank that passed while a heavy frame was still drawing:
+// measured 13.5 ticks per VBlank instead of 17 on N. Sanity Beach, the game
+// running in slow motion at 79% speed.
+TEST_F(PsyqHleTest, VSyncLeavesRootCounterTicksToTheVBlankTick) {
+    const uint32_t addr = 0x80034520u;
+    psyq_state().rcntTickAddr = addr;
+    psyq_state().rcntTicksPerVBlank = 16;
+    mem.write32(addr, 0);
+    ctx.r[A0] = 0;
+    hle_VSync(&ctx); // the fixture's drain advances the counter
+    EXPECT_EQ(mem.read32(addr), 0u);
+}
+
 TEST_F(PsyqHleTest, RootCounterTicksDisabledByDefault) {
     const uint32_t addr = 0x80034520u;
     mem.write32(addr, 0);
@@ -1040,21 +1055,4 @@ TEST_F(PsyqHleTest, RootCounterTicksRateZeroIsNoop) {
     mem.write32(addr, 500);
     applyRootCounterTicks(&ctx, 5);
     EXPECT_EQ(mem.read32(addr), 500u);
-}
-
-TEST_F(PsyqHleTest, VSyncAdvancesRootCounterTicksByVBlanksWaited) {
-    // The real path: hle_VSync waits for N VBlanks and must advance the tick
-    // word by exactly the number it actually observed, not by a fixed amount.
-    const uint32_t addr = 0x80034520u;
-    psyq_state().rcntTickAddr = addr;
-    psyq_state().rcntTicksPerVBlank = 17;
-    mem.write32(addr, 0);
-
-    const uint32_t start = psyq_state().vsyncCounter.load();
-    ctx.r[A0] = 3;
-    hle_VSync(&ctx);
-    const uint32_t waited = psyq_state().vsyncCounter.load() - start;
-
-    ASSERT_GE(waited, 3u);
-    EXPECT_EQ(mem.read32(addr), 17u * waited);
 }

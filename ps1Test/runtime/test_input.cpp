@@ -296,3 +296,53 @@ TEST(MemoryCardProtocol, AnUnknownCommandAbortsImmediately) {
   EXPECT_EQ(got[1], 0xFF);
   EXPECT_FALSE(card.transferActive());
 }
+
+// The game samples the pad once per VBlank.  A tap that starts and ends between
+// two samples must still show up in one, or short presses (Crash's jump height
+// depends on how long X is held) silently do nothing.
+TEST(InputDigital, TapBetweenSamplesIsSeenOnce) {
+  InputController input;
+  input.press(BTN_CROSS);
+  input.release(BTN_CROSS);
+  input.latchFrame();
+  EXPECT_EQ(input.buttonState() & BTN_CROSS, 0) << "tap lost";
+  input.latchFrame();
+  EXPECT_NE(input.buttonState() & BTN_CROSS, 0) << "tap stuck";
+}
+
+TEST(InputDigital, HeldButtonStaysPressedAcrossSamples) {
+  InputController input;
+  input.press(BTN_CROSS);
+  input.latchFrame();
+  input.latchFrame();
+  EXPECT_EQ(input.buttonState() & BTN_CROSS, 0);
+  input.release(BTN_CROSS);
+  input.latchFrame();
+  EXPECT_NE(input.buttonState() & BTN_CROSS, 0);
+}
+
+// The stick and the d-pad can hold the same direction.  Releasing one must not
+// release what the other still holds.
+TEST(InputHeldButtons, ReleaseOnOneSourceKeepsTheOther) {
+  InputController ic;
+  HeldButtons held;
+  held.set(HeldButtons::Stick, BTN_LEFT, true, ic);
+  held.set(HeldButtons::PadButtons, BTN_LEFT, true, ic);
+  held.set(HeldButtons::Stick, BTN_LEFT, false, ic);
+  ic.latchFrame();
+  EXPECT_EQ(ic.buttonState() & BTN_LEFT, 0) << "left released while d-pad holds it";
+  held.set(HeldButtons::PadButtons, BTN_LEFT, false, ic);
+  ic.latchFrame();
+  EXPECT_EQ(ic.buttonState() & BTN_LEFT, BTN_LEFT);
+}
+
+// Lockstep recording reads what the host is holding without feeding the game.
+TEST(InputHeldButtons, MaskIsTheUnionOfAllSources) {
+  InputController ic;
+  HeldButtons held;
+  held.set(HeldButtons::Keyboard, BTN_CROSS, true, ic);
+  held.set(HeldButtons::Stick, BTN_UP, true, ic);
+  EXPECT_EQ(held.mask(), BTN_CROSS | BTN_UP);
+  held.set(HeldButtons::Keyboard, BTN_CROSS, false, ic);
+  EXPECT_EQ(held.mask(), BTN_UP);
+}

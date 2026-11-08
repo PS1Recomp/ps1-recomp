@@ -80,36 +80,40 @@ This is the same configuration used by the CI pipeline.
 
 ### Step 1 — Provide a disc image
 
-Place your game files under `test_roms/<GameName>/`:
+Place your game files under `test_roms/<GameName>/`. For Crash Bandicoot, the
+validated game, use the paths in `configs/examples/crash.toml`:
 ```
 test_roms/
-└── Rayman/
-    ├── Rayman (USA).cue
-    └── Rayman (USA) (Track 01).bin
+└── Crash Bandicoot /
+    ├── Crash Bandicoot (USA).cue
+    └── Crash Bandicoot (USA).bin
 ```
 
-### Step 2 — Generate a config (if one doesn't exist)
+### Step 2 — Generate a config and recompile
+
+For Crash, one script runs the analyzer with the extra entries it needs and
+then the recompiler:
 
 ```bash
-./build/ps1Analyzer/ps1Analyzer \
-    --disc "test_roms/Rayman/Rayman (USA).cue" \
-    --out configs/rayman.toml
+cp configs/examples/crash.toml configs/crash.toml
+tools/regen_crash.sh --recomp
 ```
 
-This detects function boundaries, PsyQ SDK addresses, and overlays, and writes them to the TOML
-config.
-
-### Step 3 — Recompile the game
+For another game, run the two tools directly:
 
 ```bash
-./build/ps1Recomp/ps1Recomp configs/rayman.toml ps1Runtime/src/recompiled_out.cpp
+./build/ps1Analyzer/ps1Analyzer "test_roms/Game/Game.bin" configs/game_recomp.toml
+./build/ps1Recomp/ps1Recomp configs/game_recomp.toml ps1Runtime/src/recompiled_out.cpp
 ```
 
-### Step 4 — Rebuild the runtime and run
+The analyzer detects function boundaries and PsyQ SDK functions and writes
+them to the TOML config. Missed functions are added with `--add-func <addr>`.
+
+### Step 3 — Rebuild the runtime and run
 
 ```bash
 cmake --build build -j$(nproc)
-./build/ps1Runtime/ps1Runtime --config configs/rayman.toml
+./build/ps1Runtime/ps1Runtime --config configs/crash.toml
 ```
 
 ---
@@ -192,7 +196,7 @@ ps1Analyzer/    ELF parsing, function detection, PsyQ signature matching
 ps1Recomp/      MIPS R3000A -> C++ translation, jump table detection, GTE emission
 ps1Runtime/     PS1 hardware simulation (GPU, BIOS HLE, SPU, DMA, CD-ROM, GTE, MDEC…)
 ps1Interface/   Optional GUI studio (ImGui) — build with -DPS1RECOMP_BUILD_INTERFACE=ON
-ps1Test/        Google Test suite (63 files, 557 tests)
+ps1Test/        GoogleTest suite
 tools/          Python automation: PsyQ signature extraction, diagnostics, Ghidra integration
 configs/        Per-game TOML configs (gitignored except examples)
 third_party/    Git submodules (ELFIO, toml11, fmt, googletest)

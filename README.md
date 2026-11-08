@@ -1,5 +1,7 @@
 # PS1Recomp
 
+[![CI](https://github.com/PS1Recomp/ps1-recomp/actions/workflows/ci.yml/badge.svg)](https://github.com/PS1Recomp/ps1-recomp/actions/workflows/ci.yml) [![codecov](https://codecov.io/gh/PS1Recomp/ps1-recomp/branch/main/graph/badge.svg)](https://codecov.io/gh/PS1Recomp/ps1-recomp)
+
 **Static recompiler for PlayStation 1 games -- translates MIPS R3000A machine code to native C++ for PC.**
 
 ## Overview
@@ -25,9 +27,9 @@ ps1Runtime   ->  Native PC executable (SDL2 + OpenGL)
 |-----------|-----------|-------------|
 | **ps1Analyzer** | `ps1Analyzer/` | Parses PS1 ELF/BIN, detects function boundaries, identifies PsyQ SDK signatures, generates TOML config |
 | **ps1Recomp** | `ps1Recomp/` | Decodes MIPS R3000A instructions and emits literal C++ translation (1:1 per instruction), handles GTE coprocessor and jump tables |
-| **ps1Runtime** | `ps1Runtime/` | Simulates PS1 hardware: BIOS HLE, GPU (OpenGL 3.3), SPU (SDL2 audio), CD-ROM, DMA, GTE, MDEC, Timers, Input |
+| **ps1Runtime** | `ps1Runtime/` | Simulates PS1 hardware: BIOS HLE, GPU (software rasterizer, OpenGL output), SPU (SDL2 audio), CD-ROM, DMA, GTE, MDEC, Timers, Input |
 | **ps1Interface** | `ps1Interface/` | GUI studio for loading ELFs, exploring functions, editing configs, and previewing recompiled C++ (ImGui + SDL2) |
-| **ps1Test** | `ps1Test/` | 557 unit + integration tests covering all runtime subsystems |
+| **ps1Test** | `ps1Test/` | GoogleTest suite: instruction semantics, every runtime subsystem, HLE contracts |
 
 ## Project Structure
 
@@ -57,7 +59,7 @@ ps1-recomp/
 |       +-- StudioState.cpp    ps1Analyzer backend integration
 |       +-- GUI.cpp            Panel rendering and keyboard shortcuts
 |       +-- ui/StyleManager.cpp
-+-- ps1Test/           Unit tests (GTest): 557 tests across all subsystems
++-- ps1Test/           Unit and integration tests (GoogleTest)
 +-- third_party/       External dependencies: ELFIO, toml11, fmt, googletest
 +-- tools/
 |   +-- extract_psyq_signatures.py   Build the PsyQ signature DB from PsyQ SDK .LIB files
@@ -91,7 +93,7 @@ brew install cmake sdl2
 ### Clone and Build
 
 ```bash
-git clone --recurse-submodules https://github.com/Dellareti/ps1-recomp.git
+git clone --recurse-submodules https://github.com/PS1Recomp/ps1-recomp.git
 cd ps1-recomp
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
@@ -111,41 +113,42 @@ cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure -j$(nproc)
 ```
 
-## Running a Game (Rayman example)
+## Running Crash Bandicoot
 
-> **Note:** Game disc images (ROMs/ISOs) are not included in this repository for legal
-> reasons. You need your own legal copy of the game. The disc path is configured per-game
-> and can point to **any folder on your system** -- there is no required directory name.
+> **Note:** Game disc images are not included in this repository. Use an image extracted
+> from a disc you own.
 
-1. Place your disc image anywhere and note the path:
-   ```
-   # Example paths -- use whatever works for you:
-   /home/user/games/Rayman (USA).cue
-   ~/roms/Rayman (USA).cue
-   ./my_games/Rayman (USA).cue
-   ```
+Crash Bandicoot (USA, SCUS-94900) is the validated title.
 
-2. Analyze the binary and generate config:
+1. Put the disc image under `test_roms/Crash Bandicoot /` (the paths in
+   `configs/examples/crash.toml`), or edit those paths.
+2. Copy the runtime config:
    ```bash
-   ./build/ps1Analyzer/ps1Analyzer "/path/to/Rayman (USA) (Track 01).bin.boot.exe" rayman_config.toml
+   cp configs/examples/crash.toml configs/crash.toml
    ```
-
-3. Edit `rayman_config.toml` to set your disc path:
-   ```toml
-   [disc]
-   cue_path = "/path/to/Rayman (USA).cue"
-   ```
-
-4. Recompile MIPS -> C++:
+3. Analyze the binary, recompile it to C++ and rebuild:
    ```bash
-   ./build/ps1Recomp/ps1Recomp rayman_config.toml ps1Runtime/src/recompiled_out.cpp
-   ```
-
-5. Build and run:
-   ```bash
+   tools/regen_crash.sh --recomp
    cmake --build build -j$(nproc)
-   ./build/ps1Runtime/ps1Runtime --config rayman_config.toml
    ```
+4. Run (from the repository root, since config paths are relative):
+   ```bash
+   ./build/ps1Runtime/ps1Runtime --config configs/crash.toml
+   ```
+
+### Other games
+
+The same pipeline applies to any PS1 executable, with per-game facts kept in TOML:
+
+```bash
+./build/ps1Analyzer/ps1Analyzer game.exe configs/game_recomp.toml
+./build/ps1Recomp/ps1Recomp configs/game_recomp.toml ps1Runtime/src/recompiled_out.cpp
+cmake --build build -j$(nproc)
+./build/ps1Runtime/ps1Runtime --config configs/game.toml
+```
+
+A new game usually needs analyzer fixes (missed functions, wrong sizes) and runtime
+settings before it runs; see `configs/examples/crash.toml` for what Crash needed.
 
 ## Controls
 
@@ -164,6 +167,25 @@ startup, so it is always visible in the log of a run.
 
 Each press is echoed to stderr as `[pad] <key> -> <button>`, which separates a
 button that reached the pad from one that never got there.
+
+<kbd>F2</kbd> turns the PS1 dithering pattern off and on.
+
+### Gamepads (XInput)
+
+Any controller SDL2 recognises works: Xbox 360/One/Series pads, XInput-mode
+third-party pads (e.g. GuliKit KingKong), and most DualShock/DualSense pads.
+Plug it in before or after starting the game. The window title then shows its
+name. Buttons map by position:
+
+| Gamepad (Xbox names) | PS1 pad |
+|---|---|
+| A / B / X / Y | Cross / Circle / Square / Triangle |
+| LB / RB, LT / RT | L1 / R1, L2 / R2 |
+| Stick clicks | L3 / R3 |
+| Back / Start | Select / Start |
+| D-pad, left stick | D-Pad |
+
+Input is read only while the game window has focus.
 
 ### Memory cards
 
@@ -258,29 +280,24 @@ Runs the game for N seconds and outputs a JSON report with frame rate, VRAM pixe
 
 ## Status
 
-The project is the subject of an ongoing undergraduate thesis. **It is not a finished
-emulator** -- it is a recompiler whose architecture works end-to-end, plus a runtime that
-covers enough of the PS1 hardware to boot real games. The current state, honestly:
+The project is the subject of an undergraduate thesis. It is a recompiler with a runtime
+that covers enough of the PS1 to run its case study, not a general emulator.
 
-- **Pipeline**: stable. Analyzer -> recompiler -> runtime -> native binary works for any PS1
-  ELF/EXE. Stub-mode build (no ROM) is the CI baseline (557/557 tests green).
-- **Rayman (USA)**: was the primary validation target through Phases 0-3. With prior
-  imperative HLE patches it ran at ~59fps with correct VRAM content. Those patches were
-  retired during open-source preparation; the regen-fresh path now relies entirely on the
-  PsyQ hash-based HLE coverage and has a brightness gap (see `ISSUES.md` #2 -- not
-  re-validated end-to-end since patch removal).
-- **Crash Bandicoot 1 (USA)**: experimental but boots. Reaches the main game loop and
-  runs the full PsyQ render pipeline (`DrawOTag` ~435 calls/sec, `MulMatrix` ~870/sec,
-  `VSync` ~58 fps) with an env-gated workaround (`PS1_SKIP_31BF8=1`) that NOPs a GOOL
-  state machine call which would otherwise hang in an unpopulated hash table walk.
-  Permanent fix (porting the NS chunk subsystem) is the next roadmap item in
-  `PLANNING.md`. The bypass keeps the engine running so we can study the next layer
-  while the proper fix is in progress.
-- **Other games**: not exercised yet. The architecture is meant to be game-agnostic; adding
-  a new title is mostly a matter of providing a TOML config and running the analyzer.
+**Crash Bandicoot** runs from boot through the menus, map and levels at the game's
+30 fps, with music, sound effects, memory card saves and gamepad input. Levels are
+finished by a human player and replayed frame-exactly by the lockstep mode
+(`PS1_STEP`), which turns a recorded run into a regression test.
 
-For an honest, gap-by-gap account of what works and what does not, see `ARCHITECTURE.md`.
-For specific game blockers and verification metrics, see `ISSUES.md`.
+Known limits:
+
+- **One validated game.** Rayman was the first target and ran with hand-written
+  patches; without them its regenerated build boots but draws nothing.
+- **Crash open issues:** the camera at the first level's fork does not turn when the
+  left path is taken first.
+- **FMV:** MDEC decoding is incomplete (Crash does not use MDEC).
+- **Hardware accuracy:** GPU commands have no cycle timing; SPU reverb and pitch
+  modulation are approximations; some GTE, GPU and BIOS edge cases differ from
+  psx-spx.
 
 ## License
 

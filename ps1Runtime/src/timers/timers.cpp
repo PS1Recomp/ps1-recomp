@@ -1,4 +1,5 @@
 #include "runtime/timers/timers.h"
+#include <algorithm>
 #include <fmt/format.h>
 
 namespace ps1 {
@@ -62,8 +63,18 @@ void Timer::writeTarget(uint16_t val) { target_ = val; }
 bool Timer::tick(uint32_t cycles) {
   bool fired = false;
 
-  for (uint32_t i = 0; i < cycles; i++) {
-    counter_++;
+  // Advance straight to the next cycle where something can happen -- the
+  // counter landing on the target, or wrapping to 0 -- instead of one cycle at
+  // a time (~1.7M cycles per frame across the three timers).
+  while (cycles > 0) {
+    const uint32_t toWrap = 0x10000u - counter_;
+    const uint32_t toTarget =
+        target_ == 0 ? toWrap
+                     : (target_ > counter_ ? target_ - counter_
+                                           : toWrap + target_);
+    const uint32_t step = std::min({cycles, toWrap, toTarget});
+    cycles -= step;
+    counter_ = static_cast<uint16_t>(counter_ + step);
 
     // Check target
     if (target_ != 0 && counter_ == target_) {

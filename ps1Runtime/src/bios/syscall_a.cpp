@@ -478,34 +478,16 @@ void Bios::handleA0(uint32_t index) {
     ctx_.r[V0] = 0;
     break;
 
-  case 0xAB: // _96_CdInitSubFunc -- PsyQ CD initialization sub-function
-    BIOS_LOG("[BIOS] _96_CdInitSubFunc({}) -- firing INT3+INT2\n",
-               ctx_.r[A0]);
-    // On real hardware _96_CdInitSubFunc runs as the INT2 completion handler
-    // for the CdlInit command.  Before returning it sends a GetStat (0x01)
-    // which immediately generates INT3 (Ack).  The CdInit polling loop then
-    // checks testEvent(0) [spec=0x0004 = INT3] to verify the drive responded.
-    // We fire INT3 first so that testEvent(0) succeeds, then INT2 for event 1.
-    triggerCdromEvent(3); // INT3 Ack  -> spec 0x0004 -> event 0 (GetStat Ack)
-    triggerCdromEvent(2); // INT2 Complete -> spec 0x8000 -> event 1
-    ctx_.r[V0] = 0; // success
+  // A(ABh)/A(ACh) are the memory card's _card_info/_card_load (psx-spx
+  // kernelbios.md), not CD-ROM functions: libcard probes the card with them.
+  case 0xAB: // _card_info(port)
+    ctx_.r[V0] = cardRequest(ctx_.r[A0], CardOp::Info, 0, 0);
     break;
-
-  case 0xAC: { // _96_CdGetStatus -- send GetStat to query disc/drive state
-    // PsyQ CdInit calls this after _96_CdInitSubFunc to probe disc presence.
-    // On real HW: sends GetStat(0x01), which fires INT3(Ack) with status byte.
-    // We deliver INT3 synchronously and cancel the controller's pending response
-    // to prevent double-interrupt for games using SetCustomExitFromException.
-    BIOS_LOG("[BIOS] _96_CdGetStatus() -- HLE GetStat (synchronous)\n");
-    if (cdrom_) {
-      cdrom_->writeRegister(0x1F801800, 0);    // index = 0
-      cdrom_->writeRegister(0x1F801801, 0x01); // GetStat
-      cdrom_->cancelPendingInterrupt();
-    }
-    triggerCdromEvent(3); // INT3 Ack -> disc-present status
-    ctx_.r[V0] = 0;
+  case 0xAC: // _card_load(port) -- reads the "MC" id, so ignores the change flag
+    cardChangeAcked_ = true;
+    ctx_.r[V0] = cardRequest(ctx_.r[A0], CardOp::Info, 0, 0);
+    cardChangeAcked_ = false;
     break;
-  }
 
   case 0xAD: { // _96_CdReset -- send CdlInit (hardware reset)
     BIOS_LOG("[BIOS] _96_CdReset() -- HLE CdlInit (synchronous)\n");

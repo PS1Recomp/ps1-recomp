@@ -174,6 +174,19 @@ TEST(OverlayScannerTest, InferRamBaseFromLuiAddiu) {
   EXPECT_LE(base, 0x80050800u);
 }
 
+// With no ORI/ADDIU pairing the LUI, nothing refines the base: it is the
+// upper half alone, not the "no pair found" sentinel rounded to 2 KB.
+TEST(OverlayScannerTest, InferRamBaseFallsBackToUpperHalfWithoutPairs) {
+  std::vector<uint32_t> code = {
+      0x3C028004, // lui $v0, 0x8004
+      0x8C420010, // lw  $v0, 0x10($v0)
+      0x3C038004, // lui $v1, 0x8004
+      0x03E00008, // jr  $ra
+  };
+  auto data = makeMipsCode(code);
+  EXPECT_EQ(OverlayScanner::inferRamBase(data.data(), data.size()), 0x80040000u);
+}
+
 TEST(OverlayScannerTest, InferRamBaseNoCode) {
   uint32_t base = OverlayScanner::inferRamBase(nullptr, 0);
   EXPECT_EQ(base, 0u);
