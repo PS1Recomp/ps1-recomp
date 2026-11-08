@@ -199,14 +199,12 @@ std::string InstructionEmitter::emitMulDiv(const Instruction &inst) const {
         "{{ uint64_t result = (uint64_t){} * (uint64_t){}; "
         "ctx->lo = (int32_t)result; ctx->hi = (int32_t)(result >> 32); }}",
         u32(rs), u32(rt));
+  // The runtime helpers give the hardware results for a zero divisor and for
+  // 80000000h / -1, which plain C++ division leaves undefined.
   case InstrId::DIV:
-    return fmt::format(
-        "if ({} != 0) {{ ctx->lo = {} / {}; ctx->hi = {} % {}; }}", s32(rt),
-        s32(rs), s32(rt), s32(rs), s32(rt));
+    return fmt::format("DO_DIV(ctx, {}, {});", rs, rt);
   case InstrId::DIVU:
-    return fmt::format("if ({} != 0) {{ ctx->lo = (int32_t)({} / {}); "
-                       "ctx->hi = (int32_t)({} % {}); }}",
-                       u32(rt), u32(rs), u32(rt), u32(rs), u32(rt));
+    return fmt::format("DO_DIVU(ctx, {}, {});", rs, rt);
   case InstrId::MFHI:
     return assignReg(inst.rd, "ctx->hi");
   case InstrId::MFLO:
@@ -365,19 +363,20 @@ std::string InstructionEmitter::emitCOP0(const Instruction &inst) const {
 
 std::string InstructionEmitter::emitGTEMove(const Instruction &inst) const {
   switch (inst.id) {
+  // Data registers go through the GTE: LZCR, SXYP and IRGB/ORGB have side effects.
   case InstrId::MFC2:
-    return assignReg(inst.rt, fmt::format("ctx->cop2d[{}]", inst.rd));
+    return assignReg(inst.rt, fmt::format("gte_read_data(ctx, {})", inst.rd));
   case InstrId::MTC2:
-    return fmt::format("ctx->cop2d[{}] = {};", inst.rd, reg(inst.rt));
+    return fmt::format("gte_write_data(ctx, {}, {});", inst.rd, reg(inst.rt));
   case InstrId::CFC2:
     return assignReg(inst.rt, fmt::format("ctx->cop2c[{}]", inst.rd));
   case InstrId::CTC2:
     return fmt::format("ctx->cop2c[{}] = {};", inst.rd, reg(inst.rt));
   case InstrId::LWC2:
-    return fmt::format("ctx->cop2d[{}] = MEM_READ32(ctx, {} + {});", inst.rt,
-                       s32(reg(inst.rs)), inst.imm16);
+    return fmt::format("gte_write_data(ctx, {}, MEM_READ32(ctx, {} + {}));",
+                       inst.rt, s32(reg(inst.rs)), inst.imm16);
   case InstrId::SWC2:
-    return fmt::format("MEM_WRITE32(ctx, {} + {}, ctx->cop2d[{}]);",
+    return fmt::format("MEM_WRITE32(ctx, {} + {}, gte_read_data(ctx, {}));",
                        s32(reg(inst.rs)), inst.imm16, inst.rt);
   default:
     return fmt::format("// UNKNOWN GTE MOVE: {}",
@@ -412,11 +411,8 @@ std::string InstructionEmitter::emitInstruction(const Instruction &inst,
   bool writesToZero = false;
   switch (inst.category) {
   case InstrCategory::ALU:
-    // R-type writes to rd, I-type writes to rt
-    if (inst.id <= InstrId::SLTU)
-      writesToZero = (inst.rd == 0);
-    else
-      writesToZero = (inst.rt == 0);
+    // R-type ALU and shifts write rd, I-type writes rt
+    writesToZero = getDestGPR(inst) == 0;
     break;
   case InstrCategory::Memory:
     if (inst.isLoad())

@@ -16,6 +16,28 @@ TEST(RuntimeMacros, GteReadWriteData) {
   EXPECT_EQ(gte_read_data(&ctx, 8), 0x00001000u);
 }
 
+// psx-spx: LZCR reads the leading-bit count of LZCS (zeros, or ones if
+// negative). libgte SquareRoot0 depends on it.
+TEST(RuntimeMacros, GteLzcrCountsLeadingBitsOfLzcs) {
+  CPUContext ctx;
+  ctx.reset();
+
+  gte_write_data(&ctx, 30, 0x01C80000); // LZCS
+  EXPECT_EQ(gte_read_data(&ctx, 31), 7u);
+  gte_write_data(&ctx, 30, 0xFFF00000);
+  EXPECT_EQ(gte_read_data(&ctx, 31), 12u);
+}
+
+TEST(RuntimeMacros, GteSxypWritePushesTheScreenFifo) {
+  CPUContext ctx;
+  ctx.reset();
+
+  gte_write_data(&ctx, 14, 0x00020002); // SXY2
+  gte_write_data(&ctx, 15, 0x00030003); // SXYP
+  EXPECT_EQ(gte_read_data(&ctx, 13), 0x00020002u);
+  EXPECT_EQ(gte_read_data(&ctx, 14), 0x00030003u);
+}
+
 TEST(RuntimeMacros, GteReadWriteControl) {
   CPUContext ctx;
   ctx.reset();
@@ -146,4 +168,39 @@ TEST(RuntimeMacros, MemMacros8) {
 
   MEM_WRITE8(&ctx, 0x80030000, 0x42);
   EXPECT_EQ(MEM_READ8(&ctx, 0x80030000), 0x42u);
+}
+
+// Divide (psx-spx "CPU Specifications", divide errors): the R3000A defines
+// every result, including the ones C++ leaves undefined.
+TEST(RuntimeMacros, DivComputesQuotientAndRemainder) {
+  CPUContext ctx;
+  ctx.reset();
+  DO_DIV(&ctx, static_cast<uint32_t>(-7), 2);
+  EXPECT_EQ(static_cast<int32_t>(ctx.lo), -3);
+  EXPECT_EQ(static_cast<int32_t>(ctx.hi), -1);
+  DO_DIVU(&ctx, 7, 2);
+  EXPECT_EQ(ctx.lo, 3u);
+  EXPECT_EQ(ctx.hi, 1u);
+}
+
+TEST(RuntimeMacros, DivByZeroGivesTheHardwareResult) {
+  CPUContext ctx;
+  ctx.reset();
+  DO_DIV(&ctx, 5, 0); // positive: lo = -1, hi = rs
+  EXPECT_EQ(ctx.lo, 0xFFFFFFFFu);
+  EXPECT_EQ(ctx.hi, 5u);
+  DO_DIV(&ctx, static_cast<uint32_t>(-5), 0); // negative: lo = +1
+  EXPECT_EQ(ctx.lo, 1u);
+  EXPECT_EQ(ctx.hi, static_cast<uint32_t>(-5));
+  DO_DIVU(&ctx, 9, 0); // unsigned: lo = FFFFFFFFh, hi = rs
+  EXPECT_EQ(ctx.lo, 0xFFFFFFFFu);
+  EXPECT_EQ(ctx.hi, 9u);
+}
+
+TEST(RuntimeMacros, DivOfMinIntByMinusOneDoesNotTrap) {
+  CPUContext ctx;
+  ctx.reset();
+  DO_DIV(&ctx, 0x80000000u, 0xFFFFFFFFu);
+  EXPECT_EQ(ctx.lo, 0x80000000u);
+  EXPECT_EQ(ctx.hi, 0u);
 }

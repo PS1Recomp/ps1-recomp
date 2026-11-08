@@ -146,12 +146,18 @@ TEST(InstructionSemantics, MultIsSigned64BitAndMultuUnsigned) {
   EXPECT_TRUE(has(multu, "ctx->lo = (int32_t)result")) << multu;
 }
 
-TEST(InstructionSemantics, DivuDividesUnsignedQuotientToLoRemainderToHi) {
-  auto code = emit(encR(0, 4, 5, 0, 0, 0x1B));
-  EXPECT_TRUE(has(code, "ctx->lo = (int32_t)((uint32_t)(ctx->r4) / (uint32_t)(ctx->r5))"))
-      << code;
-  EXPECT_TRUE(has(code, "ctx->hi = (int32_t)((uint32_t)(ctx->r4) % (uint32_t)(ctx->r5))"))
-      << code;
+// Division goes through the runtime helpers, which define the hardware
+// results for a zero divisor and 80000000h / -1 (tested in test_runtime_macros).
+TEST(InstructionSemantics, DivAndDivuUseTheRuntimeHelpers) {
+  EXPECT_EQ(emit(encR(0, 4, 5, 0, 0, 0x1A)), "DO_DIV(ctx, ctx->r4, ctx->r5);");
+  EXPECT_EQ(emit(encR(0, 4, 5, 0, 0, 0x1B)), "DO_DIVU(ctx, ctx->r4, ctx->r5);");
+}
+
+// Shifts write rd.  Reading $zero is legal and still clears rd: the $zero
+// write filter must look at rd, not at rt as for I-type ALU ops.
+TEST(InstructionSemantics, ShiftOfZeroStillWritesRd) {
+  EXPECT_TRUE(has(emit(encR(0, 0, 0, 8, 2, 0x00)), "ctx->r8 = ")); // sll $t0, $zero, 2
+  EXPECT_TRUE(has(emit(encR(0, 4, 0, 8, 0, 0x04)), "ctx->r8 = ")); // sllv $t0, $zero, $a0
 }
 
 TEST(InstructionSemantics, MthiMtloWriteHiLoFromRs) {
@@ -270,11 +276,19 @@ TEST(InstructionSemantics, Cop2ControlMovesAndMemoryTransfers) {
   auto ctc2 = emit(encR(0x12, 0x06, 8, 5, 0, 0)); // CTC2 $t0, TRX
   EXPECT_TRUE(has(ctc2, "ctx->cop2c[5] = ctx->r8;")) << ctc2;
   auto lwc2 = emit(encI(0x32, 4, 0, 8)); // LWC2 VXY0, 8($a0)
-  EXPECT_TRUE(has(lwc2, "ctx->cop2d[0] = MEM_READ32(ctx, (int32_t)(ctx->r4) + 8)"))
+  EXPECT_TRUE(has(lwc2, "gte_write_data(ctx, 0, MEM_READ32(ctx, (int32_t)(ctx->r4) + 8))"))
       << lwc2;
   auto swc2 = emit(encI(0x3A, 4, 7, 0xFFF8)); // SWC2 OTZ, -8($a0)
-  EXPECT_TRUE(has(swc2, "MEM_WRITE32(ctx, (int32_t)(ctx->r4) + -8, ctx->cop2d[7])"))
+  EXPECT_TRUE(has(swc2, "MEM_WRITE32(ctx, (int32_t)(ctx->r4) + -8, gte_read_data(ctx, 7))"))
       << swc2;
+}
+
+// Data moves go through the GTE so LZCR, SXYP and IRGB/ORGB side effects happen.
+TEST(InstructionSemantics, Cop2DataMovesUseGteRegisterAccess) {
+  auto mfc2 = emit(encR(0x12, 0x00, 2, 31, 0, 0)); // MFC2 $v0, LZCR
+  EXPECT_TRUE(has(mfc2, "ctx->r2 = gte_read_data(ctx, 31)")) << mfc2;
+  auto mtc2 = emit(encR(0x12, 0x04, 4, 30, 0, 0)); // MTC2 $a0, LZCS
+  EXPECT_TRUE(has(mtc2, "gte_write_data(ctx, 30, ctx->r4);")) << mtc2;
 }
 
 TEST(InstructionSemantics, GteCommandPassesSfAndLmBits) {
