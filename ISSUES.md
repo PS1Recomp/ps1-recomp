@@ -112,7 +112,7 @@ When fixed:
 
 ## Issue #3 — Crash Bandicoot: level 1 fork camera does not turn
 
-**Status:** open
+**Status:** fixed (`40d7695`, `d831d38`)
 **Game:** Crash Bandicoot (USA, SCUS-94900)
 
 ### Symptom
@@ -122,17 +122,17 @@ facing the old direction. Right-then-left works.
 
 ### Root Cause
 
-Diagnosing. Not retested since the root-counter (`40d7695`) and GTE
+Not isolated. It disappeared after the root-counter (`40d7695`) and GTE
 square root (`d831d38`) fixes, which both changed gameplay.
 
 ### Fix
 
-Pending.
+None of its own; see Issues #4 and #5.
 
 ### Verification
 
-Left path first at the fork turns the camera; a recorded run of it replays
-frame-exactly.
+A human run taking the left path first turned the camera, and its recording
+replays frame-exactly.
 
 ---
 
@@ -161,8 +161,9 @@ GTE data moves go through `gte_read_data`/`gte_write_data`, which call
 
 ### Verification
 
-Emitter and macro tests; The Great Gate and Jungle Rollers finished by a
-human player with warp pads and enemies where expected.
+Emitter and macro tests; The Great Gate, Jungle Rollers and Upstream
+finished by a human player with warp pads and enemies where expected and no
+sliding.
 
 ---
 

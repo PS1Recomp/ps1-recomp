@@ -234,7 +234,7 @@ As of this writing:
 
 - **One validated title: Crash Bandicoot (USA).** It runs from boot through
   menus, map and levels at 30 fps with audio, memory card saves and gamepad
-  input. Open issue: the first level's fork camera (see `ISSUES.md`).
+  input.
 - **Rayman (USA)** was the first target and ran at ~59fps with an imperative
   patch script (`tools/patch_rayman.py`), retired in favour of hash-based HLE.
   Its regenerated build boots but draws nothing.

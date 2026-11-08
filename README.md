@@ -292,8 +292,6 @@ Known limits:
 
 - **One validated game.** Rayman was the first target and ran with hand-written
   patches; without them its regenerated build boots but draws nothing.
-- **Crash open issues:** the camera at the first level's fork does not turn when the
-  left path is taken first.
 - **FMV:** MDEC decoding is incomplete (Crash does not use MDEC).
 - **Hardware accuracy:** GPU commands have no cycle timing; SPU reverb and pitch
   modulation are approximations; some GTE, GPU and BIOS edge cases differ from
