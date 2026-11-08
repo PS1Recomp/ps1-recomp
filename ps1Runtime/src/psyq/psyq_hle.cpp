@@ -72,7 +72,7 @@ void hle_VSync(recomp_context *ctx) {
     // The VBlank tick runs on this thread now (see Bios::setVBlankPump), so
     // the wait has to drive it -- nothing else advances the counter.
     if (ctx->bios)
-      ctx->bios->pumpVBlank();
+      ctx->bios->pumpVBlank(/*waiting=*/true);
     drainOnce();
     std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
@@ -82,10 +82,8 @@ void hle_VSync(recomp_context *ctx) {
     g_cfg.deliverVBlankEvent();
   }
 
-  const uint32_t end = counter.load(std::memory_order_acquire);
-  applyRootCounterTicks(ctx, end - start);
-
-  ctx->r[V0] = end;
+  // Root-counter ticks are credited by the VBlank tick itself, busy or not.
+  ctx->r[V0] = counter.load(std::memory_order_acquire);
 }
 
 // DrawSync

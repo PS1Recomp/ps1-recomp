@@ -233,17 +233,38 @@ void hle_libcd_CdRead(recomp_context *ctx) {
 // psyq_state().cdSyncByte / cdReadyByte atomically.  These helpers poll the
 // atomic with a 100 us sleep between checks, draining BIOS callbacks per
 // iteration so any pending mode-0x1000 handler runs on the game thread.  The
-// 5 s deadline matches the previous Bios::waitForCdSync timeout.
+// Deadline: see CdWaitDeadline (300 VBlanks, as the old 5 s wall-clock wait).
 //
 namespace {
+
+// A CD wait gives up after 300 VBlanks (5 s of game time).  Counting VBlanks
+// keeps a lockstep client's think time out of the game; 5 s of wall time with
+// no VBlank at all still ends a wait nothing is pumping (unit tests).
+class CdWaitDeadline {
+public:
+  bool expired() {
+    const uint32_t now = psyq_state().vsyncCounter.load(std::memory_order_acquire);
+    if (now != lastVsync_) {
+      lastVsync_ = now;
+      lastProgress_ = std::chrono::steady_clock::now();
+    }
+    return now - startVsync_ >= 300 ||
+           std::chrono::steady_clock::now() - lastProgress_ >= std::chrono::seconds(5);
+  }
+
+private:
+  uint32_t startVsync_ = psyq_state().vsyncCounter.load(std::memory_order_acquire);
+  uint32_t lastVsync_ = startVsync_;
+  std::chrono::steady_clock::time_point lastProgress_ = std::chrono::steady_clock::now();
+};
 
 template <typename Atomic>
 uint8_t waitOnCdAtomic(Atomic &slot) {
   // Reset to "pending" so we observe the NEXT CDROM event, not the previous
   // one -- same semantics the prior cv-based path enforced explicitly.
   slot.store(0, std::memory_order_release);
-  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-  while (std::chrono::steady_clock::now() < deadline) {
+  CdWaitDeadline deadline;
+  while (!deadline.expired()) {
     uint8_t v = slot.load(std::memory_order_acquire);
     if (v != 0)
       return v;
@@ -348,9 +369,9 @@ void hle_libcd_CdReadSync(recomp_context *ctx) {
   auto &state = psyq_state();
 
   if (mode == 0) {
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    CdWaitDeadline deadline;
     while (state.cdRemaining > 0) {
-      if (std::chrono::steady_clock::now() >= deadline) {
+      if (deadline.expired()) {
         if (resultPtr != 0)
           for (int i = 0; i < 8; ++i)
             ctx->mem->write8(resultPtr + i, 0);

@@ -115,6 +115,7 @@ add_executable(ps1Runtime_tests
     runtime/test_gpu_primitives.cpp
     runtime/test_bios_syscalls.cpp
     runtime/test_cdrom_commands.cpp
+    runtime/test_step_control.cpp
 )
 
 target_include_directories(ps1Runtime_tests

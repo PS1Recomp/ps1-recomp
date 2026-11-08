@@ -30,6 +30,7 @@ add_library(ps1Runtime_lib STATIC
     src/timers/timers.cpp
     src/save_state.cpp
     src/config.cpp
+    src/step_control.cpp
     src/overlay_manager.cpp
     src/psyq/psyq_hle.cpp
     src/psyq/psyq_registry.cpp

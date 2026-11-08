@@ -335,3 +335,14 @@ TEST(InputHeldButtons, ReleaseOnOneSourceKeepsTheOther) {
   ic.latchFrame();
   EXPECT_EQ(ic.buttonState() & BTN_LEFT, BTN_LEFT);
 }
+
+// Lockstep recording reads what the host is holding without feeding the game.
+TEST(InputHeldButtons, MaskIsTheUnionOfAllSources) {
+  InputController ic;
+  HeldButtons held;
+  held.set(HeldButtons::Keyboard, BTN_CROSS, true, ic);
+  held.set(HeldButtons::Stick, BTN_UP, true, ic);
+  EXPECT_EQ(held.mask(), BTN_CROSS | BTN_UP);
+  held.set(HeldButtons::Keyboard, BTN_CROSS, false, ic);
+  EXPECT_EQ(held.mask(), BTN_UP);
+}

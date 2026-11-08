@@ -670,3 +670,31 @@ TEST_F(PsyqCdTest, RegisterLibcdExposesAll12FunctionsViaDispatch) {
     EXPECT_NO_FATAL_FAILURE(psyq_dispatch(n, &ctx)) << "dispatch failed: " << n;
   }
 }
+
+// A CD wait gives up after 300 VBlanks (5 s of game time), not 5 s of wall
+// time: in lockstep mode the client's think time passes inside the VBlank
+// pump, and a wall-clock deadline made the same input take a different path.
+TEST(PsyqCdWait, CdSyncTimesOutAfter300VBlanks) {
+  Memory mem;
+  recomp_context ctx;
+  ctx.reset();
+  ctx.mem = &mem;
+  psyq_state().reset();
+  int drains = 0;
+  HleConfig cfg;
+  cfg.drainCallbacks = [&] {
+    ++drains;
+    psyq_state().vsyncCounter.fetch_add(1, std::memory_order_release);
+  };
+  configure(cfg);
+
+  ctx.r[A0] = 0; // mode 0: block until the command completes
+  ctx.r[A1] = 0;
+  hle_libcd_CdSync(&ctx);
+
+  EXPECT_EQ(ctx.r[V0], 0u) << "a timeout reports CdlNoIntr";
+  EXPECT_GE(drains, 300);
+  EXPECT_LE(drains, 302);
+  configure(HleConfig{});
+  psyq_state().reset();
+}

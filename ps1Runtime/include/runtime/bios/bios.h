@@ -200,12 +200,13 @@ public:
   // concurrency without losing the clock during spin-waits: loops that never
   // call VSync (the NSF loader is one) still reach a backward branch, and the
   // counter below keeps the pump cheap enough for that path.
-  void setVBlankPump(std::function<void()> pump) {
+  // `waiting`: the game is idle in VSync rather than polled mid-work.
+  void setVBlankPump(std::function<void(bool waiting)> pump) {
     vblankPump_ = std::move(pump);
   }
-  void pumpVBlank() {
+  void pumpVBlank(bool waiting = false) {
     if (vblankPump_)
-      vblankPump_();
+      vblankPump_(waiting);
   }
 
   // Global $sp watchpoint (`PS1_SP_GUARD=1`).
@@ -393,7 +394,7 @@ private:
   uint64_t drainDispatched_ = 0;
   uint64_t drainDeferredNoStack_ = 0;
 
-  std::function<void()> vblankPump_;
+  std::function<void(bool)> vblankPump_;
   // Yield points are hit tens of millions of times a second, so the pump is
   // rate-limited by a plain counter rather than a clock read.
   uint32_t pumpCounter_ = 0;

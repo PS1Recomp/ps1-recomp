@@ -205,6 +205,10 @@ public:
   enum Source { Keyboard, PadButtons, Stick, kSources };
   void set(Source src, uint16_t btn, bool down, InputController &input,
            int port = 0);
+  /// Buttons held by any source (active high).
+  uint16_t mask() const {
+    return static_cast<uint16_t>(held_[0] | held_[1] | held_[2]);
+  }
 
 private:
   uint16_t held_[kSources] = {};
