@@ -103,6 +103,7 @@ void hle_ClearOTagR(recomp_context *ctx);
 /// a0 = pointer to the tail of the OT (highest priority node).
 /// Each node: bits[31:24]=word_count, bits[23:0]=next_ptr; followed by GP0 words.
 void hle_DrawOTag(recomp_context *ctx);
+void hle_DrawPrim(recomp_context *ctx);
 
 /// SetDefDispEnv(env, x, y, w, h) -- initialise a DispEnv struct in PS1 RAM.
 /// a0=*DispEnv, a1=x, a2=y, a3=w, stack+16=h

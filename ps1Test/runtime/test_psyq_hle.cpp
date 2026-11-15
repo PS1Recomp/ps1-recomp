@@ -298,6 +298,23 @@ TEST_F(PsyqHleTest, DrawOTagSubmitsSinglePrimitive) {
     EXPECT_EQ(gp0Words[1], 0x89ABCDEFu);
 }
 
+TEST_F(PsyqHleTest, DrawPrimSendsTagLengthWordsAfterTheTag) {
+    // BLK_FILL as Crash builds it before the loading sign: black 512x240.
+    const uint32_t p = 0x1000;
+    mem.write32(p + 0, (3u << 24) | 0x00FFFFFFu); // tag: len=3
+    mem.write32(p + 4, 0x02000000u);              // FillRect, rgb=0
+    mem.write32(p + 8, 0x00000200u);              // y=0, x=512
+    mem.write32(p + 12, 0x00F00200u);             // h=240, w=512
+
+    ctx.r[A0] = p;
+    hle_DrawPrim(&ctx);
+
+    ASSERT_EQ(gp0Words.size(), 3u);
+    EXPECT_EQ(gp0Words[0], 0x02000000u);
+    EXPECT_EQ(gp0Words[1], 0x00000200u);
+    EXPECT_EQ(gp0Words[2], 0x00F00200u);
+}
+
 TEST_F(PsyqHleTest, DrawOTagTraversesChain) {
     // Node B at 0x2000 (tail, processed first): 1 word, next = end
     mem.write32(0x2000, (1u << 24) | 0x00FFFFFFu);

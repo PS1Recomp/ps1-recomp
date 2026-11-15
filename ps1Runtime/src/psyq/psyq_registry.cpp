@@ -110,6 +110,7 @@ void psyq_registry_init_defaults() {
   psyq_register("libgpu_ClearOTag",   &ps1::psyq::hle_ClearOTag);
   psyq_register("libgpu_ClearOTagR",  &ps1::psyq::hle_ClearOTagR);
   psyq_register("libgpu_DrawOTag",    &ps1::psyq::hle_DrawOTag);
+  psyq_register("libgpu_DrawPrim",    &ps1::psyq::hle_DrawPrim);
   psyq_register("libgpu_SetDefDispEnv", &ps1::psyq::hle_SetDefDispEnv);
   psyq_register("libgpu_PutDispEnv",  &ps1::psyq::hle_PutDispEnv);
   psyq_register("libgpu_SetDefDrawEnv", &ps1::psyq::hle_SetDefDrawEnv);
@@ -118,7 +119,7 @@ void psyq_registry_init_defaults() {
   // Minimal no-op stubs for early-boot HLEs Crash Bandicoot references
   // These have no side-effect during init.  Promote to real impl if a game
   // is observed waiting on their state (e.g. RCnt IRQs, OT linkage via
-  // TermPrim, immediate-mode draws via DrawPrim).
+  // TermPrim).
   psyq_register("libapi_StopRCnt",       &hle_noop_stub);
   psyq_register("libapi_StartRCnt",      &hle_noop_stub);
   // SetRCnt(spec, target, mode) programs a root counter's compare value. The
@@ -133,7 +134,6 @@ void psyq_registry_init_defaults() {
   psyq_register("libcd_StCdInterrupt2",  &hle_noop_stub);
   psyq_register("libgpu__reset",         &hle_noop_stub);
   psyq_register("libgpu_TermPrim",       &hle_noop_stub);
-  psyq_register("libgpu_DrawPrim",       &hle_noop_stub);
   // VSyncCallbacks (plural) is the same shape as VSyncCallback in PsyQ --
   // game-thread-side it just registers a function pointer.  Aliasing to the
   // existing libgpu_VSyncCallback handler covers Crash's usage.

@@ -267,6 +267,18 @@ void hle_DrawOTag(recomp_context *ctx) {
   ctx->r[V0] = 0;
 }
 
+// DrawPrim(p): sends one primitive straight to GP0 -- the tag's top byte is
+// the word count, the tag itself is not sent (psyz sys.c DrawPrim -> _cwb).
+// Crash clears the screen this way before drawing the loading sign.
+void hle_DrawPrim(recomp_context *ctx) {
+  if (!g_cfg.writeGP0)
+    return;
+  const uint32_t p = ctx->r[A0];
+  const uint32_t len = ctx->mem->read32(p) >> 24;
+  for (uint32_t i = 0; i < len; i++)
+    g_cfg.writeGP0(ctx->mem->read32(p + 4 + i * 4));
+}
+
 // SetDefDispEnv
 //
 // PsyQ SetDefDispEnv(env, x, y, w, h):

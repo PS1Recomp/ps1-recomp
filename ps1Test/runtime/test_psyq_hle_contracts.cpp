@@ -197,8 +197,7 @@ TEST_P(PsyqNoopStubTest, ReturnsZeroAndTouchesNothing) {
 
 INSTANTIATE_TEST_SUITE_P(CrashNoops, PsyqNoopStubTest,
                          ::testing::Values("libapi_SetRCnt", "libapi_StartRCnt",
-                                           "libapi_StopRCnt", "libgpu__reset",
-                                           "libgpu_DrawPrim"));
+                                           "libapi_StopRCnt", "libgpu__reset"));
 
 // The rest of the libetc callback API (intr.c): ResetCallback starts the
 // module (non-zero = initialised) without forgetting handlers; Stop/Restart
