@@ -446,21 +446,11 @@ void Bios::handleA0(uint32_t index) {
   case 0x44: // FlushCache (alternate)
     break;
 
-  // PsyQ libapi: directory iteration (PS1 BIOS A0:42 / A0:43)
-  // Real BIOS returns a pointer to the DIRENTRY out-buffer (a1) when a
-  // matching file is found, NULL (0) on no-match.  We return 0 to signal
-  // "no entry" cleanly -- game's firstfile2 callers we've seen take the
-  // not-found branch (which skips file-iteration init paths) instead of
-  // reading garbage from a half-populated DIRENTRY.  A proper
-  // implementation would walk the ISO9660 directory via VirtualFs;
-  // upgrade if a future game depends on enumerating disc contents.
-  case 0x42: // firstfile2(name, *dir_entry)
-    BIOS_LOG("[BIOS] A0:42 firstfile2 [STUB returning 0 = no entry]\n");
-    ctx_.r[V0] = 0;
-    break;
+  // A(42h) firstfile / A(43h) nextfile are the B(42h)/B(43h) functions
+  // (psx-spx kernelbios.md).  Crash lists its saves with B(42h) then A(43h).
+  case 0x42: // firstfile(name, *dir_entry)
   case 0x43: // nextfile(*dir_entry)
-    BIOS_LOG("[BIOS] A0:43 nextfile [STUB returning 0 = end of dir]\n");
-    ctx_.r[V0] = 0;
+    handleB0(index);
     break;
 
   // CD-ROM stubs

@@ -802,6 +802,20 @@ TEST_F(BiosCardFileTest, NextfileKeepsReturningZeroOnceTheSearchEnded) {
   EXPECT_EQ(call(0x43, 0x80031000), 0);
 }
 
+TEST_F(BiosCardFileTest, KernelTableNextfileFindsTheSecondSave) {
+  // A(43h) nextfile is the same function as B(43h); Crash lists its saves
+  // with B(42h) then A(43h), so a stub there hides every save but the first.
+  call(0x36, create(1, "bu00:BASCUS-94900SAVE1"));
+  call(0x36, create(1, "bu00:BASCUS-94900SAVE2"));
+  ASSERT_NE(firstfile("bu00:BASCUS-94900*"), 0u);
+
+  ctx.r[A0] = 0x80031000;
+  a0(0x43);
+
+  EXPECT_EQ(ctx.r[V0], 0x80031000u);
+  EXPECT_EQ(readString(0x80031000), "BASCUS-94900SAVE2");
+}
+
 TEST_F(BiosCardFileTest, SlotTwoHasItsOwnDirectory) {
   // "bu10:" is the card in slot 2 (port 10h).
   call(0x36, create(1, "bu10:BASCUS-94900CRASH"));
